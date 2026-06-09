@@ -14,6 +14,7 @@ import FormulaCard from '../components/FormulaCard'
 import FormulaCardMini from '../components/FormulaCardMini'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
+import PackageSelector from '../components/PackageSelector'
 
 // ── Version Card ───────────────────────────────────────────────────────────────
 function VersionCard({ ver, isLatest, formula, materials, versions = [], setVersions }) {
@@ -95,14 +96,21 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
           <div style={{ color:S.textLt, fontSize:18 }}>{open ? '▲' : '▼'}</div>
           <button onClick={async (e) => {
             e.stopPropagation()
-            if (!confirm(`ลบ V${ver.ver} ออกถาวร?`)) return
+            if (versions.length <= 1) {
+              alert('ไม่สามารถลบได้ — นี่คือ version เดียวที่มีอยู่\nถ้าอยากลบทั้งหมด ให้ใช้ปุ่ม "ลบสูตรนี้" แทนค่ะ')
+              return
+            }
+            if (!confirm(`ลบ V${ver.ver} ออกถาวร?\n(เหลือ ${versions.length - 1} version)`)) return
             await db.deleteItems(ver.id)
             await supabase.from('formula_versions').delete().eq('id', ver.id)
             const updated = await db.getVersions(formula.id)
             setVersions(updated)
-          }} style={{ fontSize:10, color:S.red, background:'none',
-            border:`1px solid ${S.red}33`, borderRadius:10,
-            padding:'2px 7px', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
+          }} style={{ fontSize:10,
+            color: versions.length <= 1 ? S.textLt : S.red,
+            background:'none',
+            border:`1px solid ${versions.length <= 1 ? S.border : S.red+'33'}`,
+            borderRadius:10, padding:'2px 7px', cursor: versions.length <= 1 ? 'not-allowed' : 'pointer',
+            fontFamily:'Inter,sans-serif', opacity: versions.length <= 1 ? 0.4 : 1 }}>
             ลบ
           </button>
         </div>
