@@ -1,8 +1,74 @@
 {
-  "hash": "46778f99",
+  "hash": "f894a2fc",
   "configHash": "b89518fb",
-  "lockfileHash": "e3b0c442",
-  "browserHash": "288749ff",
-  "optimized": {},
-  "chunks": {}
+  "lockfileHash": "405a782f",
+  "browserHash": "d2ea5b1c",
+  "optimized": {
+    "@supabase/supabase-js": {
+      "src": "../../node_modules/@supabase/supabase-js/dist/index.mjs",
+      "file": "@supabase_supabase-js.js",
+      "fileHash": "c5c6f282",
+      "needsInterop": false
+    },
+    "html2canvas": {
+      "src": "../../node_modules/html2canvas/dist/html2canvas.js",
+      "file": "html2canvas.js",
+      "fileHash": "b269c649",
+      "needsInterop": true
+    },
+    "jspdf-autotable": {
+      "src": "../../node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.mjs",
+      "file": "jspdf-autotable.js",
+      "fileHash": "d8ab7cdb",
+      "needsInterop": false
+    },
+    "jspdf": {
+      "src": "../../node_modules/jspdf/dist/jspdf.es.min.js",
+      "file": "jspdf.js",
+      "fileHash": "be98f471",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "3f5dc36f",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "420cddf9",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "31873f94",
+      "needsInterop": true
+    },
+    "xlsx": {
+      "src": "../../node_modules/xlsx/xlsx.mjs",
+      "file": "xlsx.js",
+      "fileHash": "a99888c1",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-CO3PsZeE": {
+      "file": "chunk-CO3PsZeE.js",
+      "isDynamicEntry": false
+    },
+    "index.es-NZnib5vk": {
+      "file": "index.es-NZnib5vk.js",
+      "isDynamicEntry": true
+    },
+    "purify.es-BEg7_0B0": {
+      "file": "purify.es-BEg7_0B0.js",
+      "isDynamicEntry": true
+    },
+    "typeof-BUrs08F6": {
+      "file": "typeof-BUrs08F6.js",
+      "isDynamicEntry": false
+    }
+  }
 }
