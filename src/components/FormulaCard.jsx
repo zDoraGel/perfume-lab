@@ -480,20 +480,13 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
 
       <Div my={2}/>
 
-      {/* Scent Profile — Radar + Dots */}
+      {/* Scent Profile — Dots only */}
       <div style={{ margin:'1px 0', flexShrink:0 }}>
         <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
           color:MID, textAlign:'center', marginBottom:3 }}>SCENT PROFILE</div>
         {hasTraits ? (
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            {/* Radar */}
-            <div style={{ flexShrink:0 }}>
-              <RadarChart dots={dots} size={72}/>
-            </div>
-            {/* Dots */}
-            <div style={{ flex:1 }}>
-              {PROFILE_AXES.map((axis, i) => <DotRow key={axis} label={axis} value={dots[i]}/>)}
-            </div>
+          <div style={{ paddingLeft:8 }}>
+            {PROFILE_AXES.map((axis, i) => <DotRow key={axis} label={axis} value={dots[i]}/>)}
           </div>
         ) : (
           <div style={{ fontSize:8, color:LIGHT, textAlign:'center', fontStyle:'italic' }}>
@@ -501,42 +494,6 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
           </div>
         )}
       </div>
-
-      {/* Cost per Gram / Drop */}
-      {(() => {
-        const cost = calcCost(items)
-        if (!cost) return null
-        return (
-          <>
-            <Div my={1}/>
-            <div style={{ display:'flex', justifyContent:'center', gap:16, marginBottom:2 }}>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:6, color:MID, letterSpacing:1.5,
-                  textTransform:'uppercase', marginBottom:1 }}>Cost/g</div>
-                <div style={{ fontSize:9, fontWeight:600, color:GOLD }}>
-                  ฿{cost.perG.toFixed(2)}
-                </div>
-              </div>
-              <div style={{ width:0.5, background:LIGHT }}/>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:6, color:MID, letterSpacing:1.5,
-                  textTransform:'uppercase', marginBottom:1 }}>Cost/drop</div>
-                <div style={{ fontSize:9, fontWeight:600, color:GOLD }}>
-                  ฿{cost.perDrop.toFixed(3)}
-                </div>
-              </div>
-              <div style={{ width:0.5, background:LIGHT }}/>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:6, color:MID, letterSpacing:1.5,
-                  textTransform:'uppercase', marginBottom:1 }}>Total</div>
-                <div style={{ fontSize:9, fontWeight:600, color:GOLD }}>
-                  ฿{cost.totalCost.toFixed(2)}
-                </div>
-              </div>
-            </div>
-          </>
-        )
-      })()}
 
       <Div my={1}/>
 
