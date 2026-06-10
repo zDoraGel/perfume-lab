@@ -15,6 +15,7 @@ import FormulaCardMini from '../components/FormulaCardMini'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
+import LabelGenerator from '../components/LabelGenerator'
 
 // ── Version Card ───────────────────────────────────────────────────────────────
 function VersionCard({ ver, isLatest, formula, materials, versions = [], setVersions }) {
@@ -516,6 +517,7 @@ export default function PageDetail({ formula, onBack }) {
   const [exporting,   setExporting]   = useState(false)
   const [showCard,    setShowCard]    = useState(false)
   const [showMini,    setShowMini]    = useState(false)
+  const [showLabel,   setShowLabel]   = useState(false)
   const [cardItems,   setCardItems]   = useState([])
 
   async function handleExportPDF() {
@@ -556,6 +558,13 @@ export default function PageDetail({ formula, onBack }) {
           latestVersion={versions[versions.length - 1]}
           items={cardItems}
           onClose={() => setShowCard(false)}/>
+      )}
+      {/* Label Generator Modal */}
+      {showLabel && (
+        <LabelGenerator
+          formula={formulaData}
+          latestVersion={versions[versions.length - 1]}
+          onClose={() => setShowLabel(false)}/>
       )}
       {/* Mini Card Modal */}
       {showMini && (
@@ -700,6 +709,14 @@ export default function PageDetail({ formula, onBack }) {
               color:S.gold }}>
             ▭ Mini Card
           </button>
+          <button
+            onClick={() => setShowLabel(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.border}`, background:'transparent',
+              color:S.textMid }}>
+            🏷 Label
+          </button>
         </div>
       )}
 
@@ -713,17 +730,23 @@ export default function PageDetail({ formula, onBack }) {
         </div>
       )}
 
-      {versions.map((v, idx) => (
-        <VersionCard
-          key={v.id}
-          ver={v}
-          isLatest={idx === versions.length - 1}
-          formula={formula}
-          materials={materials}
-          versions={versions}
-          setVersions={setVersions}
-        />
-      ))}
+      {(() => {
+        const finalVer = versions.find(v => v.is_final)
+        const visibleVersions = finalVer
+          ? versions.filter(v => v.is_final)
+          : versions
+        return visibleVersions.map((v, idx) => (
+          <VersionCard
+            key={v.id}
+            ver={v}
+            isLatest={idx === versions.length - 1}
+            formula={formula}
+            materials={materials}
+            versions={versions}
+            setVersions={setVersions}
+          />
+        ))
+      })()}
     </div>
   )
 }
