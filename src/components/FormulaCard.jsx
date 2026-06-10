@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { db } from '../lib/db'
 import { FEELING_OPTS } from '../constants/formulaDNA'
+import LabelGenerator from './LabelGenerator'
 
 const CARD_W = 340
 const CARD_H = 610
@@ -577,9 +578,10 @@ export default function FormulaCard({ formula, latestVersion, items, onClose }) 
   const backRef  = useRef()
   const [saving,  setSaving]  = useState(false)
   const [aliases, setAliases] = useState([])
-  const [traits,  setTraits]  = useState({})  // materialId → trait row
-  const [side,       setSide]       = useState('front')
-  const [concentration, setConcentration] = useState(null) // null = ยังไม่เลือก
+  const [traits,  setTraits]  = useState({})
+  const [side,          setSide]          = useState('front')
+  const [concentration, setConcentration] = useState(null)
+  const [showLabel,     setShowLabel]     = useState(false)
 
   useEffect(() => {
     db.getAllAliases().then(setAliases)
@@ -659,6 +661,7 @@ export default function FormulaCard({ formula, latestVersion, items, onClose }) 
     const CONC_DESC = { SOFT:'กลิ่นอ่อน · ใส่ได้ทุกวัน', SIGNATURE:'กลิ่นกลาง · ประจำตัว', DEEP:'กลิ่นเข้ม · พิเศษ' }
     const CONC_C = { SOFT:'#5a8a6a', SIGNATURE:'#8a6f4e', DEEP:'#8a4a4a' }
     return (
+      <>
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', zIndex:200,
         display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
         <div style={{ background:'#f8f5f0', borderRadius:16, padding:28, width:'100%', maxWidth:320 }}>
@@ -678,13 +681,26 @@ export default function FormulaCard({ formula, latestVersion, items, onClose }) 
               </button>
             ))}
           </div>
-          <button onClick={onClose} style={{ width:'100%', marginTop:16, padding:'10px 0',
+          <button onClick={() => setShowLabel(true)}
+            style={{ width:'100%', marginTop:12, padding:'10px 0',
+              borderRadius:10, background:'none', border:'1px solid #c8b89a',
+              fontSize:12, color:'#8a6f4e', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
+            🏷 Print Label
+          </button>
+          <button onClick={onClose} style={{ width:'100%', marginTop:8, padding:'10px 0',
             borderRadius:10, background:'none', border:'1px solid #e8ddd0',
             fontSize:12, color:'#b0a090', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
             ยกเลิก
           </button>
         </div>
       </div>
+      {showLabel && (
+        <LabelGenerator
+          formula={formula}
+          latestVersion={latestVersion}
+          onClose={() => setShowLabel(false)}/>
+      )}
+      </>
     )
   }
 
@@ -742,12 +758,26 @@ export default function FormulaCard({ formula, latestVersion, items, onClose }) 
             color:'#fff' }}>
           Save หน้านี้
         </button>
+        <button onClick={() => setShowLabel(true)}
+          style={{ padding:'9px 20px', borderRadius:20, cursor:'pointer',
+            fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
+            background:'rgba(255,255,255,0.15)', border:'1px solid rgba(255,255,255,0.3)',
+            color:'#fff' }}>
+          🏷 Label
+        </button>
         <button onClick={onClose}
           style={{ padding:'9px 16px', borderRadius:20, cursor:'pointer',
             fontFamily:'Inter,sans-serif', fontSize:12,
             background:'transparent', border:'1px solid rgba(255,255,255,0.3)',
             color:'rgba(255,255,255,0.7)' }}>✕</button>
       </div>
+
+      {showLabel && (
+        <LabelGenerator
+          formula={formula}
+          latestVersion={latestVersion}
+          onClose={() => setShowLabel(false)}/>
+      )}
     </div>
   )
 }
