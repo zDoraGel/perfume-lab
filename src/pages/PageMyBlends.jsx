@@ -4,6 +4,7 @@ import { db } from '../lib/db'
 import { S } from '../constants/theme'
 import { BackBtn } from '../components/ui'
 import MaterialPicker from '../components/MaterialPicker'
+import AgingLogSection from '../components/AgingLogSection'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function readyDate(blendedAt, restDays) {
@@ -617,6 +618,9 @@ function VersionCard({ v, materials, onUpdate }) {
               ⏱ ขายได้: {readyDate(v.blended_at, v.rest_days)?.toLocaleDateString('th-TH')} (อีก {dl} วัน)
             </div>
           )}
+
+          {/* Aging Log */}
+          <AgingLogSection versionId={v.id}/>
         </div>
       )}
     </div>
