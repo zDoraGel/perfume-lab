@@ -15,7 +15,6 @@ import FormulaCardMini from '../components/FormulaCardMini'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
-import LabelGenerator from '../components/LabelGenerator'
 
 // ── Version Card ───────────────────────────────────────────────────────────────
 function VersionCard({ ver, isLatest, formula, materials, versions = [], setVersions }) {
@@ -25,21 +24,6 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
   const [showPkg,    setShowPkg]    = useState(false)
   const [scaleMl,    setScaleMl]    = useState(null)
   const [activeTab,  setActiveTab]  = useState('ingredients') // 'ingredients' | 'blend'
-  const [showFinal,  setShowFinal]  = useState(false)
-  const [agingDays,  setAgingDays]  = useState(14)
-  const [showRevise, setShowRevise] = useState(false)
-  const [revNote,    setRevNote]    = useState('')
-  const [verData,    setVerData]    = useState(ver)
-
-  // aging countdown
-  const agingDaysLeft = verData.is_final && verData.final_date
-    ? (() => {
-        const done = new Date(verData.final_date)
-        done.setDate(done.getDate() + (verData.aging_days || 14))
-        const diff = Math.ceil((done - new Date()) / 86400000)
-        return diff
-      })()
-    : null
 
   function toggle() {
     if (!open && !loaded) db.getItems(ver.id).then(d => { setItems(d); setLoaded(true) })
@@ -87,21 +71,6 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
               <span style={{ fontSize:11, color:S.gold, fontWeight:500,
                 padding:'3px 9px', borderRadius:20, background:S.goldLt }}>Latest</span>
             )}
-            {verData.is_final && (
-              <span style={{ fontSize:11, color:'#fff', fontWeight:600,
-                padding:'3px 9px', borderRadius:20, background:'#5a7a5a' }}>🔒 Final</span>
-            )}
-            {verData.is_final && agingDaysLeft !== null && (
-              agingDaysLeft > 0
-                ? <span style={{ fontSize:11, color:S.gold, padding:'3px 9px',
-                    borderRadius:20, background:S.goldLt }}>
-                    ⏳ หมักอีก {agingDaysLeft} วัน
-                  </span>
-                : <span style={{ fontSize:11, color:'#5a7a5a', fontWeight:600, padding:'3px 9px',
-                    borderRadius:20, background:'#e8f0e8' }}>
-                    ✓ พร้อมแล้ว!
-                  </span>
-            )}
             {ver.projection_actual && (
               <span style={{ fontSize:11, color:S.textMid, padding:'3px 9px',
                 borderRadius:20, background:S.bg }}>
@@ -116,13 +85,6 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
             )}
           </div>
           <div style={{ fontSize:13, color:S.textMid, lineHeight:1.5 }}>{ver.notes}</div>
-          {verData.revision_note && (
-            <div style={{ fontSize:11, color:S.gold, background:S.goldLt,
-              border:`1px solid ${S.goldBd}`, borderRadius:8,
-              padding:'6px 10px', marginTop:4 }}>
-              📝 {verData.revision_note}
-            </div>
-          )}
           {ver.personal_note && (
             <div style={{ fontSize:12, color:S.gold, fontStyle:'italic', marginTop:4 }}>
               "{ver.personal_note}"
@@ -132,152 +94,27 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
         </div>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
           <div style={{ color:S.textLt, fontSize:18 }}>{open ? '▲' : '▼'}</div>
-          {/* ปุ่มลบ — ซ่อนถ้า Final */}
-          {!verData.is_final && (
-            <button onClick={async (e) => {
-              e.stopPropagation()
-              if (versions.length <= 1) {
-                alert('ไม่สามารถลบได้ — นี่คือ version เดียวที่มีอยู่\nถ้าอยากลบทั้งหมด ให้ใช้ปุ่ม "ลบสูตรนี้" แทนค่ะ')
-                return
-              }
-              if (!confirm(`ลบ V${ver.ver} ออกถาวร?\n(เหลือ ${versions.length - 1} version)`)) return
-              await db.deleteItems(ver.id)
-              await supabase.from('formula_versions').delete().eq('id', ver.id)
-              const updated = await db.getVersions(formula.id)
-              setVersions(updated)
-            }} style={{ fontSize:10,
-              color: versions.length <= 1 ? S.textLt : S.red,
-              background:'none',
-              border:`1px solid ${versions.length <= 1 ? S.border : S.red+'33'}`,
-              borderRadius:10, padding:'2px 7px', cursor: versions.length <= 1 ? 'not-allowed' : 'pointer',
-              fontFamily:'Inter,sans-serif', opacity: versions.length <= 1 ? 0.4 : 1 }}>
-              ลบ
-            </button>
-          )}
-          {!verData.is_final ? (
-            <button onClick={(e) => { e.stopPropagation(); setShowFinal(true) }}
-              style={{ fontSize:10, color:'#5a7a5a', background:'none',
-                border:'1px solid #5a7a5a44', borderRadius:10,
-                padding:'2px 7px', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
-              Final
-            </button>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowRevise(true) }}
-                style={{ fontSize:10, color:S.gold, background:'none',
-                  border:`1px solid ${S.goldBd}`, borderRadius:10,
-                  padding:'2px 7px', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
-                ปรับ
-              </button>
-              <button onClick={async (e) => {
-                e.stopPropagation()
-                if (!confirm(`Unlock V${ver.ver} ออกจาก Final?\nจะสามารถแก้ไขและลบได้อีกครั้ง`)) return
-                await supabase.from('formula_versions')
-                  .update({ is_final: false, final_date: null, aging_days: null })
-                  .eq('id', ver.id)
-                const updated = await db.getVersions(formula.id)
-                setVersions(updated)
-                const me = updated.find(v => v.id === ver.id)
-                if (me) setVerData(me)
-              }} style={{ fontSize:10, color:S.textMid, background:'none',
-                border:`1px solid ${S.border}`, borderRadius:10,
-                padding:'2px 7px', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
-                Unlock
-              </button>
-            </div>
-          )}
-
+          <button onClick={async (e) => {
+            e.stopPropagation()
+            if (versions.length <= 1) {
+              alert('ไม่สามารถลบได้ — นี่คือ version เดียวที่มีอยู่\nถ้าอยากลบทั้งหมด ให้ใช้ปุ่ม "ลบสูตรนี้" แทนค่ะ')
+              return
+            }
+            if (!confirm(`ลบ V${ver.ver} ออกถาวร?\n(เหลือ ${versions.length - 1} version)`)) return
+            await db.deleteItems(ver.id)
+            await supabase.from('formula_versions').delete().eq('id', ver.id)
+            const updated = await db.getVersions(formula.id)
+            setVersions(updated)
+          }} style={{ fontSize:10,
+            color: versions.length <= 1 ? S.textLt : S.red,
+            background:'none',
+            border:`1px solid ${versions.length <= 1 ? S.border : S.red+'33'}`,
+            borderRadius:10, padding:'2px 7px', cursor: versions.length <= 1 ? 'not-allowed' : 'pointer',
+            fontFamily:'Inter,sans-serif', opacity: versions.length <= 1 ? 0.4 : 1 }}>
+            ลบ
+          </button>
         </div>
       </div>
-
-      {/* Final modal */}
-      {showFinal && (
-        <div onClick={e=>e.stopPropagation()} style={{
-          position:'fixed', inset:0, background:'#00000066', zIndex:999,
-          display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:'#fff', borderRadius:16, padding:24, width:300, margin:16 }}>
-            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
-              fontStyle:'italic', marginBottom:4 }}>Lock เป็น Final</div>
-            <div style={{ fontSize:12, color:S.textMid, marginBottom:16 }}>
-              V{ver.ver} จะถูก lock — ไม่สามารถแก้ ingredients ได้อีก
-            </div>
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:11, color:S.textMid, marginBottom:6 }}>หมักกี่วัน?</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                {[7,14,21,30].map(d => (
-                  <button key={d} onClick={() => setAgingDays(d)}
-                    style={{ padding:'6px 14px', borderRadius:20, cursor:'pointer',
-                      fontSize:12, fontFamily:'Inter,sans-serif',
-                      border:`1.5px solid ${agingDays===d ? '#5a7a5a' : S.border}`,
-                      background: agingDays===d ? '#5a7a5a' : 'transparent',
-                      color: agingDays===d ? '#fff' : S.textMid }}>
-                    {d} วัน
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={async () => {
-                await db.setFinal(ver.id, agingDays)
-                const updated = await db.getVersions(formula.id)
-                setVersions(updated)
-                const me = updated.find(v => v.id === ver.id)
-                if (me) setVerData(me)
-                setShowFinal(false)
-              }} style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
-                fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
-                background:'#5a7a5a', border:'none', color:'#fff' }}>
-                🔒 Lock Final
-              </button>
-              <button onClick={() => setShowFinal(false)}
-                style={{ padding:'9px 16px', borderRadius:10, cursor:'pointer',
-                  fontFamily:'Inter,sans-serif', fontSize:12,
-                  background:'transparent', border:`1px solid ${S.border}`, color:S.textMid }}>
-                ยกเลิก
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Revision note modal */}
-      {showRevise && (
-        <div onClick={e=>e.stopPropagation()} style={{
-          position:'fixed', inset:0, background:'#00000066', zIndex:999,
-          display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:'#fff', borderRadius:16, padding:24, width:300, margin:16 }}>
-            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
-              fontStyle:'italic', marginBottom:4 }}>อยากปรับสูตร?</div>
-            <div style={{ fontSize:12, color:S.textMid, marginBottom:12 }}>
-              บันทึก note ไว้ก่อน แล้วสร้าง V{ver.ver + 1} ใหม่
-            </div>
-            <textarea value={revNote} onChange={e=>setRevNote(e.target.value)}
-              placeholder="เช่น ลด Hedione ลง 10%, เพิ่ม Sandalwood..."
-              rows={3}
-              style={{ width:'100%', padding:'10px 12px', borderRadius:10, fontSize:13,
-                fontFamily:'Inter,sans-serif', color:S.ink, background:'#fafaf8',
-                border:`1px solid ${S.border}`, outline:'none',
-                resize:'none', boxSizing:'border-box', marginBottom:12 }}/>
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={async () => {
-                if (revNote.trim()) await db.setRevisionNote(ver.id, revNote.trim())
-                setShowRevise(false)
-                setRevNote('')
-              }} style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
-                fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
-                background:S.gold, border:'none', color:'#fff' }}>
-                บันทึก Note
-              </button>
-              <button onClick={() => { setShowRevise(false); setRevNote('') }}
-                style={{ padding:'9px 16px', borderRadius:10, cursor:'pointer',
-                  fontFamily:'Inter,sans-serif', fontSize:12,
-                  background:'transparent', border:`1px solid ${S.border}`, color:S.textMid }}>
-                ยกเลิก
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {open && (
         <div style={{ borderTop:`1px solid ${S.border}`, padding:'16px 18px 18px', background:'#fdfcfa' }}>
@@ -476,7 +313,6 @@ export default function PageDetail({ formula, onBack }) {
   const [formulaData, setFormulaData] = useState(formula)  // re-fetch เพื่อได้ best_for
   const [deleting,  setDeleting]  = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [deleteText,  setDeleteText]  = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -517,7 +353,6 @@ export default function PageDetail({ formula, onBack }) {
   const [exporting,   setExporting]   = useState(false)
   const [showCard,    setShowCard]    = useState(false)
   const [showMini,    setShowMini]    = useState(false)
-  const [showLabel,   setShowLabel]   = useState(false)
   const [cardItems,   setCardItems]   = useState([])
 
   async function handleExportPDF() {
@@ -559,13 +394,6 @@ export default function PageDetail({ formula, onBack }) {
           items={cardItems}
           onClose={() => setShowCard(false)}/>
       )}
-      {/* Label Generator Modal */}
-      {showLabel && (
-        <LabelGenerator
-          formula={formulaData}
-          latestVersion={versions[versions.length - 1]}
-          onClose={() => setShowLabel(false)}/>
-      )}
       {/* Mini Card Modal */}
       {showMini && (
         <FormulaCardMini
@@ -573,45 +401,29 @@ export default function PageDetail({ formula, onBack }) {
           onClose={() => setShowMini(false)}/>
       )}
 
-      {/* Confirmation Modal — พิมพ์ชื่อสูตรยืนยัน */}
+      {/* Confirmation Modal */}
       {showConfirm && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', zIndex:100,
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:100,
           display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ background:S.white, borderRadius:16, padding:24, maxWidth:320, width:'100%' }}>
             <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
-              fontStyle:'italic', color:S.red, marginBottom:8 }}>ลบสูตรนี้ถาวร</div>
-            <div style={{ fontSize:13, color:S.textMid, lineHeight:1.7, marginBottom:16 }}>
+              fontStyle:'italic', color:S.ink, marginBottom:8 }}>ลบ "{formula.name}"?</div>
+            <div style={{ fontSize:13, color:S.textMid, lineHeight:1.7, marginBottom:20 }}>
               จะลบ <strong>{versions.length} version</strong> และรูปทั้งหมดออกถาวร
               <br/>ไม่สามารถกู้คืนได้ค่ะ
             </div>
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:11, color:S.textMid, marginBottom:6 }}>
-                พิมพ์ชื่อสูตร <strong style={{ color:S.ink }}>"{formula.name}"</strong> เพื่อยืนยัน
-              </div>
-              <input
-                value={deleteText}
-                onChange={e => setDeleteText(e.target.value)}
-                placeholder={formula.name}
-                style={{ width:'100%', padding:'10px 12px', borderRadius:10,
-                  border:`1.5px solid ${deleteText === formula.name ? S.red : S.border}`,
-                  fontSize:13, fontFamily:'Inter,sans-serif', color:S.ink,
-                  outline:'none', boxSizing:'border-box',
-                  background: deleteText === formula.name ? '#fff5f5' : S.white }}
-              />
-            </div>
             <div style={{ display:'flex', gap:10 }}>
-              <button onClick={() => { setShowConfirm(false); setDeleteText('') }}
+              <button onClick={() => setShowConfirm(false)}
                 style={{ flex:1, padding:'11px 0', borderRadius:10, cursor:'pointer',
                   fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:500,
                   border:`1.5px solid ${S.border}`, background:'transparent', color:S.textMid }}>
                 ยกเลิก
               </button>
-              <button onClick={handleDelete}
-                disabled={deleting || deleteText !== formula.name}
+              <button onClick={handleDelete} disabled={deleting}
                 style={{ flex:1, padding:'11px 0', borderRadius:10, cursor:'pointer',
                   fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
                   border:'none', background:S.red, color:'#fff',
-                  opacity: (deleting || deleteText !== formula.name) ? 0.4 : 1 }}>
+                  opacity: deleting ? 0.6 : 1 }}>
                 {deleting ? 'กำลังลบ...' : 'ลบถาวร'}
               </button>
             </div>
@@ -709,14 +521,6 @@ export default function PageDetail({ formula, onBack }) {
               color:S.gold }}>
             ▭ Mini Card
           </button>
-          <button
-            onClick={() => setShowLabel(true)}
-            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
-              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
-              border:`1px solid ${S.border}`, background:'transparent',
-              color:S.textMid }}>
-            🏷 Label
-          </button>
         </div>
       )}
 
@@ -730,23 +534,17 @@ export default function PageDetail({ formula, onBack }) {
         </div>
       )}
 
-      {(() => {
-        const finalVer = versions.find(v => v.is_final)
-        const visibleVersions = finalVer
-          ? versions.filter(v => v.is_final)
-          : versions
-        return visibleVersions.map((v, idx) => (
-          <VersionCard
-            key={v.id}
-            ver={v}
-            isLatest={idx === versions.length - 1}
-            formula={formula}
-            materials={materials}
-            versions={versions}
-            setVersions={setVersions}
-          />
-        ))
-      })()}
+      {versions.map((v, idx) => (
+        <VersionCard
+          key={v.id}
+          ver={v}
+          isLatest={idx === versions.length - 1}
+          formula={formula}
+          materials={materials}
+          versions={versions}
+          setVersions={setVersions}
+        />
+      ))}
     </div>
   )
 }
