@@ -9,19 +9,27 @@ export default function PageList({ onSelect, onCreate }) {
   const [materials,   setMaterials]   = useState([])
   const [allVersions, setAllVersions] = useState([])
   const [loading,     setLoading]     = useState(true)
+  const [notes,       setNotes]       = useState([])
 
   useEffect(() => {
     Promise.all([
       db.getFormulas(),
       db.getMaterials(),
       supabase.from('formula_versions').select('*').order('created_at', { ascending: false }),
-    ]).then(([f, m, { data: v }]) => {
+      supabase.from('quick_notes').select('*').order('created_at', { ascending: false }).limit(10),
+    ]).then(([f, m, { data: v }, { data: n }]) => {
       setFormulas(f)
       setMaterials(m)
       setAllVersions(v || [])
+      setNotes(n || [])
       setLoading(false)
     })
   }, [])
+
+  async function deleteNote(id) {
+    await supabase.from('quick_notes').delete().eq('id', id)
+    setNotes(prev => prev.filter(n => n.id !== id))
+  }
 
   const successCount  = allVersions.filter(v => v.status === 'Success').length
   const lowStock      = materials.filter(m => (m.stock || 0) < 10)
@@ -63,6 +71,33 @@ export default function PageList({ onSelect, onCreate }) {
 
       {!loading && (
         <>
+          {/* Quick Notes from Line */}
+          {notes.length > 0 && (
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:11, color:S.textLt, letterSpacing:1,
+                textTransform:'uppercase', marginBottom:10 }}>💬 Quick Notes</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {notes.map(n => (
+                  <div key={n.id} style={{ background:S.white, borderRadius:12,
+                    border:`1px solid ${S.border}`, padding:'12px 14px',
+                    display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, color:S.ink, lineHeight:1.5 }}>{n.content}</div>
+                      <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
+                        {new Date(n.created_at).toLocaleDateString('th-TH', {
+                          day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'
+                        })}
+                      </div>
+                    </div>
+                    <button onClick={() => deleteNote(n.id)}
+                      style={{ background:'none', border:'none', cursor:'pointer',
+                        color:S.textLt, fontSize:14, padding:'2px 4px', flexShrink:0 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Latest Activity */}
           {latestVersion && latestFormula && (
             <div style={{ marginBottom:20 }}>
