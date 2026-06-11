@@ -53,8 +53,11 @@ async function deleteStock(id) {
   await supabase.from('retail_stock').delete().eq('id', id)
 }
 
-async function logTransaction(stock_id, type, qty, note, date) {
-  const { error } = await supabase.from('retail_stock_logs').insert({ stock_id, type, qty, note, logged_at: date })
+async function logTransaction(stock_id, type, qty, note, date, cost_price, sell_price) {
+  const payload = { stock_id, type, qty, note, logged_at: date }
+  if (cost_price) payload.cost_price = parseFloat(cost_price)
+  if (sell_price) payload.sell_price = parseFloat(sell_price)
+  const { error } = await supabase.from('retail_stock_logs').insert(payload)
   if (error) throw error
 }
 
@@ -178,14 +181,21 @@ function StockForm({ initial, onSave, onCancel }) {
 
 // ── Transaction modal (รับเข้า / ขายออก) ─────────────────────────────────────
 function TransactionModal({ stock, onDone, onClose }) {
-  const [type,   setType]   = useState('out')
-  const [qty,    setQty]    = useState('')
-  const [note,   setNote]   = useState('')
-  const [date,   setDate]   = useState(new Date().toISOString().split('T')[0])
-  const [saving, setSaving] = useState(false)
-  const [err,    setErr]    = useState('')
+  const [type,      setType]      = useState('out')
+  const [qty,       setQty]       = useState('')
+  const [note,      setNote]      = useState('')
+  const [date,      setDate]      = useState(new Date().toISOString().split('T')[0])
+  const [costPrice, setCostPrice] = useState('')   // ต้นทุน/ขวด (รับเข้า)
+  const [sellPrice, setSellPrice] = useState('')   // ราคาขาย/ขวด (ขายออก)
+  const [saving,    setSaving]    = useState(false)
+  const [err,       setErr]       = useState('')
 
   const remaining = stock.qty_total - stock.qty_sold
+
+  // reset price fields เมื่อเปลี่ยน type
+  function switchType(t) {
+    setType(t); setCostPrice(''); setSellPrice(''); setErr('')
+  }
 
   async function submit() {
     const n = parseInt(qty)
@@ -194,10 +204,35 @@ function TransactionModal({ stock, onDone, onClose }) {
     setSaving(true)
     setErr('')
     try {
-      await logTransaction(stock.id, type, n, note, date)
-      const newSold    = type === 'out' ? stock.qty_sold + n : Math.max(0, stock.qty_sold - n)
-      const newRemain  = stock.qty_total - newSold
-      await updateStock(stock.id, { qty_sold: newSold })
+      await logTransaction(stock.id, type, n, note, date,
+        type === 'in'  ? costPrice : null,
+        type === 'out' ? sellPrice : null,
+      )
+      let newSold   = type === 'out' ? stock.qty_sold + n : Math.max(0, stock.qty_sold - n)
+      let newTotal  = stock.qty_total
+      // รับเข้า → เพิ่ม qty_total ด้วย
+      if (type === 'in') newTotal = stock.qty_total + n
+      const newRemain = newTotal - newSold
+
+      const updatePayload = { qty_sold: newSold }
+      if (type === 'in') {
+        updatePayload.qty_total = newTotal
+        // อัพ cost_per_unit ถ้าใส่ราคามา (weighted avg)
+        if (costPrice) {
+          const prevCost  = parseFloat(stock.cost_per_unit || 0)
+          const prevTotal = stock.qty_total
+          const newCost   = parseFloat(costPrice)
+          const avgCost   = prevTotal > 0
+            ? ((prevCost * prevTotal) + (newCost * n)) / (prevTotal + n)
+            : newCost
+          updatePayload.cost_per_unit = parseFloat(avgCost.toFixed(2))
+        }
+      }
+      if (type === 'out' && sellPrice) {
+        updatePayload.price_per_unit = parseFloat(sellPrice)
+      }
+
+      await updateStock(stock.id, updatePayload)
 
       // แจ้งเตือน Line ถ้าขายออกแล้ว remaining ≤ alert_at
       if (type === 'out' && newRemain <= stock.alert_at) {
@@ -214,7 +249,7 @@ function TransactionModal({ stock, onDone, onClose }) {
             remaining: newRemain,
             alert_at:  stock.alert_at,
           }),
-        }).catch(() => {}) // fire-and-forget ไม่ต้องรอ
+        }).catch(() => {})
       }
 
       onDone()
@@ -237,7 +272,7 @@ function TransactionModal({ stock, onDone, onClose }) {
         {/* type toggle */}
         <div style={{ display:'flex', gap:8, marginBottom:14 }}>
           {[['out','ขายออก ↓'], ['in','รับเข้า ↑']].map(([v, l]) => (
-            <button key={v} onClick={() => setType(v)}
+            <button key={v} onClick={() => switchType(v)}
               style={{ flex:1, padding:'9px 0', borderRadius:8, cursor:'pointer',
                 fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
                 border: `1.5px solid ${type===v ? (v==='out' ? S.gold : S.green) : S.border}`,
@@ -255,13 +290,43 @@ function TransactionModal({ stock, onDone, onClose }) {
             placeholder={type==='out' ? `เหลือ ${remaining} ขวด` : 'จำนวนที่รับเพิ่ม'} />
           {err && <div style={{ fontSize:11, color:S.red, marginTop:4 }}>{err}</div>}
         </div>
+
+        {/* ราคาตาม type */}
+        {type === 'in' && (
+          <div style={{ marginBottom:10 }}>
+            <span style={label}>ต้นทุน/ขวด batch นี้ (฿)</span>
+            <input style={inp} type="number" step="0.01" value={costPrice}
+              onChange={e => setCostPrice(e.target.value)}
+              placeholder={stock.cost_per_unit ? `เดิม ฿${stock.cost_per_unit}` : '0.00'} />
+            {costPrice && qty && (
+              <div style={{ fontSize:11, color:S.green, marginTop:4 }}>
+                รวม batch นี้ ฿{(parseFloat(costPrice) * parseInt(qty||0)).toLocaleString()}
+              </div>
+            )}
+          </div>
+        )}
+        {type === 'out' && (
+          <div style={{ marginBottom:10 }}>
+            <span style={label}>ราคาขาย/ขวด ครั้งนี้ (฿)</span>
+            <input style={inp} type="number" step="0.01" value={sellPrice}
+              onChange={e => setSellPrice(e.target.value)}
+              placeholder={stock.price_per_unit ? `เดิม ฿${stock.price_per_unit}` : '0.00'} />
+            {sellPrice && costPrice === '' && stock.cost_per_unit && qty && (
+              <div style={{ fontSize:11, color:S.gold, marginTop:4 }}>
+                กำไร ฿{((parseFloat(sellPrice) - parseFloat(stock.cost_per_unit)) * parseInt(qty||0)).toLocaleString()}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ marginBottom:10 }}>
           <span style={label}>วันที่</span>
           <input style={inp} type="date" value={date} onChange={e => setDate(e.target.value)} />
         </div>
         <div style={{ marginBottom:16 }}>
           <span style={label}>หมายเหตุ</span>
-          <input style={inp} value={note} onChange={e => setNote(e.target.value)} placeholder="ช่องทาง, ลูกค้า, ฯลฯ" />
+          <input style={inp} value={note} onChange={e => setNote(e.target.value)}
+            placeholder={type==='in' ? 'ช่องทางซื้อ, โปรโมชั่น...' : 'ช่องทางขาย, ลูกค้า...'} />
         </div>
 
         <button onClick={submit} disabled={saving || !qty}
@@ -330,6 +395,8 @@ function LogDrawer({ stock, onClose }) {
                     {l.type === 'out' ? '↓ ขาย' : '↑ รับ'}
                   </span>
                   <span style={{ fontSize:13, color:S.text, fontWeight:600 }}>{l.qty} ขวด</span>
+                {l.cost_price && <span style={{ fontSize:11, color:S.textMid, marginLeft:6 }}>ต้นทุน ฿{l.cost_price}/ขวด</span>}
+                {l.sell_price && <span style={{ fontSize:11, color:S.gold, marginLeft:6 }}>ขาย ฿{l.sell_price}/ขวด</span>}
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ fontSize:11, color:S.textLt }}>

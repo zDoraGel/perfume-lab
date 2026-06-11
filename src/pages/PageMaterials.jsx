@@ -68,6 +68,8 @@ function MatModal({ mat, onClose, onSave }) {
   const [effect,        setEffect]        = useState(mat?.effect || '')
   const [ifraLimit,     setIfraLimit]     = useState(mat?.ifra_limit ?? '')
   const [ifraCategory,  setIfraCategory]  = useState(mat?.ifra_category || 'leave-on')
+  const [isKey,         setIsKey]         = useState(mat?.is_key ?? false)
+  const [stockAlertAt,  setStockAlertAt]  = useState(mat?.stock_alert_at ?? '')
   const [saving,        setSaving]        = useState(false)
 
   // คำนวณ cost/g อัตโนมัติเมื่อมี purchase_price และ purchase_size
@@ -95,6 +97,8 @@ function MatModal({ mat, onClose, onSave }) {
       effect:         effect.trim() || null,
       ifra_limit:     ifraLimit !== '' ? parseFloat(ifraLimit) : null,
       ifra_category:  ifraCategory || 'leave-on',
+      is_key:         isKey,
+      stock_alert_at: stockAlertAt !== '' ? parseFloat(stockAlertAt) : null,
     }
     await onSave(payload)
     setSaving(false)
@@ -302,6 +306,30 @@ function MatModal({ mat, onClose, onSave }) {
             <div style={{ fontSize:11, color:'#c07820', marginTop:6 }}>
               ใช้ได้สูงสุด {ifraLimit}% ใน {ifraCategory}
             </div>
+          )}
+        </div>
+
+        {/* ── Key Material ── */}
+        <div style={{ marginTop:14, padding:'12px 14px', background:isKey ? '#eef5f0' : S.bg,
+          borderRadius:12, border:`1px solid ${isKey ? '#a8d4b4' : S.border}` }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isKey ? 10 : 0 }}>
+            <div>
+              <div style={{ fontSize:11, color: isKey ? '#3d6b4a' : S.textMid, fontWeight:600,
+                letterSpacing:.8, textTransform:'uppercase' }}>⭐ Key Material</div>
+              <div style={{ fontSize:10, color:S.textLt, marginTop:2 }}>วัตถุดิบสำคัญ — แจ้งเตือนเมื่อ stock ต่ำ</div>
+            </div>
+            <button onClick={() => setIsKey(p => !p)}
+              style={{ width:40, height:24, borderRadius:12, border:'none', cursor:'pointer',
+                background: isKey ? '#3d6b4a' : S.border, transition:'background .2s',
+                position:'relative' }}>
+              <span style={{ position:'absolute', top:3, left: isKey ? 18 : 3,
+                width:18, height:18, borderRadius:'50%', background:'#fff',
+                transition:'left .2s', display:'block' }}/>
+            </button>
+          </div>
+          {isKey && (
+            <NumInput label="แจ้งเตือนเมื่อ stock ≤ (g)"
+              value={stockAlertAt} onChange={setStockAlertAt} placeholder="เช่น 10" decimal/>
           )}
         </div>
 

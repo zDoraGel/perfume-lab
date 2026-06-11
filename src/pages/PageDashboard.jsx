@@ -39,7 +39,7 @@ function BarChart({ data }) {
             <line x1={PAD} y1={y} x2={W} y2={y}
               stroke={S.border} strokeWidth=".5" strokeDasharray="3,3"/>
             <text x={PAD - 4} y={y + 3} textAnchor="end"
-              fontSize={8} fill={S.textLt}>{Math.round(f * maxVal)}</text>
+              fontSize={7} fill={S.textLt}>{Math.round(f * maxVal)}</text>
           </g>
         )
       })}
@@ -58,16 +58,16 @@ function BarChart({ data }) {
               height={H - yS} rx={3} fill={S.green} opacity={.8}/>
             {/* label */}
             <text x={x} y={H + 14} textAnchor="middle"
-              fontSize={9} fill={S.textMid}>{d.label}</text>
+              fontSize={8} fill={S.textMid}>{d.label}</text>
           </g>
         )
       })}
 
       {/* legend */}
-      <rect x={PAD} y={H + 22} width={8} height={8} rx={2} fill={S.goldBd}/>
-      <text x={PAD + 11} y={H + 30} fontSize={9} fill={S.textMid}>ผลิต</text>
-      <rect x={PAD + 50} y={H + 22} width={8} height={8} rx={2} fill={S.green}/>
-      <text x={PAD + 63} y={H + 30} fontSize={9} fill={S.textMid}>ขาย</text>
+      <rect x={PAD} y={H + 22} width={7} height={7} rx={2} fill={S.goldBd}/>
+      <text x={PAD + 10} y={H + 29} fontSize={8} fill={S.textMid}>Produced</text>
+      <rect x={PAD + 56} y={H + 22} width={7} height={7} rx={2} fill={S.green}/>
+      <text x={PAD + 66} y={H + 29} fontSize={8} fill={S.textMid}>Sold</text>
     </svg>
   )
 }
@@ -90,7 +90,7 @@ function AlertRow({ name, remaining, total, isRetail }) {
           fontFamily:'Cormorant Garamond,serif', whiteSpace:'nowrap',
           overflow:'hidden', textOverflow:'ellipsis' }}>{name}</div>
         <div style={{ fontSize:10, color:S.textLt, marginTop:1 }}>
-          {isRetail ? 'แบ่งขาย' : 'ผลิตเอง'}
+          {isRetail ? 'Retail' : 'In-house'}
         </div>
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -205,15 +205,15 @@ export default function PageDashboard() {
         <>
           {/* ── Stats grid ── */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20 }}>
-            <Stat label="ผลิตทั้งหมด" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
-              sub={`ขายแล้ว ${totalSold} ขวด`} />
-            <Stat label="stock คงเหลือ" value={totalRemaining}
-              sub="จากการผลิตเอง" color={totalRemaining <= 5 ? S.amber : S.text}/>
-            <Stat label="retail ขายแล้ว" value={retailSold}
-              sub={retailRevenue > 0 ? `รายได้ ฿${retailRevenue.toLocaleString()}` : 'ยังไม่มีข้อมูลราคา'}
+            <Stat label="Total Produced" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
+              sub={`Sold ${totalSold} bottles`} />
+            <Stat label="In-house Stock" value={totalRemaining}
+              sub="from own production" color={totalRemaining <= 5 ? S.amber : S.text}/>
+            <Stat label="Retail Sold" value={retailSold}
+              sub={retailRevenue > 0 ? `Revenue ฿${retailRevenue.toLocaleString()}` : 'no pricing data'}
               color={S.gold}/>
-            <Stat label="กำไร retail" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
-              sub="ราคาขาย − ต้นทุน" color={S.green}/>
+            <Stat label="Retail Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
+              sub="sell price − cost" color={S.green}/>
           </div>
 
           {/* ── Alert ── */}
@@ -222,7 +222,7 @@ export default function PageDashboard() {
               borderRadius:12, padding:'12px 16px', marginBottom:20 }}>
               <div style={{ fontSize:11, fontWeight:700, color:S.amber,
                 textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
-                ⚠ ต้องดูแล {alerts.length} รายการ
+                ⚠ Needs attention · {alerts.length} items
               </div>
               {alerts.map((a,i) => (
                 <AlertRow key={i} {...a}/>
@@ -236,7 +236,7 @@ export default function PageDashboard() {
               borderRadius:12, padding:'16px', marginBottom:20 }}>
               <div style={{ fontSize:11, fontWeight:700, color:S.gold,
                 textTransform:'uppercase', letterSpacing:.8, marginBottom:14 }}>
-                ยอดผลิต vs ขาย (รายเดือน)
+                Production vs Sales (Monthly)
               </div>
               <BarChart data={monthly.slice(-6)}/>
             </div>
@@ -248,7 +248,7 @@ export default function PageDashboard() {
               borderRadius:12, padding:'16px', marginBottom:20 }}>
               <div style={{ fontSize:11, fontWeight:700, color:S.gold,
                 textTransform:'uppercase', letterSpacing:.8, marginBottom:4 }}>
-                ขายดีที่สุด
+                Top Sellers
               </div>
               {allItems.map((item, i) => (
                 <TopRow key={i} rank={i+1} {...item}/>
@@ -262,7 +262,7 @@ export default function PageDashboard() {
               borderRadius:12, padding:'16px', marginBottom:20 }}>
               <div style={{ fontSize:11, fontWeight:700, color:S.gold,
                 textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
-                stock ผลิตเอง (รายสูตร)
+                In-house Stock by Formula
               </div>
               {prodSum.map(f => (
                 <div key={f.formula_id}
