@@ -9,14 +9,18 @@ import PageMaterials  from './pages/PageMaterials'
 import PageExport     from './pages/PageExport'
 import PageProduction from './pages/PageProduction'
 import PageMyBlends   from './pages/PageMyBlends'
+import PageDashboard  from './pages/PageDashboard'
+import PageRetailStock from './pages/PageRetailStock'
 
 const NAV = [
-  { id:'formulas',   label:'Formulas',   icon:'◈' },
-  { id:'accords',    label:'Accords',    icon:'◎' },
-  { id:'materials',  label:'Materials',  icon:'⬡' },
-  { id:'myblends',   label:'My Blends',  icon:'✦' },
-  { id:'production', label:'Production', icon:'○' },
-  { id:'export',     label:'Export',     icon:'↓' },
+  { id:'dashboard',   label:'Dashboard',  icon:'◉' },
+  { id:'formulas',    label:'Formulas',   icon:'◈' },
+  { id:'accords',     label:'Accords',    icon:'◎' },
+  { id:'materials',   label:'Materials',  icon:'⬡' },
+  { id:'myblends',    label:'My Blends',  icon:'✦' },
+  { id:'production',  label:'Production', icon:'○' },
+  { id:'retail',      label:'Retail',     icon:'⬘' },
+  { id:'export',      label:'Export',     icon:'↓' },
 ]
 
 export default function App() {
@@ -52,6 +56,9 @@ export default function App() {
       {/* Page Content */}
       <div style={{ maxWidth:600, margin:'0 auto', padding:'20px 16px 90px' }}>
 
+        {/* ── Dashboard ────────────────────────────────────── */}
+        {tab === 'dashboard' && <PageDashboard/>}
+
         {/* ── Formulas ─────────────────────────────────────── */}
         {tab === 'formulas' && formulaPage === 'list' && (
           <PageList
@@ -84,6 +91,9 @@ export default function App() {
         {/* ── Production ───────────────────────────────────── */}
         {tab === 'production' && <PageProduction/>}
 
+        {/* ── Retail Stock ─────────────────────────────────── */}
+        {tab === 'retail' && <PageRetailStock/>}
+
         {/* ── Export ───────────────────────────────────────── */}
         {tab === 'export' && <PageExport/>}
       </div>
@@ -91,9 +101,10 @@ export default function App() {
       {/* Bottom Nav */}
       {!inSubPage && (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:20,
-          background:S.white, borderTop:`1px solid ${S.border}`,
-          display:'flex', justifyContent:'center' }}>
-          <div style={{ display:'flex', maxWidth:600, width:'100%' }}>
+          background:S.white, borderTop:`1px solid ${S.border}` }}>
+          <div style={{ display:'flex', overflowX:'auto', WebkitOverflowScrolling:'touch',
+            scrollbarWidth:'none', msOverflowStyle:'none',
+            maxWidth:600, margin:'0 auto' }}>
             {NAV.map(n => {
               const active = tab === n.id
               return (
@@ -102,9 +113,9 @@ export default function App() {
                     setTab(n.id)
                     if (n.id === 'formulas') setFormulaPage('list')
                   }}
-                  style={{ flex:1, padding:'12px 0 14px', background:'none', border:'none',
-                    cursor:'pointer', display:'flex', flexDirection:'column',
-                    alignItems:'center', gap:3 }}>
+                  style={{ flexShrink:0, minWidth:68, padding:'12px 0 14px',
+                    background:'none', border:'none', cursor:'pointer',
+                    display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
                   <span style={{ fontSize:18, lineHeight:1, color: active ? S.gold : S.textLt }}>
                     {n.icon}
                   </span>

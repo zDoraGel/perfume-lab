@@ -3,6 +3,7 @@ import {
   PROJECTION_OPTS, TEXTURE_OPTS, TEMPERATURE_OPTS,
   FEELING_OPTS, OPENING_OPTS, AVOID_PRESETS, WEIGHT_PCTS
 } from '../constants/formulaDNA'
+import FormulaRadarChart from './FormulaRadarChart'
 
 function getLabel(opts, value) {
   return opts.find(o => o.value === value)?.label || value
@@ -12,7 +13,7 @@ function getEmoji(opts, value) {
   return opts.find(o => o.value === value)?.emoji || ''
 }
 
-export default function FormulaDNASummary({ formula }) {
+export default function FormulaDNASummary({ formula, items = [] }) {
   const dna = formula
 
   const hasAny = dna.projection || dna.texture || dna.temperature ||
@@ -166,6 +167,9 @@ export default function FormulaDNASummary({ formula }) {
           </Row>
         )}
       </div>
+
+      {/* Radar Chart */}
+      <FormulaRadarChart formula={formula} items={items} />
     </div>
   )
 }

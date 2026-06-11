@@ -16,6 +16,7 @@ import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
 import LabelGenerator from '../components/LabelGenerator'
+import IFRAWarning from '../components/IFRAWarning'
 
 // ── Version Card ───────────────────────────────────────────────────────────────
 function VersionCard({ ver, isLatest, formula, materials, versions = [], setVersions }) {
@@ -24,7 +25,8 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
   const [loaded,     setLoaded]     = useState(false)
   const [showPkg,    setShowPkg]    = useState(false)
   const [scaleMl,    setScaleMl]    = useState(null)
-  const [activeTab,  setActiveTab]  = useState('ingredients') // 'ingredients' | 'blend'
+  const [activeTab,  setActiveTab]  = useState('ingredients')
+  const [concentration, setConcentration] = useState('SIGNATURE') // 'ingredients' | 'blend'
   const [showFinal,  setShowFinal]  = useState(false)
   const [agingDays,  setAgingDays]  = useState(14)
   const [showRevise, setShowRevise] = useState(false)
@@ -384,6 +386,79 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
             </div>
           )}
 
+          {/* Cost per Gram / Drop */}
+          {loaded && activeTab === 'ingredients' && (() => {
+            const totalCostG = items.reduce((s, x) => {
+              const cost = x.material?.cost
+              return cost != null ? s + parseFloat(x.grams||0) * scale * parseFloat(cost) : s
+            }, 0)
+            const hasCost = items.some(x => x.material?.cost != null)
+            if (!hasCost) return null
+            const totalG   = total  // grams already scaled
+            const costPerG = totalG > 0 ? totalCostG / totalG : 0
+            // 1 drop ≈ 0.05 ml ≈ 0.05 × 0.95 g (avg density)
+            const costPerDrop = costPerG * 0.05 * 0.95
+            const batchMlFinal = scaleMl || batchMl
+            const costPerMl    = totalG > 0 ? totalCostG / batchMlFinal : 0
+            return (
+              <div style={{ marginTop:10, padding:'10px 14px', borderRadius:10,
+                background:S.goldLt, border:`1px solid ${S.goldBd}` }}>
+                <div style={{ fontSize:10, fontWeight:700, color:S.gold,
+                  textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
+                  ต้นทุน concentrate
+                </div>
+                <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                  <div>
+                    <div style={{ fontSize:18, fontWeight:700, color:S.gold,
+                      fontFamily:'Cormorant Garamond,serif' }}>
+                      ฿{totalCostG.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize:10, color:S.textMid }}>รวม {batchMlFinal}ml</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:18, fontWeight:700, color:S.text,
+                      fontFamily:'Cormorant Garamond,serif' }}>
+                      ฿{costPerMl.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize:10, color:S.textMid }}>ต่อ ml</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:18, fontWeight:700, color:S.textMid,
+                      fontFamily:'Cormorant Garamond,serif' }}>
+                      ฿{costPerDrop.toFixed(3)}
+                    </div>
+                    <div style={{ fontSize:10, color:S.textMid }}>ต่อ drop</div>
+                  </div>
+                </div>
+                {items.some(x => x.material?.cost == null) && (
+                  <div style={{ fontSize:10, color:S.textLt, marginTop:6 }}>
+                    * บาง ingredient ยังไม่มีราคา — ตัวเลขนี้อาจไม่ครบค่ะ
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* Concentration selector สำหรับ IFRA */}
+          {loaded && activeTab === 'ingredients' && items.some(i => i.material?.ifra_limit != null) && (
+            <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:10, color:S.textMid, textTransform:'uppercase',
+                letterSpacing:.5, fontWeight:600 }}>IFRA คำนวณที่</span>
+              <div style={{ display:'flex', gap:6 }}>
+                {['SOFT','SIGNATURE','DEEP'].map(c => (
+                  <button key={c} onClick={() => setConcentration(c)}
+                    style={{ padding:'4px 12px', borderRadius:16, cursor:'pointer',
+                      fontSize:10, fontFamily:'Inter,sans-serif', fontWeight:600,
+                      border:`1.5px solid ${concentration===c ? S.gold : S.border}`,
+                      background: concentration===c ? S.goldLt : 'transparent',
+                      color: concentration===c ? S.gold : S.textMid }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Blend Guide tab */}
           {loaded && activeTab === 'blend' && (
             <BlendGuide
@@ -437,6 +512,11 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
             />
           )}
 
+          {/* IFRA Warning */}
+          {loaded && activeTab === 'ingredients' && items.length > 0 && (
+            <IFRAWarning items={items} concentration={concentration}/>
+          )}
+
           {/* Package System toggle */}
           {loaded && items.length > 0 && (
             <div style={{ marginTop:14 }}>
@@ -473,10 +553,11 @@ export default function PageDetail({ formula, onBack }) {
   const [loading,   setLoading]   = useState(true)
   const [view,      setView]      = useState('list')
   const [imageUrl,  setImageUrl]  = useState(formula.image_url || null)
-  const [formulaData, setFormulaData] = useState(formula)  // re-fetch เพื่อได้ best_for
+  const [formulaData, setFormulaData] = useState(formula)
   const [deleting,  setDeleting]  = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleteText,  setDeleteText]  = useState('')
+  const [latestItems, setLatestItems] = useState([])
 
   useEffect(() => {
     Promise.all([
@@ -486,9 +567,13 @@ export default function PageDetail({ formula, onBack }) {
     ]).then(([v, m, all]) => {
       setVersions(v)
       setMaterials(m)
-      // re-fetch formula เพื่อให้ได้ best_for และ fields ใหม่ครบ
       const fresh = all.find(f => f.id === formula.id)
       if (fresh) setFormulaData(fresh)
+      // load latest version items for radar chart
+      if (v.length > 0) {
+        const latest = v[v.length - 1]
+        db.getItems(latest.id).then(its => setLatestItems(its))
+      }
       setLoading(false)
     })
   }, [formula.id])
@@ -641,7 +726,7 @@ export default function PageDetail({ formula, onBack }) {
       />
 
       {/* DNA Summary */}
-      <FormulaDNASummary formula={formula}/>
+      <FormulaDNASummary formula={formula} items={latestItems}/>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:20 }}>
         {[

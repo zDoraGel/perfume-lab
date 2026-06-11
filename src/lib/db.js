@@ -332,4 +332,55 @@ export const db = {
     })
     return Object.values(map).map(s => ({ ...s, remaining: s.produced - s.sold }))
   },
+
+  // ── Dashboard ──────────────────────────────────────────────────────────────
+  async getAllBatchesWithFormula() {
+    const { data } = await supabase
+      .from('production_batches')
+      .select('*, formula:formulas(name)')
+      .order('produced_at', { ascending: true })
+    return data || []
+  },
+
+  async getProductionSummary() {
+    const batches = await this.getAllBatchesWithFormula()
+    const map = {}
+    batches.forEach(b => {
+      const id = b.formula_id
+      if (!map[id]) map[id] = {
+        formula_id: id,
+        name: b.formula?.name || `Formula ${id}`,
+        produced: 0, sold: 0,
+      }
+      map[id].produced += b.qty_produced
+      map[id].sold     += b.qty_sold
+    })
+    return Object.values(map).map(s => ({ ...s, remaining: s.produced - s.sold }))
+  },
+
+  async getMonthlySeries() {
+    const batches = await this.getAllBatchesWithFormula()
+    const map = {}
+    batches.forEach(b => {
+      const d     = new Date(b.produced_at)
+      const key   = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+      const label = d.toLocaleDateString('th-TH', { month:'short', year:'2-digit' })
+      if (!map[key]) map[key] = { key, label, produced: 0, sold: 0 }
+      map[key].produced += b.qty_produced
+      map[key].sold     += b.qty_sold
+    })
+    return Object.keys(map).sort().map(k => map[k])
+  },
+
+  async getRetailStockSummary() {
+    const { data } = await supabase
+      .from('retail_stock')
+      .select('id, name, brand, qty_total, qty_sold, alert_at, price_per_unit, cost_per_unit')
+      .order('created_at', { ascending: false })
+    return (data || []).map(r => ({
+      ...r,
+      remaining: r.qty_total - r.qty_sold,
+      isLow: (r.qty_total - r.qty_sold) <= r.alert_at,
+    }))
+  },
 }
