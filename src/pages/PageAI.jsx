@@ -146,6 +146,16 @@ const VIBE_PRESETS = [
   { v:'Spring Petals',        th:'กลีบดอกฤดูใบไม้ผลิ' },
   { v:'Dewy Flowers',         th:'ดอกไม้เปียกน้ำค้าง' },
   { v:'Floral Skin',          th:'ดอกไม้บนผิว' },
+  { v:'Soft Tea',             th:'ชาอ่อนโยน' },
+  { v:'White Tea',            th:'ชาขาว' },
+  { v:'Delicate Tea Leaves',  th:'ใบชานุ่มละมุน' },
+  { v:'Tea Steam',            th:'ไอน้ำชาร้อน' },
+  { v:'Tea & Linen',          th:'ชาและผ้าสะอาด' },
+  { v:'Airy Tea',             th:'ชาโปร่งเบา' },
+  { v:'Elegant Tea',          th:'ชาสุภาพมีระดับ' },
+  { v:'Clean Tea Accord',     th:'กลิ่นชาสะอาด' },
+  { v:'Gentle Infusion',      th:'ชางนุ่มละมุน' },
+  { v:'Whisper of Tea',       th:'กลิ่นชาแผ่วเบา' },
 ]
 const NOT_PRESETS = [
   'Sweet Candy','Gourmand','Heavy Floral','Creamy','Milky',
