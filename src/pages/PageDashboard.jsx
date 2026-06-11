@@ -20,7 +20,7 @@ function Stat({ label, value, sub, color }) {
 function BarChart({ data }) {
   if (!data.length) return (
     <div style={{ textAlign:'center', padding:'32px 0', color:S.textLt, fontSize:13 }}>
-      ยังไม่มีข้อมูล
+      No data yet
     </div>
   )
 
@@ -95,9 +95,9 @@ function AlertRow({ name, remaining, total, isRetail }) {
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
         <div style={{ fontSize:13, fontWeight:700, color }}>
-          {remaining <= 0 ? 'หมดแล้ว' : `เหลือ ${remaining}`}
+          {remaining <= 0 ? 'Out of stock' : `${remaining} left`}
         </div>
-        <div style={{ fontSize:10, color:S.textLt }}>/ {total} ขวด</div>
+        <div style={{ fontSize:10, color:S.textLt }}>/ {total} bottles</div>
       </div>
     </div>
   )
@@ -126,7 +126,7 @@ function TopRow({ rank, name, sold, produced, isRetail }) {
       </div>
       <div style={{ textAlign:'right', flexShrink:0 }}>
         <div style={{ fontSize:14, fontWeight:700, color:S.gold }}>{sold}</div>
-        <div style={{ fontSize:10, color:S.textLt }}>ขวด · {pct}%</div>
+        <div style={{ fontSize:10, color:S.textLt }}>btl · {pct}%</div>
       </div>
     </div>
   )
@@ -191,15 +191,15 @@ export default function PageDashboard() {
         <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:22,
           color:S.gold, fontStyle:'italic', marginBottom:2 }}>Dashboard</div>
         <div style={{ fontSize:11, color:S.textLt, textTransform:'uppercase', letterSpacing:1 }}>
-          ภาพรวมธุรกิจ
+          Business Overview
         </div>
       </div>
 
       {isEmpty ? (
         <div style={{ textAlign:'center', padding:'60px 0' }}>
           <div style={{ fontSize:32, marginBottom:12 }}>◈</div>
-          <div style={{ fontSize:14, color:S.textMid, marginBottom:6 }}>ยังไม่มีข้อมูล</div>
-          <div style={{ fontSize:12, color:S.textLt }}>เริ่มบันทึก Production หรือ Retail Stock ก่อนนะคะ</div>
+          <div style={{ fontSize:14, color:S.textMid, marginBottom:6 }}>No data yet</div>
+          <div style={{ fontSize:12, color:S.textLt }}>Start by adding Production or Retail Stock</div>
         </div>
       ) : (
         <>
@@ -272,9 +272,9 @@ export default function PageDashboard() {
                   <div style={{ fontSize:13, fontFamily:'Cormorant Garamond,serif',
                     color:S.text }}>{f.name}</div>
                   <div style={{ display:'flex', gap:16, fontSize:12 }}>
-                    <span style={{ color:S.textMid }}>ผลิต <b style={{ color:S.text }}>{f.produced}</b></span>
-                    <span style={{ color:S.textMid }}>ขาย <b style={{ color:S.gold }}>{f.sold}</b></span>
-                    <span style={{ color:S.textMid }}>เหลือ <b style={{
+                    <span style={{ color:S.textMid }}>Produced <b style={{ color:S.text }}>{f.produced}</b></span>
+                    <span style={{ color:S.textMid }}>Sold <b style={{ color:S.gold }}>{f.sold}</b></span>
+                    <span style={{ color:S.textMid }}>Remaining <b style={{
                       color: f.remaining <= 3 ? S.red : f.remaining <= 8 ? S.amber : S.green
                     }}>{f.remaining}</b></span>
                   </div>
