@@ -206,14 +206,14 @@ export default function PageDashboard() {
           {/* ── Stats grid ── */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20 }}>
             <Stat label="Total Produced" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
-              sub={`Sold ${totalSold} bottles`} />
+              sub={`ผลิตแล้ว ${totalSold} ขวด`} />
             <Stat label="In-house Stock" value={totalRemaining}
-              sub="from own production" color={totalRemaining <= 5 ? S.amber : S.text}/>
+              sub="คงเหลือจากผลิตเอง" color={totalRemaining <= 5 ? S.amber : S.text}/>
             <Stat label="Retail Sold" value={retailSold}
-              sub={retailRevenue > 0 ? `Revenue ฿${retailRevenue.toLocaleString()}` : 'no pricing data'}
+              sub={retailRevenue > 0 ? `รายได้ ฿${retailRevenue.toLocaleString()}` : 'ยังไม่มีข้อมูลราคา'}
               color={S.gold}/>
             <Stat label="Retail Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
-              sub="sell price − cost" color={S.green}/>
+              sub="ราคาขาย − ต้นทุน" color={S.green}/>
           </div>
 
           {/* ── Alert ── */}
