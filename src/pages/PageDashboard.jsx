@@ -1,6 +1,41 @@
 import { useState, useEffect } from 'react'
 import { db } from '../lib/db'
 import { S } from '../constants/theme'
+import { supabase } from '../lib/supabase'
+
+// ── Trend helpers ─────────────────────────────────────────────────────────────
+async function fetchSavedTrends() {
+  const { data } = await supabase
+    .from('trend_items')
+    .select('*')
+    .order('fetched_at', { ascending: false })
+    .limit(20)
+  return data || []
+}
+
+async function toggleSaved(id, is_saved) {
+  await supabase.from('trend_items').update({ is_saved }).eq('id', id)
+}
+
+async function toggleDone(id, is_done) {
+  await supabase.from('trend_items').update({ is_done }).eq('id', id)
+}
+
+async function updateNote(id, saved_note) {
+  await supabase.from('trend_items').update({ saved_note }).eq('id', id)
+}
+
+async function callTrendFetch() {
+  const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trend-fetch`
+  const res = await fetch(fnUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+  })
+  return res.json()
+}
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function Stat({ label, value, sub, color }) {
@@ -132,24 +167,135 @@ function TopRow({ rank, name, sold, produced, isRetail }) {
   )
 }
 
+// ── Trend Card ────────────────────────────────────────────────────────────────
+function TrendCard({ trend, onToggleSaved, onToggleDone, onNote }) {
+  const [editNote, setEditNote] = useState(false)
+  const [noteVal,  setNoteVal]  = useState(trend.saved_note || '')
+
+  return (
+    <div style={{ background:S.white, border:`1px solid ${trend.is_saved ? S.goldBd : S.border}`,
+      borderRadius:12, padding:14, marginBottom:10,
+      opacity: trend.is_done ? .6 : 1 }}>
+
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:S.text,
+            fontFamily:'Cormorant Garamond,serif',
+            textDecoration: trend.is_done ? 'line-through' : 'none' }}>
+            {trend.title}
+          </div>
+          <div style={{ fontSize:11, color:S.textMid, marginTop:4, lineHeight:1.5 }}>
+            {trend.description}
+          </div>
+          {trend.keywords?.length > 0 && (
+            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:6 }}>
+              {trend.keywords.map((k,i) => (
+                <span key={i} style={{ fontSize:10, padding:'2px 8px', borderRadius:12,
+                  background:S.goldLt, color:S.gold, border:`1px solid ${S.goldBd}` }}>
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+          {trend.saved_note && !editNote && (
+            <div style={{ fontSize:11, color:S.textMid, marginTop:6,
+              fontStyle:'italic', padding:'4px 8px', background:S.bg, borderRadius:6 }}>
+              📝 {trend.saved_note}
+            </div>
+          )}
+          {editNote && (
+            <div style={{ marginTop:6, display:'flex', gap:6 }}>
+              <input value={noteVal} onChange={e => setNoteVal(e.target.value)}
+                placeholder="note ของฉัน..."
+                style={{ flex:1, padding:'5px 8px', borderRadius:6, fontSize:11,
+                  border:`1px solid ${S.goldBd}`, outline:'none' }}/>
+              <button onClick={() => { onNote(noteVal); setEditNote(false) }}
+                style={{ padding:'5px 10px', borderRadius:6, border:'none',
+                  background:S.gold, color:'#fff', fontSize:11, cursor:'pointer' }}>บันทึก</button>
+              <button onClick={() => setEditNote(false)}
+                style={{ padding:'5px 8px', borderRadius:6, border:`1px solid ${S.border}`,
+                  background:'none', fontSize:11, cursor:'pointer', color:S.textMid }}>ยกเลิก</button>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+          <button onClick={onToggleSaved}
+            title={trend.is_saved ? 'ยกเลิก bookmark' : 'บันทึกไว้'}
+            style={{ padding:'5px 8px', borderRadius:8, border:'none',
+              background: trend.is_saved ? S.goldLt : S.bg,
+              cursor:'pointer', fontSize:14 }}>
+            {trend.is_saved ? '🔖' : '📌'}
+          </button>
+          <button onClick={onToggleDone}
+            title={trend.is_done ? 'ยังไม่ทำ' : 'ทำแล้ว'}
+            style={{ padding:'5px 8px', borderRadius:8, border:'none',
+              background: trend.is_done ? S.greenBg : S.bg,
+              cursor:'pointer', fontSize:14 }}>
+            {trend.is_done ? '✅' : '○'}
+          </button>
+          <button onClick={() => { setEditNote(true); setNoteVal(trend.saved_note || '') }}
+            title="เพิ่ม note"
+            style={{ padding:'5px 8px', borderRadius:8, border:'none',
+              background:S.bg, cursor:'pointer', fontSize:14 }}>
+            📝
+          </button>
+        </div>
+      </div>
+
+      <div style={{ fontSize:9, color:S.textLt, marginTop:8 }}>
+        {new Date(trend.fetched_at).toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'2-digit' })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function PageDashboard() {
   const [loading,    setLoading]    = useState(true)
-  const [prodSum,    setProdSum]    = useState([])   // per-formula summary
-  const [monthly,    setMonthly]    = useState([])   // monthly series
-  const [retail,     setRetail]     = useState([])   // retail stock
+  const [prodSum,    setProdSum]    = useState([])
+  const [monthly,    setMonthly]    = useState([])
+  const [retail,     setRetail]     = useState([])
+  const [trends,     setTrends]     = useState([])
+  const [fetching,   setFetching]   = useState(false)
+
+  const loadTrends = () => fetchSavedTrends().then(setTrends)
+
+  async function handleFetchTrends() {
+    setFetching(true)
+    await callTrendFetch()
+    await loadTrends()
+    setFetching(false)
+  }
+
+  async function handleToggleSaved(id, val) {
+    await toggleSaved(id, val)
+    loadTrends()
+  }
+
+  async function handleToggleDone(id, val) {
+    await toggleDone(id, val)
+    loadTrends()
+  }
+
+  async function handleNote(id, note) {
+    await updateNote(id, note)
+    loadTrends()
+  }
 
   useEffect(() => {
     Promise.all([
       db.getProductionSummary(),
       db.getMonthlySeries(),
-      db.getRetailStockSummary().catch(() => []),  // table อาจยังไม่มี
+      db.getRetailStockSummary().catch(() => []),
     ]).then(([ps, ms, rs]) => {
       setProdSum(ps)
       setMonthly(ms)
       setRetail(rs)
       setLoading(false)
     })
+    loadTrends()
   }, [])
 
   if (loading) return (
@@ -284,6 +430,58 @@ export default function PageDashboard() {
           )}
         </>
       )}
+
+      {/* ── Fragrance Trends ── */}
+      <div style={{ marginTop:24 }}>
+        {/* Header + refresh button */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+              textTransform:'uppercase', letterSpacing:.8 }}>✦ Fragrance Trends</div>
+            <div style={{ fontSize:10, color:S.textLt, marginTop:2 }}>กดเพื่ออัพเดท trend ล่าสุด</div>
+          </div>
+          <button onClick={handleFetchTrends} disabled={fetching}
+            style={{ padding:'8px 14px', borderRadius:20, border:`1.5px solid ${S.gold}`,
+              background: fetching ? S.bg : S.goldLt, cursor: fetching ? 'default' : 'pointer',
+              fontSize:11, fontWeight:600, color:S.gold, fontFamily:'Inter,sans-serif' }}>
+            {fetching ? 'กำลังดึง…' : '↻ Refresh Trends'}
+          </button>
+        </div>
+
+        {/* Saved trends first */}
+        {trends.filter(t => t.is_saved).length > 0 && (
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:10, color:S.gold, fontWeight:600,
+              textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>
+              🔖 บันทึกไว้
+            </div>
+            {trends.filter(t => t.is_saved).map(t => (
+              <TrendCard key={t.id} trend={t}
+                onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
+                onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
+                onNote={note => handleNote(t.id, note)}/>
+            ))}
+          </div>
+        )}
+
+        {/* All trends */}
+        {trends.filter(t => !t.is_saved).length > 0 && (
+          <div>
+            {trends.filter(t => !t.is_saved).slice(0, 10).map(t => (
+              <TrendCard key={t.id} trend={t}
+                onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
+                onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
+                onNote={note => handleNote(t.id, note)}/>
+            ))}
+          </div>
+        )}
+
+        {trends.length === 0 && !fetching && (
+          <div style={{ textAlign:'center', padding:'24px 0', color:S.textLt, fontSize:13 }}>
+            กด Refresh Trends เพื่อดึง trend ล่าสุดค่ะ
+          </div>
+        )}
+      </div>
     </div>
   )
 }
