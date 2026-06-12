@@ -97,6 +97,8 @@ export default function PageNewFormula({ onBack, onCreate }) {
   const [formulaLoading,setFormulaLoading]= useState(false)
   const [selectedChoice,setSelectedChoice]= useState({})
   const [expandedIng,   setExpandedIng]   = useState(null)
+  const [overrideGrams, setOverrideGrams] = useState({})
+  const [overrideMl,    setOverrideMl]    = useState({})
   const [extraIngs,     setExtraIngs]     = useState([]) // manual add-on
 
   // Step 6 — Name
@@ -471,7 +473,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
 
   // ── Generate formula ────────────────────────────────────────────────────────
   async function genFormula() {
-    setFormulaLoading(true); setFormulaSugg(null); setSelectedChoice({}); setExpandedIng(null); setExtraIngs([])
+    setFormulaLoading(true); setFormulaSugg(null); setSelectedChoice({}); setExpandedIng(null); setExtraIngs([{matId:'',grams:'',ml:''}]); setOverrideGrams({}); setOverrideMl({})
     const matList = materials.map(m => m.name + ' (' + m.family + ', stock: ' + m.stock + 'g, evap: ' + (m.evaporation||'?') + ')').join(', ')
     const compiledPrompt = buildPrompt()
     const cxPrompt = {
@@ -531,8 +533,15 @@ export default function PageNewFormula({ onBack, onCreate }) {
   // ── Helpers ─────────────────────────────────────────────────────────────────
   function findInStock(ingName) {
     if (!ingName) return null
-    const n = ingName.toLowerCase()
-    return materials.find(m => m.name.toLowerCase().includes(n) || n.includes(m.name.toLowerCase().split(' ')[0]))
+    const n = ingName.toLowerCase().trim()
+    // 1. exact match
+    const exact = materials.find(m => m.name.toLowerCase().trim() === n)
+    if (exact) return exact
+    // 2. material name fully contained in ingredient name
+    const contained = materials.find(m => n.includes(m.name.toLowerCase().trim()))
+    if (contained) return contained
+    // 3. ingredient name fully contained in material name
+    return materials.find(m => m.name.toLowerCase().trim().includes(n)) || null
   }
 
   function getChosenOption(ing) {
@@ -559,11 +568,16 @@ export default function PageNewFormula({ onBack, onCreate }) {
               evaporation: ing.role === 'top' ? 'Top' : ing.role === 'heart' ? 'Heart' : 'Base',
             })
           }
-          return mat ? { materialId: mat.id, grams: chosen.grams, ml: chosen.ml || null, family: mat.family || '' } : null
+          return mat ? {
+            materialId: mat.id,
+            grams: parseFloat(overrideGrams[chosen.name] ?? chosen.grams),
+            ml: overrideMl[chosen.name] ? parseFloat(overrideMl[chosen.name]) : (chosen.ml || null),
+            family: mat.family || ''
+          } : null
         }),
         ...extraIngs.filter(e => e.matId && e.grams).map(async e => {
           const mat = materials.find(m => m.id === parseInt(e.matId))
-          return mat ? { materialId: mat.id, grams: parseFloat(e.grams), ml: null, family: mat.family || '' } : null
+          return mat ? { materialId: mat.id, grams: parseFloat(e.grams), ml: e.ml ? parseFloat(e.ml) : null, family: mat.family || '' } : null
         }),
       ])
       const validIngs = matchedIngs.filter(Boolean)
@@ -886,8 +900,26 @@ export default function PageNewFormula({ onBack, onCreate }) {
                                     )}
                                   </div>
                                   <div style={{ textAlign:'right', flexShrink:0, marginLeft:12 }}>
-                                    <div style={{ fontSize:14, color:S.ink, fontWeight:500 }}>{chosen.grams}g</div>
-                                    <div style={{ fontSize:12, color:S.gold }}>{chosen.ml}ml</div>
+                                    <div style={{ display:'flex', gap:4, alignItems:'center', justifyContent:'flex-end' }}>
+                                      <input type="number" step="0.1"
+                                        value={overrideGrams?.[ing.primary.name] ?? chosen.grams}
+                                        onChange={ev => setOverrideGrams(p => ({...p, [ing.primary.name]: ev.target.value}))}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{ width:52, padding:'4px 6px', borderRadius:6, fontSize:13,
+                                          border:`1px solid ${S.goldBd}`, color:S.ink, fontFamily:'Inter,sans-serif',
+                                          textAlign:'right', outline:'none', background:S.white }}/>
+                                      <span style={{ fontSize:11, color:S.textMid }}>g</span>
+                                    </div>
+                                    <div style={{ display:'flex', gap:4, alignItems:'center', justifyContent:'flex-end', marginTop:3 }}>
+                                      <input type="number" step="0.1"
+                                        value={overrideMl?.[ing.primary.name] ?? chosen.ml ?? ''}
+                                        onChange={ev => setOverrideMl(p => ({...p, [ing.primary.name]: ev.target.value}))}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{ width:52, padding:'4px 6px', borderRadius:6, fontSize:13,
+                                          border:`1px solid ${S.border}`, color:S.gold, fontFamily:'Inter,sans-serif',
+                                          textAlign:'right', outline:'none', background:S.white }}/>
+                                      <span style={{ fontSize:11, color:S.gold }}>ml</span>
+                                    </div>
                                     <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>{isOpen ? '▲' : '▼'}</div>
                                   </div>
                                 </div>
@@ -992,11 +1024,20 @@ export default function PageNewFormula({ onBack, onCreate }) {
                                 onChange={id => setExtraIngs(p => p.map((x,j)=>j===i?{...x,matId:id}:x))}
                                 placeholder="ค้นหา ingredient..."/>
                             </div>
-                            <input type="number" placeholder="g" value={e.grams}
-                              onChange={ev => setExtraIngs(p => p.map((x,j)=>j===i?{...x,grams:ev.target.value}:x))}
-                              style={{ width:64, padding:'10px 8px', borderRadius:10, fontSize:13,
-                                fontFamily:'Inter,sans-serif', border:`1px solid ${S.border}`,
-                                color:S.ink, background:S.white, outline:'none' }}/>
+                            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                              <input type="number" placeholder="g" value={e.grams}
+                                onChange={ev => setExtraIngs(p => p.map((x,j)=>j===i?{...x,grams:ev.target.value}:x))}
+                                style={{ width:52, padding:'10px 6px', borderRadius:10, fontSize:13,
+                                  fontFamily:'Inter,sans-serif', border:`1px solid ${S.border}`,
+                                  color:S.ink, background:S.white, outline:'none', textAlign:'right' }}/>
+                              <span style={{ fontSize:11, color:S.textMid }}>g</span>
+                              <input type="number" placeholder="ml" value={e.ml||''}
+                                onChange={ev => setExtraIngs(p => p.map((x,j)=>j===i?{...x,ml:ev.target.value}:x))}
+                                style={{ width:52, padding:'10px 6px', borderRadius:10, fontSize:13,
+                                  fontFamily:'Inter,sans-serif', border:`1px solid ${S.border}`,
+                                  color:S.gold, background:S.white, outline:'none', textAlign:'right' }}/>
+                              <span style={{ fontSize:11, color:S.gold }}>ml</span>
+                            </div>
                             <button onClick={() => setExtraIngs(p=>p.filter((_,j)=>j!==i))}
                               style={{ color:S.textLt, background:'none', border:'none',
                                 cursor:'pointer', fontSize:18, flexShrink:0 }}>×</button>
@@ -1004,7 +1045,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
                         ))}
 
                         {canAdd && (
-                          <button onClick={() => setExtraIngs(p=>[...p,{matId:'',grams:''}])}
+                          <button onClick={() => setExtraIngs(p=>[...p,{matId:'',grams:'',ml:''}])}
                             style={{ fontSize:12, color:S.gold, background:'none',
                               border:`1px solid ${S.goldBd}`, borderRadius:16,
                               padding:'5px 14px', cursor:'pointer',

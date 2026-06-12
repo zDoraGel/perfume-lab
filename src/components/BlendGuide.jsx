@@ -127,6 +127,15 @@ Give 4-5 bullets only.`,
         </div>
       )}
 
+      {/* Remove button — ขึ้นมาอยู่บนสุด */}
+      <button onClick={addRemoveToDraft}
+        style={{ width:'100%', padding:'8px 0', borderRadius:10, cursor:'pointer',
+          fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
+          background:'transparent', border:`1px solid ${S.red}44`, color:S.red,
+          marginBottom:8 }}>
+        🗑 ลบ {item.material?.name} ออกจากสูตร
+      </button>
+
       <input value={query} onChange={e => setQuery(e.target.value)}
         placeholder="ค้นหา material..."
         style={{ width:'100%', background:S.bg, border:`1px solid ${S.border}`,
@@ -272,21 +281,16 @@ Give 4-5 bullets only.`,
           + เพิ่มใน Draft ({item.material?.name} → {selected.name})
         </button>
       )}
-
-      {/* Remove button */}
-      <button onClick={addRemoveToDraft}
-        style={{ width:'100%', padding:'8px 0', borderRadius:10, cursor:'pointer',
-          fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
-          background:'transparent', border:`1px solid ${S.red}44`, color:S.red }}>
-        🗑 ลบ {item.material?.name} ออกจากสูตร
-      </button>
     </div>
   )
 }
 
 // ── Guide Row ──────────────────────────────────────────────────────────────────
 function GuideRow({ item, state, materials, onSaveNewVersion, allItems, draft, onAddToDraft }) {
-  const [showSwap, setShowSwap] = useState(false)
+  const [showSwap,  setShowSwap]  = useState(false)
+  const [editAmt,   setEditAmt]   = useState(false)
+  const [editG,     setEditG]     = useState('')
+  const [editMl,    setEditMl]    = useState('')
   const fc          = FC[item.material?.family] || { c: S.textMid, bg: S.border }
   const bgColor     = state === 'must-buy' ? '#fffbf8'
     : state === 'use-sub' ? '#fffdf5'
@@ -332,12 +336,56 @@ function GuideRow({ item, state, materials, onSaveNewVersion, allItems, draft, o
           </div>
 
           <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-            <span style={{ fontSize:12, color:S.textMid }}>{item.scaledG.toFixed(3)}g</span>
-            <span style={{ fontSize:13, fontWeight:600,
-              color: state === 'ready' ? S.green : S.textMid }}>
-              {item.scaledMl.toFixed(2)}ml
-            </span>
-            {(state === 'ready' || state === 'use-sub' || state === 'must-buy') && (
+            {editAmt ? (
+              <>
+                <input type="number" step="0.01" value={editG}
+                  onChange={e => setEditG(e.target.value)}
+                  style={{ width:52, padding:'3px 6px', borderRadius:6, fontSize:12,
+                    border:`1px solid ${S.goldBd}`, textAlign:'right', outline:'none',
+                    fontFamily:'Inter,sans-serif' }}/>
+                <span style={{ fontSize:11, color:S.textMid }}>g</span>
+                <input type="number" step="0.01" value={editMl}
+                  onChange={e => setEditMl(e.target.value)}
+                  style={{ width:52, padding:'3px 6px', borderRadius:6, fontSize:12,
+                    border:`1px solid ${S.border}`, textAlign:'right', outline:'none',
+                    color:S.green, fontFamily:'Inter,sans-serif' }}/>
+                <span style={{ fontSize:11, color:S.green }}>ml</span>
+                <button onClick={() => {
+                  if (editG) onAddToDraft({
+                    originalId:   item.material_id,
+                    originalName: item.material?.name,
+                    newMaterial:  inDraft?.action === 'swap' ? inDraft.newMaterial : item.material,
+                    newGrams:     parseFloat((parseFloat(editG) / (item.scaledG / parseFloat(item.grams))).toFixed(4)),
+                    newMl:        editMl ? parseFloat((parseFloat(editMl) / (item.scaledG / parseFloat(item.grams))).toFixed(4)) : null,
+                    action:       inDraft?.action === 'swap' ? 'swap' : 'rebalance',
+                    item,
+                  })
+                  setEditAmt(false)
+                }}
+                  style={{ padding:'3px 8px', borderRadius:6, border:'none',
+                    background:S.gold, color:'#fff', cursor:'pointer',
+                    fontSize:11, fontFamily:'Inter,sans-serif' }}>✓</button>
+                <button onClick={() => setEditAmt(false)}
+                  style={{ padding:'3px 6px', borderRadius:6,
+                    border:`1px solid ${S.border}`, background:'none',
+                    cursor:'pointer', fontSize:11, color:S.textMid }}>✕</button>
+              </>
+            ) : (
+              <>
+                <span onClick={() => { setEditG(item.scaledG.toFixed(3)); setEditMl(item.scaledMl.toFixed(2)); setEditAmt(true) }}
+                  style={{ fontSize:12, color:S.textMid, cursor:'pointer',
+                    textDecoration:'underline dotted', textUnderlineOffset:2 }}>
+                  {item.scaledG.toFixed(3)}g
+                </span>
+                <span onClick={() => { setEditG(item.scaledG.toFixed(3)); setEditMl(item.scaledMl.toFixed(2)); setEditAmt(true) }}
+                  style={{ fontSize:13, fontWeight:600, cursor:'pointer',
+                    textDecoration:'underline dotted', textUnderlineOffset:2,
+                    color: state === 'ready' ? S.green : S.textMid }}>
+                  {item.scaledMl.toFixed(2)}ml
+                </span>
+              </>
+            )}
+            {!editAmt && (state === 'ready' || state === 'use-sub' || state === 'must-buy') && (
               <button onClick={() => setShowSwap(p => !p)}
                 style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:20,
                   cursor:'pointer', fontFamily:'Inter,sans-serif',
