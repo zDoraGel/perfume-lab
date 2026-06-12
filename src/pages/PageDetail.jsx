@@ -10,6 +10,7 @@ import StockRecommendations from '../components/StockRecommendations'
 import FormulaImage from '../components/FormulaImage'
 import BlendGuide from '../components/BlendGuide'
 import FormulaDNASummary from '../components/FormulaDNASummary'
+import { FormulaDNASelector } from '../components/FormulaDNA'
 import FormulaCard from '../components/FormulaCard'
 import FormulaCardMini from '../components/FormulaCardMini'
 import PageNewVersion from './PageNewVersion'
@@ -476,8 +477,8 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
                     return {
                       materialId: sw?.action === 'swap' ? sw.newMaterial.id : i.material_id,
                       grams:      sw && sw.newGrams != null ? sw.newGrams : i.grams,
-                      ml:         i.ml,
-                      family:     sw ? sw.newMaterial.family : i.material?.family,
+                      ml:         sw?.newMl != null ? sw.newMl : i.ml,
+                      family:     sw?.action === 'swap' ? sw.newMaterial?.family : i.material?.family,
                     }
                   })
                 // เพิ่ม extra ingredients
@@ -558,6 +559,8 @@ export default function PageDetail({ formula, onBack }) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [deleteText,  setDeleteText]  = useState('')
   const [latestItems, setLatestItems] = useState([])
+  const [editDna,     setEditDna]     = useState(false)
+  const [dnaValues,   setDnaValues]   = useState({})
 
   useEffect(() => {
     Promise.all([
@@ -568,7 +571,7 @@ export default function PageDetail({ formula, onBack }) {
       setVersions(v)
       setMaterials(m)
       const fresh = all.find(f => f.id === formula.id)
-      if (fresh) setFormulaData(fresh)
+      if (fresh) { setFormulaData(fresh); setDnaValues(fresh) }
       // load latest version items for radar chart
       if (v.length > 0) {
         const latest = v[v.length - 1]
@@ -726,7 +729,48 @@ export default function PageDetail({ formula, onBack }) {
       />
 
       {/* DNA Summary */}
-      <FormulaDNASummary formula={formula} items={latestItems}/>
+      <FormulaDNASummary formula={formulaData} items={latestItems}/>
+
+      {/* DNA Edit */}
+      <div style={{ marginTop:8 }}>
+        <button onClick={() => setEditDna(p => !p)}
+          style={{ width:'100%', padding:'9px 0', borderRadius:10, cursor:'pointer',
+            fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
+            border:`1.5px solid ${editDna ? S.gold : S.border}`,
+            background: editDna ? S.goldLt : S.white,
+            color: editDna ? S.gold : S.textMid }}>
+          {editDna ? '▲ ซ่อน' : '✎ แก้ไข DNA (Feeling, Best For, ฯลฯ)'}
+        </button>
+        {editDna && (
+          <div style={{ marginTop:12 }}>
+            <FormulaDNASelector
+              values={dnaValues}
+              onChange={(k, v) => setDnaValues(p => ({ ...p, [k]: v }))}/>
+            <button onClick={async () => {
+              await db.updateFormula(formula.id, {
+                projection:    dnaValues.projection,
+                texture:       dnaValues.texture,
+                temperature:   dnaValues.temperature,
+                feeling:       dnaValues.feeling,
+                opening_style: dnaValues.opening_style,
+                best_for:      typeof dnaValues.best_for === 'string'
+                  ? dnaValues.best_for
+                  : JSON.stringify(dnaValues.best_for || []),
+                avoid:         dnaValues.avoid,
+                avoid_custom:  dnaValues.avoid_custom,
+              })
+              const fresh = await db.getFormulas().then(all => all.find(f => f.id === formula.id))
+              if (fresh) setFormulaData(fresh)
+              setEditDna(false)
+            }}
+              style={{ width:'100%', padding:'11px 0', borderRadius:10, border:'none',
+                cursor:'pointer', background:S.gold, color:S.white, marginTop:12,
+                fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600 }}>
+              บันทึก DNA
+            </button>
+          </div>
+        )}
+      </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:20 }}>
         {[
