@@ -81,11 +81,19 @@ export default function PageNewFormula({ onBack, onCreate }) {
   const [vibeWords,     setVibeWords]     = useState([])
   const [vibeCustom,    setVibeCustom]    = useState('')
 
-  // Step 3 — NOT
+  // Step 3 — DNA Details
+  const [dnaProjection, setDnaProjection] = useState('')
+  const [dnaTexture,    setDnaTexture]    = useState([])
+  const [dnaTemp,       setDnaTemp]       = useState([])
+  const [dnaFeeling,    setDnaFeeling]    = useState([])
+  const [dnaOpening,    setDnaOpening]    = useState([])
+  const [dnaBestFor,    setDnaBestFor]    = useState([])
+
+  // Step 4 — NOT
   const [notWords,      setNotWords]      = useState([])
   const [notCustom,     setNotCustom]     = useState('')
 
-  // Step 4 — Materials
+  // Step 5 — Materials
   const [preferMats,    setPreferMats]    = useState([])
   const [avoidMats,     setAvoidMats]     = useState([])
   const [matCustom,     setMatCustom]     = useState('')
@@ -511,7 +519,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
       const p = parseAIJson(clean)
       if (!p.ingredients) throw new Error('no ingredients key')
       setFormulaSugg(p)
-      setStep(6)
+      setStep(7)
     } catch (e) {
       setFormulaSugg({ error: r || 'AI ไม่ตอบ — ลอง Generate ใหม่' })
     }
@@ -555,7 +563,16 @@ export default function PageNewFormula({ onBack, onCreate }) {
     if (!name.trim()) { alert('ใส่ชื่อสูตรก่อนนะคะ'); return }
     setSaving(true)
     const vibe = buildVibeString()
-    const dna  = { complexity, avoid: JSON.stringify({ presets: notWords, custom: notCustom }) }
+    const dna  = {
+      complexity,
+      avoid: JSON.stringify({ presets: notWords, custom: notCustom }),
+      projection: dnaProjection,
+      texture: dnaTexture,
+      temperature: dnaTemp,
+      feeling: dnaFeeling,
+      opening_style: dnaOpening,
+      best_for: dnaBestFor,
+    }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
     if (f && formulaSugg?.ingredients) {
       const matchedIngs = await Promise.all([
@@ -596,7 +613,16 @@ export default function PageNewFormula({ onBack, onCreate }) {
     if (!name.trim()) { alert('ใส่ชื่อสูตรก่อนนะคะ'); return }
     setSaving(true)
     const vibe = buildVibeString()
-    const dna  = { complexity, avoid: JSON.stringify({ presets: notWords, custom: notCustom }) }
+    const dna  = {
+      complexity,
+      avoid: JSON.stringify({ presets: notWords, custom: notCustom }),
+      projection: dnaProjection,
+      texture: dnaTexture,
+      temperature: dnaTemp,
+      feeling: dnaFeeling,
+      opening_style: dnaOpening,
+      best_for: dnaBestFor,
+    }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
     setSaving(false)
     if (f) onCreate(f)
@@ -731,28 +757,160 @@ export default function PageNewFormula({ onBack, onCreate }) {
         </div>
       )}
 
-      {/* ── Step 3: Define NOT ── */}
+      {/* ── Step 3: DNA Details ── */}
       {step >= 3 && (
         <div style={{ marginBottom:20 }}>
-          <StepHeader step={3} title="Define What It Is NOT" currentStep={step}
-            sub="อันนี้สำคัญมาก — กลิ่นนี้ต้องไม่เป็นอะไร"/>
+          <StepHeader step={3} title="DNA Details" currentStep={step}
+            sub="กำหนด character ของกลิ่น — ข้ามได้ถ้ายังไม่แน่ใจ"/>
           {step === 3 && (
             <div>
-              <TagPicker options={NOT_OPTS} selected={notWords}
-                onToggle={v => setNotWords(p => p.includes(v) ? p.filter(x=>x!==v) : [...p,v])}/>
-              <input value={notCustom} onChange={e => setNotCustom(e.target.value)}
-                placeholder="เพิ่มเองได้ เช่น 'Not Another 13 clone, Not powdery' (คั่นด้วย ,)"
-                style={{ ...iStyle, marginTop:10, marginBottom:12, fontSize:12 }}/>
-              <Btn onClick={() => setStep(4)}
-                style={{ width:'100%' }}>
-                ถัดไป →
-              </Btn>
+              {/* PROJECTION */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                PROJECTION <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>กระจายกลิ่นแค่ไหน</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+                {[
+                  { v:'Whisper', th:'Skin close — ใกล้ตัวเองเข้าใกล' },
+                  { v:'Aura',    th:'Moderate — personal space ~1 เมตร' },
+                  { v:'Presence',th:'Strong — ได้กลิ่นทั่วห้อง' },
+                  { v:'Signature',th:'Beast mode — ได้กลิ่นก่อนเข้าห้อง' },
+                ].map(opt => (
+                  <button key={opt.v} onClick={() => setDnaProjection(p => p === opt.v ? '' : opt.v)}
+                    style={{ padding:'8px 14px', borderRadius:10, cursor:'pointer',
+                      border:`1.5px solid ${dnaProjection === opt.v ? S.gold : S.border}`,
+                      background: dnaProjection === opt.v ? S.goldLt : 'transparent',
+                      textAlign:'left', minWidth:140 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color: dnaProjection === opt.v ? S.gold : S.ink }}>
+                      {dnaProjection === opt.v ? '◈ ' : '○ '}{opt.v}
+                    </div>
+                    <div style={{ fontSize:10, color:S.textMid, marginTop:2 }}>{opt.th}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* TEXTURE */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                TEXTURE <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>เนื้อกลิ่น · เลือกได้ถึง 3</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+                {['Powdery','Creamy','Watery','Dry','Resinous','Fizzy','Velvety','Airy'].map(v => (
+                  <button key={v} onClick={() => setDnaTexture(p => p.includes(v) ? p.filter(x=>x!==v) : p.length < 3 ? [...p,v] : p)}
+                    style={{ padding:'6px 14px', borderRadius:20, cursor:'pointer', fontSize:12,
+                      border:`1.5px solid ${dnaTexture.includes(v) ? S.gold : S.border}`,
+                      background: dnaTexture.includes(v) ? S.goldLt : 'transparent',
+                      color: dnaTexture.includes(v) ? S.gold : S.textMid, fontWeight: dnaTexture.includes(v) ? 600 : 400 }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              {/* TEMPERATURE */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                TEMPERATURE <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>อุณหภูมิกลิ่น · เลือกได้ 2</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+                {[
+                  { v:'Icy', th:'เย็นจัด' }, { v:'Cool', th:'เย็นสบาย' },
+                  { v:'Neutral', th:'กลางๆ' }, { v:'Warm', th:'อบอุ่น' }, { v:'Hot', th:'ร้อน' },
+                ].map(opt => (
+                  <button key={opt.v} onClick={() => setDnaTemp(p => p.includes(opt.v) ? p.filter(x=>x!==opt.v) : p.length < 2 ? [...p,opt.v] : p)}
+                    style={{ padding:'6px 14px', borderRadius:20, cursor:'pointer', fontSize:12,
+                      border:`1.5px solid ${dnaTemp.includes(opt.v) ? S.gold : S.border}`,
+                      background: dnaTemp.includes(opt.v) ? S.goldLt : 'transparent',
+                      color: dnaTemp.includes(opt.v) ? S.gold : S.textMid, fontWeight: dnaTemp.includes(opt.v) ? 600 : 400 }}>
+                    <div>{opt.v}</div>
+                    <div style={{ fontSize:9, opacity:.7 }}>{opt.th}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* FEELING */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                FEELING <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>ความรู้สึก · เลือกได้ถึง 6</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:16 }}>
+                {['สะอาดแบบเนียบๆ','ดูแพงแบบไม่พยายาม','น่าเข้าใกล้','อบอุ่น','นุ่มละมุน','สบายใจ',
+                  'ผ่อนคลาย','โรแมนติกเบาๆ','มีเสน่ห์แบบธรรมชาติ','หรูหราแบบมินิมอล','โปร่งสบาย',
+                  'ดูเรียบร้อยสะอาด','ดูโตแบบทันสมัย','ลึกลับนิดๆ','เซ็กซี่เบาๆ','สดใส','ดูมั่นใจ',
+                  'ดูอ่อนโยน','ดู calm','ดู sophisticated','ดู cozy',
+                  'หอมเหมือนผิวจริง','สะอาดเหมือนผ้าพึ่งซัก','ละมุนแบบเกาหลี',
+                  'luxury แบบ quiet','หอมแบบคนดูแลตัวเอง','น่ากอด'].map(v => (
+                  <button key={v} onClick={() => setDnaFeeling(p => p.includes(v) ? p.filter(x=>x!==v) : p.length < 6 ? [...p,v] : p)}
+                    style={{ padding:'5px 11px', borderRadius:20, cursor:'pointer', fontSize:11,
+                      border:`1.5px solid ${dnaFeeling.includes(v) ? S.gold : S.border}`,
+                      background: dnaFeeling.includes(v) ? S.goldLt : 'transparent',
+                      color: dnaFeeling.includes(v) ? S.gold : S.textMid, fontWeight: dnaFeeling.includes(v) ? 600 : 400 }}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              {/* OPENING STYLE */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                OPENING STYLE <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>กลิ่นเปิดตัว · เลือกได้ 2</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
+                {[
+                  { v:'Soft', th:'เปิดเบาๆ ค่อยๆ ออกมา' },
+                  { v:'Burst', th:'พุ่งออกมาแรงตั้งแต่แรก' },
+                  { v:'Slow Bloom', th:'ค่อยๆ บาน ดีขึ้นเรื่อยๆ' },
+                  { v:'Sharp', th:'คมชัด แทงจมูก' },
+                  { v:'Diffused', th:'กระจายเบาๆ รอบตัว' },
+                  { v:'Quiet', th:'เรียบนิ่ง ค่อยๆ ปรากฏ' },
+                  { v:'Skin Close', th:'แนบผิว ใกล้ชิด' },
+                  { v:'Glow', th:'ฟุ้งเรืองๆ อบอุ่น' },
+                ].map(opt => (
+                  <button key={opt.v} onClick={() => setDnaOpening(p => p.includes(opt.v) ? p.filter(x=>x!==opt.v) : p.length < 2 ? [...p,opt.v] : p)}
+                    style={{ padding:'6px 14px', borderRadius:10, cursor:'pointer',
+                      border:`1.5px solid ${dnaOpening.includes(opt.v) ? S.gold : S.border}`,
+                      background: dnaOpening.includes(opt.v) ? S.goldLt : 'transparent',
+                      textAlign:'left' }}>
+                    <div style={{ fontSize:12, fontWeight: dnaOpening.includes(opt.v) ? 600 : 400,
+                      color: dnaOpening.includes(opt.v) ? S.gold : S.ink }}>{opt.v}</div>
+                    <div style={{ fontSize:9, color:S.textMid, marginTop:1 }}>{opt.th}</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* BEST FOR */}
+              <div style={{ fontSize:11, fontWeight:700, color:S.textMid, letterSpacing:.8,
+                textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
+                BEST FOR <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>เหมาะกับโอกาสไหน</span>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:16 }}>
+                {['Daily Wear','Office Day','Casual Date','Romantic Date','Weekend Brunch',
+                  'Evening Out','Spring & Summer','Fall & Winter','Skin Scent Lover',
+                  'Minimalist','Quiet Luxury','Gift','After Shower','Travel','Night Out','Self Care Day'].map(v => (
+                  <button key={v} onClick={() => setDnaBestFor(p => p.includes(v) ? p.filter(x=>x!==v) : [...p,v])}
+                    style={{ padding:'5px 12px', borderRadius:20, cursor:'pointer', fontSize:11,
+                      border:`1.5px solid ${dnaBestFor.includes(v) ? S.gold : S.border}`,
+                      background: dnaBestFor.includes(v) ? S.goldLt : 'transparent',
+                      color: dnaBestFor.includes(v) ? S.gold : S.textMid,
+                      fontWeight: dnaBestFor.includes(v) ? 600 : 400 }}>
+                    {dnaBestFor.includes(v) ? '✓ ' : ''}{v}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display:'flex', gap:8 }}>
+                <Btn variant="outline" onClick={() => setStep(4)} style={{ flex:1 }}>
+                  ข้าม →
+                </Btn>
+                <Btn onClick={() => setStep(4)} style={{ flex:2 }}>
+                  ถัดไป →
+                </Btn>
+              </div>
             </div>
           )}
           {step > 3 && (
             <div style={{ fontSize:12, color:S.textMid, padding:'8px 12px',
               background:S.bg, borderRadius:8, marginBottom:4 }}>
-              {notWords.length ? notWords.join(', ').slice(0,80) : 'ไม่ได้ระบุ'}
+              {[dnaProjection, ...dnaTexture, ...dnaTemp].filter(Boolean).join(' · ').slice(0,80) || 'ไม่ได้ระบุ'}
               <button onClick={() => setStep(3)} style={{ marginLeft:8, fontSize:10,
                 color:S.gold, background:'none', border:'none', cursor:'pointer' }}>แก้ไข</button>
             </div>
@@ -760,12 +918,41 @@ export default function PageNewFormula({ onBack, onCreate }) {
         </div>
       )}
 
-      {/* ── Step 4: Define Materials ── */}
+      {/* ── Step 4: Define NOT ── */}
       {step >= 4 && (
         <div style={{ marginBottom:20 }}>
-          <StepHeader step={4} title="Define Materials" currentStep={step}
-            sub="ตรงนี้ AI จะเริ่มเข้าใจว่าควรเลือกอะไร"/>
+          <StepHeader step={4} title="Define What It Is NOT" currentStep={step}
+            sub="อันนี้สำคัญมาก — กลิ่นนี้ต้องไม่เป็นอะไร"/>
           {step === 4 && (
+            <div>
+              <TagPicker options={NOT_OPTS} selected={notWords}
+                onToggle={v => setNotWords(p => p.includes(v) ? p.filter(x=>x!==v) : [...p,v])}/>
+              <input value={notCustom} onChange={e => setNotCustom(e.target.value)}
+                placeholder="เพิ่มเองได้ เช่น 'Not Another 13 clone, Not powdery' (คั่นด้วย ,)"
+                style={{ ...iStyle, marginTop:10, marginBottom:12, fontSize:12 }}/>
+              <Btn onClick={() => setStep(5)}
+                style={{ width:'100%' }}>
+                ถัดไป →
+              </Btn>
+            </div>
+          )}
+          {step > 4 && (
+            <div style={{ fontSize:12, color:S.textMid, padding:'8px 12px',
+              background:S.bg, borderRadius:8, marginBottom:4 }}>
+              {notWords.length ? notWords.join(', ').slice(0,80) : 'ไม่ได้ระบุ'}
+              <button onClick={() => setStep(4)} style={{ marginLeft:8, fontSize:10,
+                color:S.gold, background:'none', border:'none', cursor:'pointer' }}>แก้ไข</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Step 5: Define Materials ── */}
+      {step >= 5 && (
+        <div style={{ marginBottom:20 }}>
+          <StepHeader step={5} title="Define Materials" currentStep={step}
+            sub="ตรงนี้ AI จะเริ่มเข้าใจว่าควรเลือกอะไร"/>
+          {step === 5 && (
             <div>
               <div style={{ fontSize:11, fontWeight:600, color:S.green, letterSpacing:.8,
                 textTransform:'uppercase', marginBottom:8 }}>Preferred Materials</div>
@@ -780,28 +967,28 @@ export default function PageNewFormula({ onBack, onCreate }) {
               <input value={matCustom} onChange={e => setMatCustom(e.target.value)}
                 placeholder="Avoid เพิ่มเติม เช่น 'Iso E Super, Ambroxan' (คั่นด้วย ,)"
                 style={{ ...iStyle, marginTop:10, marginBottom:12, fontSize:12 }}/>
-              <Btn onClick={() => setStep(5)} style={{ width:'100%' }}>
+              <Btn onClick={() => setStep(6)} style={{ width:'100%' }}>
                 ถัดไป →
               </Btn>
             </div>
           )}
-          {step > 4 && (
+          {step > 5 && (
             <div style={{ fontSize:12, color:S.textMid, padding:'8px 12px',
               background:S.bg, borderRadius:8, marginBottom:4 }}>
               {preferMats.length ? `Preferred: ${preferMats.join(', ').slice(0,50)}` : 'ไม่ได้ระบุ preferred'}
-              <button onClick={() => setStep(4)} style={{ marginLeft:8, fontSize:10,
+              <button onClick={() => setStep(5)} style={{ marginLeft:8, fontSize:10,
                 color:S.gold, background:'none', border:'none', cursor:'pointer' }}>แก้ไข</button>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Step 5: Generate ── */}
-      {step >= 5 && (
+      {/* ── Step 6: Generate ── */}
+      {step >= 6 && (
         <div style={{ marginBottom:20 }}>
-          <StepHeader step={5} title="Generate Formula" currentStep={step}
+          <StepHeader step={6} title="Generate Formula" currentStep={step}
             sub="ค่อยกด — AI จะ compile ทุกอย่างที่กรอกมาเป็นสูตร"/>
-          {step >= 5 && (
+          {step >= 6 && (
             <div>
               {/* Complexity */}
               <div style={{ fontSize:11, color:S.textMid, fontWeight:500,
@@ -1075,10 +1262,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
         </div>
       )}
 
-      {/* ── Step 6: Name ── */}
-      {step >= 6 && (
+      {/* ── Step 7: Name ── */}
+      {step >= 7 && (
         <div style={{ marginBottom:24 }}>
-          <StepHeader step={6} title="ตั้งชื่อทีหลัง" currentStep={step}
+          <StepHeader step={7} title="ตั้งชื่อทีหลัง" currentStep={step}
             sub="เพราะถ้าตั้งชื่อก่อน AI แต่ละตัวตีความไม่เหมือนกัน"/>
           <div>
             <input value={name} onChange={e => setName(e.target.value)}
@@ -1130,9 +1317,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
       )}
 
       {/* Allow saving without completing all steps */}
-      {step < 6 && step >= 2 && (
+      {step < 7 && step >= 2 && (
         <div style={{ marginTop:8, textAlign:'center' }}>
-          <button onClick={() => setStep(6)}
+          <button onClick={() => setStep(7)}
             style={{ fontSize:11, color:S.textLt, background:'none', border:'none',
               cursor:'pointer', textDecoration:'underline' }}>
             ข้ามไปตั้งชื่อและ save เลย
