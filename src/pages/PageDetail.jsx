@@ -468,17 +468,27 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
               scaleMl={scaleMl}
               batchMl={batchMl}
               onSaveNewVersion={async (draft, extraIngs) => {
+                function getDensity(family) {
+                  const d = { Citrus:.87, Fresh:.88, Floral:.95, Woody:1.0, Musk:1.0, Ambery:1.05, Spicy:1.02, Gourmand:1.0 }
+                  return d[family] || 0.95
+                }
                 // สร้าง items ใหม่จาก draft
                 const removeIds = draft.filter(d=>d.action==='remove').map(d=>d.originalId)
                 const newItems = items
                   .filter(i => !removeIds.includes(i.material_id) && i.material_id && i.material?.name)
                   .map(i => {
-                    const sw = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
+                    const sw     = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
+                    const mat    = sw?.action === 'swap' ? sw.newMaterial : i.material
+                    const family = mat?.family || i.material?.family
+                    const grams  = sw && sw.newGrams != null ? sw.newGrams : parseFloat(i.grams)
+                    const ml     = sw?.newMl != null
+                      ? sw.newMl
+                      : sw?.newGrams != null
+                        ? parseFloat((sw.newGrams / getDensity(family)).toFixed(3))
+                        : parseFloat(i.ml || (parseFloat(i.grams) / getDensity(family)).toFixed(3))
                     return {
                       materialId: sw?.action === 'swap' ? sw.newMaterial.id : i.material_id,
-                      grams:      sw && sw.newGrams != null ? sw.newGrams : i.grams,
-                      ml:         sw?.newMl != null ? sw.newMl : i.ml,
-                      family:     sw?.action === 'swap' ? sw.newMaterial?.family : i.material?.family,
+                      grams, ml, family,
                     }
                   })
                 // เพิ่ม extra ingredients
