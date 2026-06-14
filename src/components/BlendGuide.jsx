@@ -339,31 +339,37 @@ function GuideRow({ item, state, materials, onSaveNewVersion, allItems, draft, o
             {editAmt ? (
               <>
                 <input type="number" step="0.01" value={editG}
-                  onChange={e => setEditG(e.target.value)}
+                  onChange={e => {
+                    const g = e.target.value
+                    setEditG(g)
+                    const density = getDensity(item.material?.family)
+                    setEditMl(g ? parseFloat((parseFloat(g) / density).toFixed(2)) : '')
+                  }}
                   style={{ width:52, padding:'3px 6px', borderRadius:6, fontSize:12,
                     border:`1px solid ${S.goldBd}`, textAlign:'right', outline:'none',
                     fontFamily:'Inter,sans-serif' }}/>
                 <span style={{ fontSize:11, color:S.textMid }}>g</span>
                 <input type="number" step="0.01" value={editMl}
-                  onChange={e => setEditMl(e.target.value)}
+                  onChange={e => {
+                    const ml = e.target.value
+                    setEditMl(ml)
+                    const density = getDensity(item.material?.family)
+                    setEditG(ml ? parseFloat((parseFloat(ml) * density).toFixed(3)) : '')
+                  }}
                   style={{ width:52, padding:'3px 6px', borderRadius:6, fontSize:12,
                     border:`1px solid ${S.border}`, textAlign:'right', outline:'none',
                     color:S.green, fontFamily:'Inter,sans-serif' }}/>
                 <span style={{ fontSize:11, color:S.green }}>ml</span>
                 <button onClick={() => {
-                  const density = getDensity(item.material?.family)
-                  const finalG  = editMl
-                    ? parseFloat((parseFloat(editMl) * density).toFixed(4))
-                    : parseFloat(parseFloat(editG).toFixed(4))
-                  const finalMl = editMl
-                    ? parseFloat(parseFloat(editMl).toFixed(4))
-                    : editG ? parseFloat((parseFloat(editG) / density).toFixed(4)) : null
-                  if (finalG) onAddToDraft({
+                  const g  = parseFloat(editG)
+                  const ml = parseFloat(editMl)
+                  if (!g) return
+                  onAddToDraft({
                     originalId:   item.material_id,
                     originalName: item.material?.name,
                     newMaterial:  inDraft?.action === 'swap' ? inDraft.newMaterial : item.material,
-                    newGrams:     finalG,
-                    newMl:        finalMl,
+                    newGrams:     parseFloat(g.toFixed(4)),
+                    newMl:        ml ? parseFloat(ml.toFixed(4)) : null,
                     action:       inDraft?.action === 'swap' ? 'swap' : 'rebalance',
                     item,
                   })
