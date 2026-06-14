@@ -533,7 +533,7 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
   const owned    = materials.filter(m => (m.stock || 0) > 0)
   const targetMl = scaleMl || batchMl
 
-  const guide = items.map(item => {
+  const guide = items.filter(item => item.material?.name).map(item => {
     const inStock   = owned.some(m => m.id === item.material_id)
     const essential = isEssential(item, items)
     const sub       = !inStock ? findSubstitute(item, owned) : null
