@@ -351,12 +351,19 @@ function GuideRow({ item, state, materials, onSaveNewVersion, allItems, draft, o
                     color:S.green, fontFamily:'Inter,sans-serif' }}/>
                 <span style={{ fontSize:11, color:S.green }}>ml</span>
                 <button onClick={() => {
-                  if (editG) onAddToDraft({
+                  const density = getDensity(item.material?.family)
+                  const finalG  = editMl
+                    ? parseFloat((parseFloat(editMl) * density).toFixed(4))
+                    : parseFloat(parseFloat(editG).toFixed(4))
+                  const finalMl = editMl
+                    ? parseFloat(parseFloat(editMl).toFixed(4))
+                    : editG ? parseFloat((parseFloat(editG) / density).toFixed(4)) : null
+                  if (finalG) onAddToDraft({
                     originalId:   item.material_id,
                     originalName: item.material?.name,
                     newMaterial:  inDraft?.action === 'swap' ? inDraft.newMaterial : item.material,
-                    newGrams:     parseFloat(parseFloat(editG).toFixed(4)),
-                    newMl:        editMl ? parseFloat(parseFloat(editMl).toFixed(4)) : null,
+                    newGrams:     finalG,
+                    newMl:        finalMl,
                     action:       inDraft?.action === 'swap' ? 'swap' : 'rebalance',
                     item,
                   })

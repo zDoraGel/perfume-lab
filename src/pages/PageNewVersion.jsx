@@ -7,6 +7,11 @@ import StockRecommendations from '../components/StockRecommendations'
 import MaterialPicker from '../components/MaterialPicker'
 import { FormulaDNAActual } from '../components/FormulaDNA'
 
+function getDensity(family) {
+  const d = { Citrus:.87, Fresh:.88, Floral:.95, Woody:1.0, Musk:1.0, Ambery:1.05, Spicy:1.02, Gourmand:1.0 }
+  return d[family] || 0.95
+}
+
 export default function PageNewVersion({ formula, versions, onBack, onSave }) {
   const [status,      setStatus]      = useState('Pending')
   const [rating,      setRating]      = useState('')
@@ -471,12 +476,26 @@ export default function PageNewVersion({ formula, versions, onBack, onSave }) {
               value={row.materialId}
               onChange={(id) => updIng(idx, 'materialId', id)}
             />
-            <input type="number" value={row.grams} onChange={e=>updIng(idx,'grams',e.target.value)}
+            <input type="number" value={row.grams} onChange={e => {
+              const g = e.target.value
+              const ml = g ? (parseFloat(g) / getDensity(mat?.family)).toFixed(2) : ''
+              setIngs(p => p.map((r,i) => i===idx ? {...r, grams:g, ml} : r))
+            }}
               placeholder="g"
               style={{ flex:1, background:S.white, border:`1px solid ${low ? S.red+'88' : S.border}`,
                 borderRadius:10, padding:'12px 14px', fontSize:14,
                 fontFamily:'Inter,sans-serif', color:S.text, outline:'none',
-                boxSizing:'border-box', maxWidth:80 }}/>
+                boxSizing:'border-box', maxWidth:72 }}/>
+            <input type="number" value={row.ml || ''} onChange={e => {
+              const ml = e.target.value
+              const g = ml ? (parseFloat(ml) * getDensity(mat?.family)).toFixed(3) : ''
+              setIngs(p => p.map((r,i) => i===idx ? {...r, ml, grams:g} : r))
+            }}
+              placeholder="ml"
+              style={{ flex:1, background:S.white, border:`1px solid ${S.green}44`,
+                borderRadius:10, padding:'12px 14px', fontSize:14,
+                fontFamily:'Inter,sans-serif', color:S.green, outline:'none',
+                boxSizing:'border-box', maxWidth:72 }}/>
             {ings.length > 1 && (
               <button onClick={() => setIngs(p=>p.filter((_,i)=>i!==idx))}
                 style={{ background:'none', border:'none', color:S.textLt,
