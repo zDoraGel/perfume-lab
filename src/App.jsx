@@ -11,6 +11,7 @@ import PageProduction from './pages/PageProduction'
 import PageMyBlends   from './pages/PageMyBlends'
 import PageDashboard  from './pages/PageDashboard'
 import PageRetailStock from './pages/PageRetailStock'
+import PageReport     from './pages/PageReport'
 
 const NAV = [
   { id:'dashboard',   label:'Dashboard',  icon:'◉' },
@@ -20,6 +21,7 @@ const NAV = [
   { id:'myblends',    label:'My Blends',  icon:'✦' },
   { id:'production',  label:'Production', icon:'○' },
   { id:'retail',      label:'Retail',     icon:'⬘' },
+  { id:'report',      label:'Report',     icon:'◱' },
   { id:'export',      label:'Export',     icon:'↓' },
 ]
 
@@ -93,6 +95,9 @@ export default function App() {
 
         {/* ── Retail Stock ─────────────────────────────────── */}
         {tab === 'retail' && <PageRetailStock/>}
+
+        {/* ── Report ───────────────────────────────────────── */}
+        {tab === 'report' && <PageReport/>}
 
         {/* ── Export ───────────────────────────────────────── */}
         {tab === 'export' && <PageExport/>}
