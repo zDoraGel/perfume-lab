@@ -83,13 +83,17 @@ Give 4-5 bullets only.`,
 
   function addToDraft() {
     if (!selected) return
-    const gramsToUse = newGrams.trim() !== '' ? parseFloat(newGrams) : parseFloat(item.grams)
-    const origName = item.material?.name || item.material?.alias || `#${item.material_id}`
+    const density    = getDensity(selected?.family || item.material?.family)
+    const origG      = parseFloat(item.grams) || 0
+    const gramsToUse = newGrams.trim() !== '' ? parseFloat(newGrams) : origG
+    const mlToUse    = parseFloat((gramsToUse / density).toFixed(3))
+    const origName   = item.material?.name || item.material?.alias || `#${item.material_id}`
     onAddToDraft({
       originalId:   item.material_id,
       originalName: origName,
       newMaterial:  selected,
-      newGrams:     isNaN(gramsToUse) ? parseFloat(item.grams) : gramsToUse,
+      newGrams:     isNaN(gramsToUse) ? origG : gramsToUse,
+      newMl:        mlToUse,
       item,
       action: 'swap',
     })
@@ -611,7 +615,7 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
                   ? `⚖ ${d.originalName}: ${d.item?.scaledG?.toFixed(3) ?? parseFloat(d.item?.grams)}g → ${d.newGrams}g`
                   : `${d.originalName} → ${d.newMaterial?.name ?? '(removed)'}${
                       d.newGrams && d.newGrams !== parseFloat(d.item?.grams)
-                        ? ` (${d.newGrams}g)` : ''
+                        ? ` (${d.newGrams}g / ${d.newMl ? d.newMl + 'ml' : ''})` : ''
                     }`}
               </span>
               <button onClick={() => removeFromDraft(d.originalId)}
