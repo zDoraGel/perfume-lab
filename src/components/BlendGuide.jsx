@@ -355,8 +355,8 @@ function GuideRow({ item, state, materials, onSaveNewVersion, allItems, draft, o
                     originalId:   item.material_id,
                     originalName: item.material?.name,
                     newMaterial:  inDraft?.action === 'swap' ? inDraft.newMaterial : item.material,
-                    newGrams:     parseFloat((parseFloat(editG) / (item.scaledG / parseFloat(item.grams))).toFixed(4)),
-                    newMl:        editMl ? parseFloat((parseFloat(editMl) / (item.scaledG / parseFloat(item.grams))).toFixed(4)) : null,
+                    newGrams:     parseFloat(parseFloat(editG).toFixed(4)),
+                    newMl:        editMl ? parseFloat(parseFloat(editMl).toFixed(4)) : null,
                     action:       inDraft?.action === 'swap' ? 'swap' : 'rebalance',
                     item,
                   })
@@ -595,7 +595,7 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
                 {d.action === 'remove'
                   ? `🗑 ลบ ${d.originalName} ออก`
                   : d.action === 'rebalance'
-                  ? `⚖ ${d.originalName}: ${parseFloat(d.item?.grams)}g → ${d.newGrams}g`
+                  ? `⚖ ${d.originalName}: ${d.item?.scaledG?.toFixed(3) ?? parseFloat(d.item?.grams)}g → ${d.newGrams}g`
                   : `${d.originalName} → ${d.newMaterial?.name ?? '(removed)'}${
                       d.newGrams && d.newGrams !== parseFloat(d.item?.grams)
                         ? ` (${d.newGrams}g)` : ''
