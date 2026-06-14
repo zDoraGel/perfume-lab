@@ -56,6 +56,7 @@ export default function PageReport() {
   // data
   const [loading,   setLoading]   = useState(false)
   const [report,    setReport]    = useState(null)
+  const [activeSection, setActiveSection] = useState('all')
 
   function applyPreset(p) {
     const now = new Date()
@@ -352,6 +353,30 @@ export default function PageReport() {
         </div>
       </div>
 
+      {/* ── Section filter tabs ── */}
+      {report && (
+        <div className="no-print" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+          {[
+            { v: 'all',       l: 'ทั้งหมด',        icon: '◈' },
+            { v: 'personal',  l: 'Personal',       icon: '✦' },
+            { v: 'blends',    l: 'My Blends',      icon: '◎' },
+            { v: 'retail',    l: 'Retail',         icon: '⬘' },
+            { v: 'materials', l: 'Materials',      icon: '⬡' },
+            { v: 'trends',    l: 'Trends',         icon: '◇' },
+          ].map(s => (
+            <button key={s.v} onClick={() => setActiveSection(s.v)}
+              style={{ padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 12, fontFamily: 'Inter,sans-serif',
+                border: `1.5px solid ${activeSection === s.v ? S.gold : S.border}`,
+                background: activeSection === s.v ? S.gold : S.white,
+                color: activeSection === s.v ? '#fff' : S.textMid,
+                fontWeight: activeSection === s.v ? 600 : 400 }}>
+              {s.icon} {s.l}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Report content ── */}
       {report && (
         <div ref={printRef} className="print-area">
@@ -374,6 +399,7 @@ export default function PageReport() {
           </div>
 
           {/* ── Section 1: Personal Formulas ── */}
+          {(activeSection === 'all' || activeSection === 'personal') && (
           <Section title="✦ Personal Formulas — น้ำหอมของเราเอง" color={S.gold}>
             {report.formulas.length === 0 ? (
               <div style={{ color: S.textLt, fontSize: 13 }}>ไม่มีข้อมูล</div>
@@ -430,8 +456,10 @@ export default function PageReport() {
               </div>
             )}
           </Section>
+          )}
 
           {/* ── Section 2: My Blends / Accords ── */}
+          {(activeSection === 'all' || activeSection === 'blends') && (
           <Section title="◎ My Blends — Accords & Experiments" color="#8a3a68">
             {report.accords.length === 0 ? (
               <div style={{ color: S.textLt, fontSize: 13 }}>ไม่มีข้อมูล</div>
@@ -474,8 +502,10 @@ export default function PageReport() {
               </div>
             )}
           </Section>
+          )}
 
           {/* ── Section 3: Retail ── */}
+          {(activeSection === 'all' || activeSection === 'retail') && (
           <Section title="⬘ Retail — ยอดขาย" color={S.green}>
             {report.retail.length === 0 ? (
               <div style={{ color: S.textLt, fontSize: 13 }}>ไม่มีข้อมูล</div>
@@ -530,8 +560,10 @@ export default function PageReport() {
               </div>
             )}
           </Section>
+          )}
 
           {/* ── Top Materials ── */}
+          {(activeSection === 'all' || activeSection === 'materials') && (
           <Section title="⬡ Top Materials Used" color={S.gold}>
             {report.topMaterials.length === 0 ? (
               <div style={{ color: S.textLt, fontSize: 13 }}>ไม่มีข้อมูล (ต้องมี blend ในช่วงนี้)</div>
@@ -556,9 +588,10 @@ export default function PageReport() {
               </div>
             )}
           </Section>
+          )}
 
           {/* ── Saved Trends ── */}
-          {report.trends.length > 0 && (
+          {(activeSection === 'all' || activeSection === 'trends') && report.trends.length > 0 && (
             <Section title="✦ Fragrance Trends — บันทึกไว้" color="#5a4a8a">
               {report.trends.map(t => (
                 <div key={t.id} style={{ padding: '10px 0', borderBottom: `1px solid ${S.border}` }}>
