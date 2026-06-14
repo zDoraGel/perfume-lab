@@ -45,7 +45,9 @@ export default function PageNewVersion({ formula, versions, onBack, onSave }) {
         if (latest.batch_ml) setBatchMl(String(latest.batch_ml))
         const latestItems = await db.getItems(latest.id)
         if (latestItems.length > 0) {
-          setIngs(latestItems.map(i => ({ materialId: i.material_id, grams: i.grams })))
+          setIngs(latestItems
+            .filter(i => i.material_id && materials.find(m => m.id === i.material_id))
+            .map(i => ({ materialId: i.material_id, grams: i.grams, ml: i.ml || '' })))
           setPrefilled(true)
         }
       }

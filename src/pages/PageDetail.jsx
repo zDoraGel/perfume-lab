@@ -58,7 +58,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
   const total    = items.reduce((s,i) => s + parseFloat(i.grams||0), 0) * scale
   const rc       = { Top:S.green, Heart:'#8a3a68', Base:'#7a5c2e' }
   const pyramid  = { Top:[], Heart:[], Base:[] }
-  items.forEach(x => {
+  items.filter(x => x.material?.name).forEach(x => {
     const fam  = x.material?.family
     const role = (fam==='Citrus'||fam==='Fresh') ? 'Top'
                : (fam==='Floral'||fam==='Spicy') ? 'Heart' : 'Base'
@@ -471,7 +471,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
                 // สร้าง items ใหม่จาก draft
                 const removeIds = draft.filter(d=>d.action==='remove').map(d=>d.originalId)
                 const newItems = items
-                  .filter(i => !removeIds.includes(i.material_id))
+                  .filter(i => !removeIds.includes(i.material_id) && i.material_id && i.material?.name)
                   .map(i => {
                     const sw = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
                     return {
