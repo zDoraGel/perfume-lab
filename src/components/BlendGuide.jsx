@@ -84,15 +84,15 @@ Give 4-5 bullets only.`,
   function addToDraft() {
     if (!selected) return
     const density    = getDensity(selected?.family || item.material?.family)
-    const origG      = parseFloat(item.grams) || 0
-    const gramsToUse = newGrams.trim() !== '' ? parseFloat(newGrams) : origG
+    const scaledG    = item.scaledG ?? parseFloat(item.grams)
+    const gramsToUse = newGrams.trim() !== '' ? parseFloat(newGrams) : scaledG
     const mlToUse    = parseFloat((gramsToUse / density).toFixed(3))
     const origName   = item.material?.name || item.material?.alias || `#${item.material_id}`
     onAddToDraft({
       originalId:   item.material_id,
       originalName: origName,
       newMaterial:  selected,
-      newGrams:     isNaN(gramsToUse) ? origG : gramsToUse,
+      newGrams:     isNaN(gramsToUse) ? scaledG : gramsToUse,
       newMl:        mlToUse,
       item,
       action: 'swap',

@@ -480,12 +480,14 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
                     const sw     = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
                     const mat    = sw?.action === 'swap' ? sw.newMaterial : i.material
                     const family = mat?.family || i.material?.family
-                    const grams  = sw && sw.newGrams != null ? sw.newGrams : parseFloat(i.grams)
+                    // ถ้ามี draft ใช้ค่าจาก draft (scaledG แล้ว)
+                    // ถ้าไม่มี ต้อง scale ด้วย scale factor ปัจจุบัน
+                    const grams  = sw?.newGrams != null
+                      ? sw.newGrams
+                      : parseFloat((parseFloat(i.grams) * scale).toFixed(4))
                     const ml     = sw?.newMl != null
                       ? sw.newMl
-                      : sw?.newGrams != null
-                        ? parseFloat((sw.newGrams / getDensity(family)).toFixed(3))
-                        : parseFloat(i.ml || (parseFloat(i.grams) / getDensity(family)).toFixed(3))
+                      : parseFloat((grams / getDensity(family)).toFixed(3))
                     return {
                       materialId: sw?.action === 'swap' ? sw.newMaterial.id : i.material_id,
                       grams, ml, family,
@@ -497,6 +499,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
                   return { materialId: parseInt(e.matId), grams: parseFloat(e.grams), ml: null, family: mat?.family }
                 })
                 const allNewItems = [...newItems, ...extras]
+                console.log('🔍 saving items:', JSON.stringify(allNewItems, null, 2))
 
                 // สร้าง note อธิบาย changes
                 const swaps   = draft.filter(d=>d.action==='swap').map(d=>`${d.originalName}→${d.newMaterial?.name}`)
