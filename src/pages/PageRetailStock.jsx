@@ -656,8 +656,6 @@ export default function PageRetailStock() {
     await updateStock(item.id, { is_favorite: !item.is_favorite })
     load()
   }
-    load()
-  }
 
   const filtered = items.filter(i => {
     const rem = i.qty_total - i.qty_sold
