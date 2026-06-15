@@ -17,10 +17,19 @@ export default function FormulaImage({ formula, onImageUpdated }) {
   const [uploading,    setUploading]    = useState(false)
   const [showPrompt,   setShowPrompt]   = useState(false)
   const [copied,       setCopied]       = useState(false)
+  const [savedPrompt,  setSavedPrompt]  = useState(formula.image_prompt || '')
+  const [saving,       setSaving]       = useState(false)
   const fileRef = useRef()
 
   const prompt    = buildPrompt(formula.name, formula.vibe || '')
   const shortHint = prompt.split(',').slice(0, 3).join(',') + '...'
+
+  async function handleSavePrompt() {
+    setSaving(true)
+    await supabase.from('formulas').update({ image_prompt: prompt }).eq('id', formula.id)
+    setSavedPrompt(prompt)
+    setSaving(false)
+  }
 
   async function handleUpload(e) {
     const file = e.target.files?.[0]
@@ -130,13 +139,29 @@ export default function FormulaImage({ formula, onImageUpdated }) {
               fontFamily:'Inter,sans-serif', marginBottom:10 }}>
               {prompt}
             </div>
-            <button onClick={copyPrompt}
-              style={{ fontSize:11, fontWeight:600, padding:'6px 16px', borderRadius:20,
-                cursor:'pointer', fontFamily:'Inter,sans-serif', border:'none',
-                background: copied ? S.green : S.gold, color:'#fff',
-                transition:'background .2s' }}>
-              {copied ? '✓ Copied!' : 'Copy Prompt'}
-            </button>
+            <div style={{ display:'flex', gap:8, marginTop:10 }}>
+              <button onClick={copyPrompt}
+                style={{ fontSize:11, fontWeight:600, padding:'6px 16px', borderRadius:20,
+                  cursor:'pointer', fontFamily:'Inter,sans-serif', border:'none',
+                  background: copied ? S.green : S.gold, color:'#fff',
+                  transition:'background .2s' }}>
+                {copied ? '✓ Copied!' : 'Copy Prompt'}
+              </button>
+              <button onClick={handleSavePrompt} disabled={saving}
+                style={{ fontSize:11, fontWeight:600, padding:'6px 16px', borderRadius:20,
+                  cursor:'pointer', fontFamily:'Inter,sans-serif',
+                  border:`1px solid ${S.gold}`, background:'transparent',
+                  color: saving ? S.textLt : S.gold }}>
+                {saving ? 'Saving...' : savedPrompt === prompt ? '✓ Saved' : '💾 Save Prompt'}
+              </button>
+            </div>
+            {savedPrompt && savedPrompt !== prompt && (
+              <div style={{ marginTop:10, padding:'8px 10px', background:S.bg,
+                borderRadius:8, fontSize:11, color:S.textMid }}>
+                <div style={{ fontWeight:600, marginBottom:4, color:S.textMid }}>📌 Prompt ที่บันทึกไว้:</div>
+                <div style={{ lineHeight:1.6 }}>{savedPrompt}</div>
+              </div>
+            )}
             <div style={{ fontSize:10, color:S.textLt, marginTop:8, lineHeight:1.6 }}>
               วาง prompt นี้ใน Gemini → ได้รูป → กดรูปด้านบนเพื่อ upload ค่ะ
             </div>
