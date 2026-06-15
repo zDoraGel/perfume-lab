@@ -441,7 +441,7 @@ function LogDrawer({ stock, onClose }) {
 }
 
 // ── Stock card ────────────────────────────────────────────────────────────────
-function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend }) {
+function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend, onFavorite, onDiscontinue }) {
   const remaining = item.qty_total - item.qty_sold
   const isLow     = remaining > 0 && remaining <= item.alert_at
   const isEmpty   = remaining <= 0
@@ -451,7 +451,7 @@ function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend 
     : null
 
   return (
-    <div style={{ background: S.white, border: `1px solid ${isEmpty ? S.redBg : isLow ? '#f0e0c0' : S.border}`,
+    <div style={{ background: S.white, border: `1px solid ${isEmpty ? S.redBg : isLow ? '#f0e0c0' : item.is_favorite ? '#e8c0c0' : S.border}`,
       borderRadius:14, padding:16, marginBottom:12,
       boxShadow: isLow || isEmpty ? 'none' : '0 1px 4px rgba(0,0,0,.04)' }}>
 
@@ -462,8 +462,16 @@ function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend 
             <div style={{ fontSize:15, fontWeight:700, color:S.text, fontFamily:'Cormorant Garamond,serif' }}>
               {item.name}
             </div>
+            {item.is_favorite && (
+              <span style={{ fontSize:13 }} title="Favorite">❤️</span>
+            )}
             {item.is_recommended && (
               <span style={{ fontSize:13 }} title="Recommended">⭐</span>
+            )}
+            {item.is_discontinued && (
+              <span style={{ fontSize:10, fontFamily:'Inter,sans-serif', fontWeight:600,
+                color:'#888', background:'#f0f0f0', padding:'2px 7px',
+                borderRadius:20, letterSpacing:.3 }}>เลิกผลิต</span>
             )}
           </div>
           <div style={{ fontSize:11, color:S.textLt, marginTop:1 }}>
@@ -517,6 +525,23 @@ function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend 
             color: remaining <= 0 ? S.textLt : S.gold,
             fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600, cursor: remaining <= 0 ? 'default' : 'pointer' }}>
           บันทึกการขาย
+        </button>
+        <button onClick={() => onFavorite(item)}
+          title={item.is_favorite ? 'ยกเลิก Favorite' : 'Mark เป็น Favorite'}
+          style={{ padding:'9px 12px', borderRadius:8,
+            border:`1px solid ${item.is_favorite ? '#e06060' : S.border}`,
+            background: item.is_favorite ? '#fff0f0' : S.white,
+            cursor:'pointer', fontSize:14 }}>
+          {item.is_favorite ? '❤️' : '🤍'}
+        </button>
+        <button onClick={() => onDiscontinue(item)}
+          title={item.is_discontinued ? 'ยกเลิก เลิกผลิต' : 'Mark เป็น เลิกผลิต'}
+          style={{ padding:'9px 12px', borderRadius:8,
+            border:`1px solid ${item.is_discontinued ? '#aaa' : S.border}`,
+            background: item.is_discontinued ? '#f0f0f0' : S.white,
+            cursor:'pointer', fontSize:12, color: item.is_discontinued ? '#888' : S.textMid,
+            fontFamily:'Inter,sans-serif', fontWeight: item.is_discontinued ? 600 : 400 }}>
+          {item.is_discontinued ? '✓ เลิกผลิต' : 'เลิกผลิต'}
         </button>
         <button onClick={() => onRecommend(item)}
           title={item.is_recommended ? 'ยกเลิก Recommend' : 'Mark เป็น Recommend'}
@@ -622,6 +647,18 @@ export default function PageRetailStock() {
     load()
   }
 
+  async function handleDiscontinue(item) {
+    await updateStock(item.id, { is_discontinued: !item.is_discontinued })
+    load()
+  }
+
+  async function handleFavorite(item) {
+    await updateStock(item.id, { is_favorite: !item.is_favorite })
+    load()
+  }
+    load()
+  }
+
   const filtered = items.filter(i => {
     const rem = i.qty_total - i.qty_sold
     if (filter === 'low'   && !(rem > 0 && rem <= i.alert_at)) return false
@@ -699,6 +736,8 @@ export default function PageRetailStock() {
             onTransaction={setTxItem}
             onLogs={setLogItem}
             onRecommend={handleRecommend}
+            onFavorite={handleFavorite}
+            onDiscontinue={handleDiscontinue}
           />
         ))
       )}
