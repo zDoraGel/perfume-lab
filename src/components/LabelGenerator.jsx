@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { S } from '../constants/theme'
 
 const DPI  = 300
-const W_PX_15 = Math.round(50 / 25.4 * DPI)  // 591 — 50×80mm
-const H_PX_15 = Math.round(80 / 25.4 * DPI)  // 945
-const W_PX_30 = Math.round(55 / 25.4 * DPI)  // 650 — 55×80mm
-const H_PX_30 = Math.round(80 / 25.4 * DPI)  // 945
+const W_PX_15 = Math.round(50 / 25.4 * DPI)
+const H_PX_15 = Math.round(80 / 25.4 * DPI)
+const W_PX_30 = Math.round(55 / 25.4 * DPI)
+const H_PX_30 = Math.round(80 / 25.4 * DPI)
 
 const CONC_OPTIONS = ['EAU DE PARFUM','EAU DE TOILETTE','PARFUM','BODY MIST']
 const ML_OPTIONS   = [5,10,15,20,30,50,100]
@@ -40,19 +40,13 @@ function baseSetup(canvas) {
   return { ctx, w, h }
 }
 
-// ── 15ml layout ───────────────────────────────────────────────────────────────
-// LINEN THEORY · name · SIGNATURE · EAU DE PARFUM · volume · tagline
 function draw15(canvas, { name, tier, concentration, bottleMl, tagline }) {
   const { ctx, w, h } = baseSetup(canvas)
   const pad = w * 0.1
-
-  // LINEN THEORY
   ctx.font = `${Math.round(w*0.072)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.018)}px`
   ctx.fillText('LINEN THEORY', w/2, h*0.10)
   ctx.letterSpacing = '0px'
-
-  // name — Courier bold largest
   const nameSize = Math.round(w * 0.100)
   ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
   const nameLines = wrapText(ctx, name, w - pad*2)
@@ -61,45 +55,31 @@ function draw15(canvas, { name, tier, concentration, bottleMl, tagline }) {
   nameLines.forEach((l, i) => {
     ctx.fillText(l, w/2, nameCenterY + (i - (nameLines.length-1)/2) * lineH)
   })
-
-  // SIGNATURE — small gap under name
   const nameBottomY = nameCenterY + (nameLines.length * lineH * 0.5)
   const tierSize = Math.round(w * 0.048)
   ctx.font = `${tierSize}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.022)}px`
   ctx.fillText(tier, w/2, nameBottomY + tierSize * 1.8)
   ctx.letterSpacing = '0px'
-
-  // EAU DE PARFUM
   ctx.font = `${Math.round(w*0.056)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.008)}px`
   ctx.fillText(concentration, w/2, h*0.68)
   ctx.letterSpacing = '0px'
-
-  // volume
   ctx.font = `${Math.round(w*0.054)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.fillText(`${bottleMl} ml / ${flOz(bottleMl)} fl.oz`, w/2, h*0.68 + Math.round(w*0.054)*1.8)
-
-  // tagline — Courier italic bottom
   if (tagline) {
     ctx.font = `italic ${Math.round(w*0.050)}px "Courier New",Courier,monospace`
     ctx.fillText(tagline, w/2, h*0.91)
   }
 }
 
-// ── 30ml layout ───────────────────────────────────────────────────────────────
-// LINEN THEORY · name · tagline · EAU DE PARFUM · volume · SIGNATURE
 function draw30(canvas, { name, tier, concentration, bottleMl, tagline }) {
   const { ctx, w, h } = baseSetup(canvas)
   const pad = w * 0.1
-
-  // LINEN THEORY
   ctx.font = `${Math.round(w*0.072)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.018)}px`
   ctx.fillText('LINEN THEORY', w/2, h*0.10)
   ctx.letterSpacing = '0px'
-
-  // name — Courier bold largest
   const nameSize = Math.round(w * 0.100)
   ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
   const nameLines = wrapText(ctx, name, w - pad*2)
@@ -108,26 +88,21 @@ function draw30(canvas, { name, tier, concentration, bottleMl, tagline }) {
   nameLines.forEach((l, i) => {
     ctx.fillText(l, w/2, nameCenterY + (i - (nameLines.length-1)/2) * lineH)
   })
-
-  // tagline — Courier italic, small gap under name
+  // tagline — ใต้ชื่อ
+  const nameBottomY = nameCenterY + (nameLines.length * lineH * 0.5)
   if (tagline) {
     const tagSize = Math.round(w*0.052)
     ctx.font = `italic ${tagSize}px "Courier New",Courier,monospace`
-    const nameBottomY = nameCenterY + (nameLines.length * lineH * 0.5)
     ctx.fillText(tagline, w/2, nameBottomY + tagSize * 1.8)
   }
-
-  // EAU DE PARFUM
+  // concentration + volume กลาง
   ctx.font = `${Math.round(w*0.056)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.008)}px`
   ctx.fillText(concentration, w/2, h*0.68)
   ctx.letterSpacing = '0px'
-
-  // volume
   ctx.font = `${Math.round(w*0.054)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.fillText(`${bottleMl} ml / ${flOz(bottleMl)} fl.oz`, w/2, h*0.68 + Math.round(w*0.054)*1.8)
-
-  // SIGNATURE — Inter spaced bottom
+  // tier — ล่างสุด
   const tierSize = Math.round(w * 0.050)
   ctx.font = `${tierSize}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.022)}px`
@@ -146,7 +121,6 @@ function getSize(bottleMl) {
     : { w: W_PX_30, h: H_PX_30 }
 }
 
-// ── Preview ───────────────────────────────────────────────────────────────────
 function LabelPreview({ params }) {
   const { w, h } = getSize(params.bottleMl)
   const ref = (el) => {
@@ -160,18 +134,17 @@ function LabelPreview({ params }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function LabelGenerator({ formula, latestVersion, onClose }) {
+  // ชื่อ: ถ้ามี formula ให้ใช้ชื่อ formula เป็น default แต่แก้ได้เสมอ
+  const [customName,    setCustomName]    = useState(formula?.name || '')
   const [concentration, setConcentration] = useState('EAU DE PARFUM')
   const [bottleMl,      setBottleMl]      = useState(latestVersion?.bottle_ml || 15)
   const [tier,          setTier]          = useState('SIGNATURE')
   const [tagline,       setTagline]       = useState('the art of clean')
   const [exporting,     setExporting]     = useState(false)
 
-  const params = {
-    name: (formula?.name || 'UNTITLED').toUpperCase(),
-    tier, concentration, bottleMl, tagline,
-  }
+  const displayName = (customName.trim() || 'UNTITLED').toUpperCase()
 
-  const layoutLabel = bottleMl <= 20 ? '15ml layout' : '30ml layout'
+  const params = { name: displayName, tier, concentration, bottleMl, tagline }
 
   function handleExport() {
     setExporting(true)
@@ -182,11 +155,17 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
       canvas.height = h
       drawLabel(canvas, params)
       const link = document.createElement('a')
-      link.download = `label_${(formula?.name||'label').replace(/\s+/g,'_')}_${bottleMl}ml.png`
+      link.download = `label_${displayName.replace(/\s+/g,'_')}_${bottleMl}ml.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
     } catch(e) { alert('Export ล้มเหลว') }
     finally { setExporting(false) }
+  }
+
+  const iStyle = {
+    width:'100%', padding:'8px 12px', borderRadius:10,
+    border:`1.5px solid ${S.border}`, fontSize:13, color:S.ink,
+    background:S.bg, outline:'none', boxSizing:'border-box'
   }
 
   return (
@@ -203,10 +182,9 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
             fontSize:20, cursor:'pointer', color:S.textLt }}>✕</button>
         </div>
 
-        {/* layout badge */}
         <div style={{ fontSize:11, color:S.textMid, textAlign:'center',
           marginBottom:10, letterSpacing:.4 }}>
-          {bottleMl <= 20 ? '50×80mm' : '55×80mm'} · <strong>{layoutLabel}</strong>
+          {bottleMl <= 20 ? '50×80mm' : '55×80mm'} · <strong>{bottleMl <= 20 ? '15ml layout' : '30ml layout'}</strong>
         </div>
 
         {/* Preview */}
@@ -216,6 +194,26 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+          {/* ชื่อ — แก้ได้เสมอ */}
+          <div>
+            <div style={{ fontSize:11, color:S.textMid, letterSpacing:.6,
+              textTransform:'uppercase', marginBottom:5 }}>
+              ชื่อน้ำหอม
+              {formula?.name && (
+                <span style={{ marginLeft:8, fontWeight:400, textTransform:'none',
+                  color:S.textLt, letterSpacing:0 }}>
+                  (จาก formula: {formula.name})
+                </span>
+              )}
+            </div>
+            <input
+              value={customName}
+              onChange={e => setCustomName(e.target.value)}
+              placeholder="พิมพ์ชื่อน้ำหอม..."
+              style={{ ...iStyle, fontFamily:'"Courier New",monospace', fontWeight:700, fontSize:14 }}
+            />
+          </div>
 
           <div>
             <div style={{ fontSize:11, color:S.textMid, letterSpacing:.6,
@@ -267,10 +265,7 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
               textTransform:'uppercase', marginBottom:5 }}>Tagline</div>
             <input value={tagline} onChange={e => setTagline(e.target.value)}
               placeholder="the art of clean"
-              style={{ width:'100%', padding:'8px 12px', borderRadius:10,
-                border:`1.5px solid ${S.border}`, fontSize:13,
-                fontFamily:'"Courier New",monospace', color:S.ink,
-                background:S.bg, outline:'none', boxSizing:'border-box' }}/>
+              style={{ ...iStyle, fontFamily:'"Courier New",monospace' }}/>
           </div>
 
         </div>

@@ -150,7 +150,7 @@ export function exportMaterialsToExcel(materials) {
  * Export Formula detail เป็น PDF
  * ใช้ jspdf + jspdf-autotable
  */
-export async function exportFormulaToPDF(formula, versions, itemsByVersion) {
+export async function exportFormulaToPDF(formula, versions, itemsByVersion, shareMode = false) {
   const { jsPDF }     = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
@@ -218,7 +218,16 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion) {
   }
 
   // ── Versions ──
-  for (const v of versions) {
+  const versionsToExport = shareMode
+    ? versions.filter(v => v.is_final || v.status === 'Final' || v.final_date)
+    : versions
+
+  // ถ้า shareMode ไม่มี Final version เลย ใช้ version ล่าสุดแทน
+  const exportVersions = (shareMode && versionsToExport.length === 0)
+    ? versions.slice(-1)
+    : versionsToExport
+
+  for (const v of exportVersions) {
     const items = itemsByVersion[v.id] || []
     if (items.length === 0) continue
 
@@ -227,7 +236,8 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion) {
     doc.setFontSize(11)
     doc.setTextColor(42, 35, 28)
     doc.setFontSize(10)
-    doc.text(`Version ${v.ver}  ·  ${v.status}${v.rating ? `  ·  ${v.rating}/10` : ''}`, 20, y)
+    const vLabel = shareMode ? 'Final Formula' : `Version ${v.ver}  ·  ${v.status}${v.rating ? `  ·  ${v.rating}/10` : ''}`
+    doc.text(vLabel, 20, y)
     y += 4
 
     if (v.blend_date) {
@@ -249,14 +259,37 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion) {
 
     // Ingredients table
     const total = items.reduce((s,i) => s + parseFloat(i.grams||0), 0)
-    const tableData = items.map(item => {
-      const density = getDensity(item.material?.family)
-      const ml      = item.ml ? parseFloat(item.ml) : parseFloat(item.grams) / density
-      const pct     = total > 0 ? ((item.grams / total) * 100).toFixed(1) : 0
+    const validItems = items.filter(item => item.material?.name)
+
+    // Alias deduplication สำหรับ shareMode
+    const aliasMap = {}
+    if (shareMode) {
+      const aliasCount = {}
+      validItems.forEach(item => {
+        const aliases = item.material?.material_aliases || item.material?.aliases || []
+        const base    = aliases[0]?.market_name || item.material?.family || item.material?.name || ''
+        aliasCount[base] = (aliasCount[base] || 0) + 1
+      })
+      const seen = {}
+      validItems.forEach(item => {
+        const aliases = item.material?.material_aliases || item.material?.aliases || []
+        const base    = aliases[0]?.market_name || item.material?.family || item.material?.name || ''
+        seen[base]    = (seen[base] || 0) + 1
+        aliasMap[item.material_id] = aliasCount[base] > 1 ? `${base} ${seen[base]}` : base
+      })
+    }
+
+    const tableData = validItems.map(item => {
+      const density  = getDensity(item.material?.family)
+      const ml       = item.ml ? parseFloat(item.ml) : parseFloat(item.grams) / density
+      const pct      = total > 0 ? ((item.grams / total) * 100).toFixed(1) : 0
+      const dispName = shareMode
+        ? (aliasMap[item.material_id] || item.material?.family || item.material?.name || '')
+        : (item.material?.name || '')
       return [
-        item.material?.name || '',
-        item.material?.family || '',
-        item.material?.evaporation || '',
+        dispName,
+        shareMode ? '' : (item.material?.family || ''),
+        shareMode ? '' : (item.material?.evaporation || ''),
         `${parseFloat(item.grams).toFixed(3)}g`,
         `${ml.toFixed(2)}ml`,
         `${pct}%`,
@@ -265,9 +298,15 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion) {
 
     autoTable(doc, {
       startY: y,
-      head: [['Ingredient', 'Family', 'Role', 'Grams', 'ml', '%']],
-      body: tableData,
-      foot: [['Total', '', '', `${total.toFixed(3)}g`, '', '100%']],
+      head: [shareMode
+        ? ['Ingredient', 'Grams', 'ml', '%']
+        : ['Ingredient', 'Family', 'Role', 'Grams', 'ml', '%']],
+      body: shareMode
+        ? tableData.map(r => [r[0], r[3], r[4], r[5]])
+        : tableData,
+      foot: [shareMode
+        ? ['Total', `${total.toFixed(3)}g`, '', '100%']
+        : ['Total', '', '', `${total.toFixed(3)}g`, '', '100%']],
       margin: { left:20, right:20 },
       styles: { fontSize:7.5, cellPadding:1.5 },
       headStyles: { fillColor:[138, 111, 62], textColor:255, fontSize:8 },

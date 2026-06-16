@@ -165,7 +165,7 @@ export const db = {
   // ── Formula Items ──────────────────────────────────────────────────────────
   async getItems(versionId) {
     const { data } = await supabase.from('formula_items')
-      .select('*, material:materials(*)').eq('version_id', versionId)
+      .select('*, material:materials(*, material_aliases(market_name, description))').eq('version_id', versionId)
     return data || []
   },
   async createItems(versionId, ingredients) {
@@ -375,7 +375,7 @@ export const db = {
   async getRetailStockSummary() {
     const { data } = await supabase
       .from('retail_stock')
-      .select('id, name, brand, qty_total, qty_sold, alert_at, price_per_unit, cost_per_unit')
+      .select('id, name, brand, qty_total, qty_sold, alert_at, price_per_unit, cost_per_unit, is_favorite')
       .order('created_at', { ascending: false })
     return (data || []).map(r => ({
       ...r,

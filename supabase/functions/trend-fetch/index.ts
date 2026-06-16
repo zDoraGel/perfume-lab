@@ -1,7 +1,4 @@
 // supabase/functions/trend-fetch/index.ts
-// Deploy: supabase functions deploy trend-fetch
-// Secrets needed: ANTHROPIC_API_KEY (มีอยู่แล้ว)
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -21,60 +18,53 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // ── ให้ Claude ค้นหา + สรุป trend พร้อมกันเลย ──────────────────────────
+    // ใช้ Claude knowledge โดยตรง ไม่ใช้ web search (เร็วกว่า ไม่ timeout)
     const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
         messages: [{
           role: 'user',
-          content: `Search for the latest perfume and fragrance trends in 2026. 
-Find what notes, ingredients, and styles are popular right now among niche perfumers and fragrance enthusiasts.
+          content: `You are a fragrance industry expert. Based on your knowledge of 2025-2026 perfume trends, return ONLY a valid JSON array with exactly 5 trending fragrance concepts for indie/niche perfumers. No markdown, no explanation, just the JSON array.
 
-Then return ONLY a JSON array (no markdown, no explanation) with exactly 5 trending fragrance concepts:
 [
   {
-    "title": "Short trend name in English (max 5 words)",
-    "description": "2-3 sentences in Thai explaining the trend and why it's interesting for indie perfumers.",
+    "title": "Short trend name (max 5 words)",
+    "description": "2-3 sentences in Thai explaining the trend and why it matters for indie perfumers.",
     "keywords": ["material1", "material2", "material3"]
   }
 ]
 
-Keywords must be actual perfumery materials (e.g. Hedione, White Musk, Iso E Super, Ambroxan, White Tea, etc.)`
+Keywords must be real perfumery materials (e.g. Hedione, Ambroxan, Iso E Super, Skin Musk, etc.)`
         }]
       })
     })
 
     const aiData = await aiRes.json()
-    
-    // หา text block สุดท้าย
     const textBlock = aiData.content?.filter((b: any) => b.type === 'text').pop()
     const aiText = textBlock?.text || '[]'
 
     let trends: any[] = []
     try {
       const clean = aiText.replace(/```json|```/g, '').trim()
-      // หา JSON array ใน text
       const match = clean.match(/\[[\s\S]*\]/)
       trends = match ? JSON.parse(match[0]) : []
     } catch {
-      trends = []
-    }
-
-    if (!trends.length) {
       return new Response(JSON.stringify({ error: 'parse failed', raw: aiText }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // บันทึกลง Supabase
+    if (!trends.length) {
+      return new Response(JSON.stringify({ error: 'no trends', raw: aiText }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
     const { data, error } = await supabase.from('trend_items').insert(
       trends.map((t: any) => ({
         title:       t.title,

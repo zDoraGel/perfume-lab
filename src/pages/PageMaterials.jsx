@@ -282,29 +282,60 @@ function MatModal({ mat, onClose, onSave }) {
         </div>
 
         {/* ── IFRA ── */}
-        <div style={{ marginTop:14, padding:'12px 14px', background:'#fff8f0',
-          borderRadius:12, border:'1px solid #e8c88a' }}>
-          <div style={{ fontSize:11, color:'#c07820', fontWeight:600, letterSpacing:.8,
-            textTransform:'uppercase', marginBottom:10 }}>⚠ IFRA Limit</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-            <NumInput label="Max Usage (%)" value={ifraLimit}
-              onChange={setIfraLimit} placeholder="เช่น 0.5" decimal/>
-            <div>
-              <div style={{ fontSize:12, color:'#6b6560', fontWeight:500, letterSpacing:.5,
-                textTransform:'uppercase', marginBottom:4 }}>Category</div>
-              <select value={ifraCategory} onChange={e => setIfraCategory(e.target.value)}
-                style={{ width:'100%', background:'#fff', border:'1px solid #e8e4dc',
-                  borderRadius:10, padding:'12px 14px', fontSize:14,
-                  fontFamily:'Inter,sans-serif', color:'#1a1814', outline:'none' }}>
-                <option value="leave-on">Leave-on (น้ำหอม)</option>
-                <option value="rinse-off">Rinse-off (ล้างออก)</option>
-                <option value="fine-fragrance">Fine Fragrance</option>
-              </select>
+        <div style={{ marginTop:14, padding:'14px 16px', background:S.bg,
+          borderRadius:12, border:`1px solid ${ifraLimit ? S.goldBd : S.border}` }}>
+          <div style={{ fontSize:11, color:S.gold, fontWeight:700, letterSpacing:.8,
+            textTransform:'uppercase', marginBottom:12,
+            fontFamily:'Inter,sans-serif' }}>✦ IFRA Limit</div>
+
+          <div style={{ display:'flex', gap:10, marginBottom: ifraLimit ? 10 : 0 }}>
+            {/* % input */}
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:11, color:S.textMid, fontWeight:500,
+                letterSpacing:.5, marginBottom:5, textTransform:'uppercase',
+                fontFamily:'Inter,sans-serif' }}>Max %</div>
+              <input
+                type="number" step="0.01" value={ifraLimit}
+                onChange={e => setIfraLimit(e.target.value)}
+                placeholder="เช่น 0.5"
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10,
+                  border:`1.5px solid ${ifraLimit ? S.gold : S.border}`,
+                  fontSize:14, fontFamily:'Inter,sans-serif', color:S.ink,
+                  background:S.white, outline:'none', boxSizing:'border-box' }}/>
+            </div>
+
+            {/* Category buttons */}
+            <div style={{ flex:2 }}>
+              <div style={{ fontSize:11, color:S.textMid, fontWeight:500,
+                letterSpacing:.5, marginBottom:5, textTransform:'uppercase',
+                fontFamily:'Inter,sans-serif' }}>ประเภท</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[
+                  { v:'leave-on',       l:'น้ำหอม' },
+                  { v:'fine-fragrance', l:'Fine Frag' },
+                  { v:'rinse-off',      l:'Rinse-off' },
+                ].map(opt => (
+                  <button key={opt.v} onClick={() => setIfraCategory(opt.v)}
+                    style={{ flex:1, padding:'10px 4px', borderRadius:10, cursor:'pointer',
+                      fontSize:11, fontFamily:'Inter,sans-serif',
+                      border:`1.5px solid ${ifraCategory === opt.v ? S.gold : S.border}`,
+                      background: ifraCategory === opt.v ? S.goldLt : S.white,
+                      color: ifraCategory === opt.v ? S.gold : S.textMid,
+                      fontWeight: ifraCategory === opt.v ? 600 : 400 }}>
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
           {ifraLimit && (
-            <div style={{ fontSize:11, color:'#c07820', marginTop:6 }}>
-              ใช้ได้สูงสุด {ifraLimit}% ใน {ifraCategory}
+            <div style={{ fontSize:11, color:S.gold, padding:'6px 10px',
+              background:S.goldLt, borderRadius:8, display:'inline-block' }}>
+              ใช้ได้สูงสุด <strong>{ifraLimit}%</strong> · {
+                ifraCategory === 'leave-on' ? 'Leave-on (น้ำหอม)' :
+                ifraCategory === 'fine-fragrance' ? 'Fine Fragrance' : 'Rinse-off'
+              }
             </div>
           )}
         </div>

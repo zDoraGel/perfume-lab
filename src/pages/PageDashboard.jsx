@@ -259,6 +259,24 @@ export default function PageDashboard() {
   const [retail,     setRetail]     = useState([])
   const [trends,     setTrends]     = useState([])
   const [fetching,   setFetching]   = useState(false)
+  const [sending,    setSending]    = useState(false)
+
+  async function handleSendReport() {
+    setSending(true)
+    try {
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/daily-report`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        }
+      })
+      alert('ส่ง Report ไป LINE แล้วค่ะ ✅')
+    } catch(e) {
+      alert('ส่งไม่สำเร็จ ลองใหม่นะคะ')
+    }
+    setSending(false)
+  }
 
   const loadTrends = () => fetchSavedTrends().then(setTrends)
 
@@ -340,6 +358,18 @@ export default function PageDashboard() {
           Business Overview
         </div>
       </div>
+
+      {/* Send Report Button */}
+      <button onClick={handleSendReport} disabled={sending}
+        style={{ width:'100%', padding:'12px 0', borderRadius:12, marginBottom:16,
+          border:`1.5px solid ${S.gold}`, background: sending ? S.bg : S.goldLt,
+          cursor: sending ? 'default' : 'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        <span style={{ fontSize:16 }}>📊</span>
+        <span style={{ fontSize:13, fontWeight:600, color:S.gold, fontFamily:'Inter,sans-serif' }}>
+          {sending ? 'กำลังส่ง...' : 'ส่ง Daily Report → LINE'}
+        </span>
+      </button>
 
       {isEmpty ? (
         <div style={{ textAlign:'center', padding:'60px 0' }}>
@@ -429,6 +459,46 @@ export default function PageDashboard() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Top Favorites ── */}
+      {retail.filter(r => r.is_favorite).length > 0 && (
+        <div style={{ background:S.white, border:`1.5px solid #e8c0c0`,
+          borderRadius:12, padding:'16px', marginBottom:20, marginTop:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'#c06060',
+            textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
+            ❤️ Top Favorites
+          </div>
+          {retail.filter(r => r.is_favorite).map((r, i) => (
+            <div key={r.id} style={{ display:'flex', justifyContent:'space-between',
+              alignItems:'center', padding:'9px 0',
+              borderBottom: i < retail.filter(x=>x.is_favorite).length - 1 ? `1px solid ${S.border}` : 'none' }}>
+              <div>
+                <div style={{ fontSize:13, fontFamily:'Cormorant Garamond,serif',
+                  fontWeight:700, color:S.text }}>{r.name}</div>
+                {r.brand && <div style={{ fontSize:11, color:S.textLt }}>{r.brand}</div>}
+              </div>
+              <div style={{ display:'flex', gap:12, fontSize:11, textAlign:'right' }}>
+                <div>
+                  <div style={{ color:S.textLt }}>ขายไป</div>
+                  <div style={{ fontWeight:700, color:S.gold }}>{r.qty_sold} ขวด</div>
+                </div>
+                <div>
+                  <div style={{ color:S.textLt }}>คงเหลือ</div>
+                  <div style={{ fontWeight:700, color: r.remaining <= r.alert_at ? '#c06060' : S.green }}>
+                    {r.remaining} ขวด
+                  </div>
+                </div>
+                {r.price_per_unit && (
+                  <div>
+                    <div style={{ color:S.textLt }}>ราคา</div>
+                    <div style={{ fontWeight:700, color:S.textMid }}>฿{r.price_per_unit}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ── Fragrance Trends ── */}
