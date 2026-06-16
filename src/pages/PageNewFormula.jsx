@@ -263,44 +263,88 @@ export default function PageNewFormula({ onBack, onCreate }) {
 
   // ── NOT options ─────────────────────────────────────────────────────────────
   const NOT_OPTS = [
-    { v:'Laundry Detergent', th:'ผงซักฟอก' },
-    { v:'Masculine Cologne',  th:'กลิ่นผู้ชายจัด' },
-    { v:'Sweet Candy',        th:'หวานลูกกวาด' },
-    { v:'Gourmand',           th:'กลิ่นอาหาร/ขนม' },
-    { v:'Heavy Floral',       th:'ดอกไม้หนักจัด' },
-    { v:'Sharp Citrus',       th:'เปรี้ยวแหลม' },
-    { v:'Metallic Fresh',     th:'สดแบบโลหะ' },
-    { v:'Aquatic / Marine',   th:'ทะเล/น้ำ' },
-    { v:'Smoky / Oud',        th:'ควัน/อู้ด' },
-    { v:'Baby Powder',        th:'แป้งเด็ก' },
-    { v:'Overly Perfumey',    th:'รู้เลยว่าใส่น้ำหอม' },
-    { v:'Loud Projection',    th:'ฟุ้งแรงเกิน' },
-    { v:'Synthetic',          th:'กลิ่นเคมีปลอม' },
-    { v:'Bitter Tea',         th:'ชาขม/ฝาด' },
-    { v:'Creamy / Milky',      th:'ครีม/นม' },
-    { v:'Lotion-like',         th:'เหมือนโลชั่น' },
-    { v:'Skincare Cream',      th:'กลิ่นครีมบำรุงผิว' },
-    { v:'Powdery Floral',      th:'ดอกไม้แป้ง' },
-    { v:'White Floral Dominant', th:'ดอกไม้ขาวครอบงำ' },
-    { v:'Rice Milk',           th:'น้ำนมข้าว' },
+    { v:'Laundry Detergent',    th:'ผงซักฟอก' },
+    { v:'Masculine Cologne',    th:'กลิ่นผู้ชายจัด' },
+    { v:'Sweet Candy',          th:'หวานลูกกวาด' },
+    { v:'Gourmand',             th:'กลิ่นอาหาร/ขนม' },
+    { v:'Heavy Floral',         th:'ดอกไม้หนักจัด' },
+    { v:'Sharp Citrus',         th:'เปรี้ยวแหลม' },
+    { v:'Metallic Fresh',       th:'สดแบบโลหะ' },
+    { v:'Aquatic / Marine',     th:'ทะเล/น้ำ' },
+    { v:'Smoky / Oud',          th:'ควัน/อู้ด' },
+    { v:'Baby Powder',          th:'แป้งเด็ก' },
+    { v:'Overly Perfumey',      th:'รู้เลยว่าใส่น้ำหอม' },
+    { v:'Loud Projection',      th:'ฟุ้งแรงเกิน' },
+    { v:'Synthetic',            th:'กลิ่นเคมีปลอม' },
+    { v:'Bitter Tea',           th:'ชาขม/ฝาด' },
+    { v:'Creamy / Milky',       th:'ครีม/นม' },
+    { v:'Lotion-like',          th:'เหมือนโลชั่น' },
+    { v:'Skincare Cream',       th:'กลิ่นครีมบำรุงผิว' },
+    { v:'Powdery Floral',       th:'ดอกไม้แป้ง' },
+    { v:'White Floral Dominant',th:'ดอกไม้ขาวครอบงำ' },
+    { v:'Rice Milk',            th:'น้ำนมข้าว' },
+    { v:'Spicy / Pepper',       th:'เผ็ดร้อน/พริกไทย' },
+    { v:'Mossy / Earthy',       th:'ดินชื้น/มอส' },
+    { v:'Tobacco',              th:'ยาสูบ' },
+    { v:'Animalic',             th:'กลิ่นสัตว์' },
+    { v:'Soapy Clean',          th:'สะอาดแบบสบู่จัด' },
+    { v:'Over-sweetened',       th:'หวานเกินไป' },
   ]
 
   // ── Preferred material categories ──────────────────────────────────────────
   const PREFER_OPTS = [
-    { v:'White Tea',        th:'ชาขาว' },
-    { v:'Clean Musks',      th:'มัสก์สะอาด' },
-    { v:'Hedione',          th:'เฮดิโอน (ดอกไม้เบา)' },
-    { v:'Soft Peony',       th:'พีโอนี่อ่อนโยน' },
-    { v:'Muguet',           th:'ลิลลี่ออฟเดอะวัลลี่' },
-    { v:'Ambrette Seed',    th:'แอมเบรตซีด (มัสก์ธรรมชาติ)' },
-    { v:'Transparent Woods',th:'ไม้โปร่งใส' },
-    { v:'Sandalwood',       th:'ไม้จันทน์' },
-    { v:'Iris',             th:'ไอริส (แป้งหอม)' },
-    { v:'Bergamot',         th:'เบอร์กามอต' },
-    { v:'Skin Musk',        th:'มัสก์กลิ่นผิว' },
-    { v:'White Musk',       th:'มัสก์ขาวสะอาด' },
-    { v:'Iso E Super',      th:'ไม้โปร่งใส พุ่ง' },
-    { v:'Habanolide',       th:'มัสก์แมคโครไซคลิก' },
+    // Musk & Skin
+    { v:'White Musk',          th:'มัสก์ขาวสะอาด' },
+    { v:'Clean Musks',         th:'มัสก์สะอาด' },
+    { v:'Skin Musk',           th:'มัสก์กลิ่นผิว' },
+    { v:'Ambrette Seed',       th:'แอมเบรตซีด (มัสก์ธรรมชาติ)' },
+    { v:'Habanolide',          th:'มัสก์แมคโครไซคลิก' },
+    { v:'Galaxolide',          th:'มัสก์วงแหวน' },
+    { v:'Cashmeran',           th:'แคชเมียร์นุ่ม' },
+    { v:'Clean Urban Skin',    th:'มัสก์ผิวแบบเมือง' },
+    // Wood & Amber
+    { v:'Iso E Super',         th:'ไม้โปร่งใส พุ่ง' },
+    { v:'Transparent Woods',   th:'ไม้โปร่งใส' },
+    { v:'Sandalwood',          th:'ไม้จันทน์' },
+    { v:'Ambroxan',            th:'แอมบร็อกซาน' },
+    { v:'Amber',               th:'อำพัน' },
+    { v:'Vetiver',             th:'เวทิเวอร์ (รากหญ้า)' },
+    { v:'Patchouli',           th:'แพทชูลี' },
+    { v:'Oud',                 th:'อู้ด' },
+    { v:'Leather',             th:'หนัง' },
+    // Resin & Incense
+    { v:'Frankincense',        th:'กำยาน' },
+    { v:'Labdanum',            th:'ลาบดานัม (อำพัน)' },
+    { v:'Coumarin',            th:'คูมาริน (หวานหญ้าแห้ง)' },
+    // Floral
+    { v:'Hedione',             th:'เฮดิโอน (ดอกไม้เบา)' },
+    { v:'Soft Peony',          th:'พีโอนี่อ่อนโยน' },
+    { v:'Muguet',              th:'ลิลลี่ออฟเดอะวัลลี่' },
+    { v:'Magnolia',            th:'แมกโนเลีย' },
+    { v:'Neroli',              th:'ส้มดอกไม้' },
+    { v:'Iris',                th:'ไอริส (แป้งหอม)' },
+    { v:'Heliotrope',          th:'เฮลิโอโทรป (หวานแป้ง)' },
+    // Citrus & Fresh
+    { v:'Bergamot',            th:'เบอร์กามอต' },
+    { v:'Petitgrain',          th:'ใบส้มสดสะอาด' },
+    { v:'Lemon Verbena',       th:'มะนาวสมุนไพร' },
+    // Tea & Green
+    { v:'White Tea',           th:'ชาขาว' },
+    { v:'Green Tea',           th:'ชาเขียวสด' },
+    // Spice & Warmth
+    { v:'Cardamom',            th:'กระวาน' },
+    { v:'Black Pepper',        th:'พริกไทยดำ' },
+    { v:'Ginger',              th:'ขิงสด' },
+    { v:'Cinnamon',            th:'อบเชย' },
+    // Sweet
+    { v:'Vanilla',             th:'วานิลลา' },
+    { v:'Tonka Bean',          th:'ตองก้าหวานครีม' },
+    // Aquatic
+    { v:'Sea Salt',            th:'เกลือทะเล' },
+    // Fruity
+    { v:'Pear',                th:'ลูกแพร์' },
+    { v:'Apple',               th:'แอปเปิ้ลสด' },
+    { v:'Peach',               th:'พีช' },
   ]
   const AVOID_MAT_OPTS = [
     { v:'Heavy Ambroxan',       th:'แอมบร็อกซานหนัก' },
@@ -795,7 +839,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
                 TEXTURE <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>เนื้อกลิ่น · เลือกได้ถึง 3</span>
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
-                {['Powdery','Creamy','Watery','Dry','Resinous','Fizzy','Velvety','Airy'].map(v => (
+                {['Powdery','Creamy','Watery','Dry','Resinous','Fizzy','Velvety','Airy','Silky','Smoky','Earthy','Mossy'].map(v => (
                   <button key={v} onClick={() => setDnaTexture(p => p.includes(v) ? p.filter(x=>x!==v) : p.length < 3 ? [...p,v] : p)}
                     style={{ padding:'6px 14px', borderRadius:20, cursor:'pointer', fontSize:12,
                       border:`1.5px solid ${dnaTexture.includes(v) ? S.gold : S.border}`,
@@ -838,7 +882,8 @@ export default function PageNewFormula({ onBack, onCreate }) {
                   'ดูเรียบร้อยสะอาด','ดูโตแบบทันสมัย','ลึกลับนิดๆ','เซ็กซี่เบาๆ','สดใส','ดูมั่นใจ',
                   'ดูอ่อนโยน','ดู calm','ดู sophisticated','ดู cozy',
                   'หอมเหมือนผิวจริง','สะอาดเหมือนผ้าพึ่งซัก','ละมุนแบบเกาหลี',
-                  'luxury แบบ quiet','หอมแบบคนดูแลตัวเอง','น่ากอด'].map(v => (
+                  'luxury แบบ quiet','หอมแบบคนดูแลตัวเอง','น่ากอด',
+                  'หวานอ่อนๆ','ดูเป็นผู้ใหญ่','ดูเป็นธรรมชาติ','อบอวลแบบ cozy','ดู artsy','กลิ่นผิวแท้ๆ'].map(v => (
                   <button key={v} onClick={() => setDnaFeeling(p => p.includes(v) ? p.filter(x=>x!==v) : p.length < 6 ? [...p,v] : p)}
                     style={{ padding:'5px 11px', borderRadius:20, cursor:'pointer', fontSize:11,
                       border:`1.5px solid ${dnaFeeling.includes(v) ? S.gold : S.border}`,
