@@ -1,8 +1,8 @@
 export const PROJECTION_OPTS = [
-  { value: 'whisper',   label: 'Whisper',   icon: '○', desc: 'Skin close — ได้กลิ่นต่อเมื่อเข้าใกล้' },
-  { value: 'aura',      label: 'Aura',      icon: '◎', desc: 'Moderate — personal space ~1 เมตร' },
-  { value: 'presence',  label: 'Presence',  icon: '◈', desc: 'Strong — ได้กลิ่นทั่วห้อง' },
-  { value: 'signature', label: 'Signature', icon: '❋', desc: 'Beast mode — ได้กลิ่นก่อนเข้าห้อง' },
+  { value: 'whisper',   label: 'Skin Scent',     icon: '○', desc: 'Skin close — ได้กลิ่นต่อเมื่อเข้าใกล้' },
+  { value: 'aura',      label: 'Personal Space', icon: '◎', desc: 'Moderate — personal space ~1 เมตร' },
+  { value: 'presence',  label: 'Room Presence',  icon: '◈', desc: 'Strong — ได้กลิ่นทั่วห้อง' },
+  { value: 'signature', label: 'Statement',      icon: '❋', desc: 'Beast mode — ได้กลิ่นก่อนเข้าห้อง' },
 ]
 
 export const TEXTURE_OPTS = [
@@ -14,6 +14,15 @@ export const TEXTURE_OPTS = [
   { value: 'fizzy',    label: 'Fizzy',    emoji: '✨', desc: 'ฟู้ สดชื่น เด้ง' },
   { value: 'velvety',  label: 'Velvety',  emoji: '🪶', desc: 'กำมะหยี่ นุ่มลึก' },
   { value: 'airy',     label: 'Airy',     emoji: '☁️', desc: 'เบา ลอย โปร่ง' },
+  { value: 'silky',     label: 'Silky',     emoji: '🎀', desc: 'ลื่น เนียน นุ่ม' },
+  { value: 'smoky',     label: 'Smoky',     emoji: '🌫', desc: 'ควัน ลึก คลุมเครือ' },
+  { value: 'earthy',    label: 'Earthy',    emoji: '🌍', desc: 'ดิน รากไม้ ลึก' },
+  { value: 'mossy',     label: 'Mossy',     emoji: '🍃', desc: 'มอส เขียวชื้น' },
+  { value: 'fluffy',    label: 'Fluffy',    emoji: '☁️', desc: 'ฟู นุ่ม เบา' },
+  { value: 'cottony',   label: 'Cottony',   emoji: '🧶', desc: 'นุ่มเหมือนผ้าฝ้าย' },
+  { value: 'sheer',     label: 'Sheer',     emoji: '🪶', desc: 'โปร่งแสง บางเบา' },
+  { value: 'transparent', label: 'Transparent', emoji: '💎', desc: 'ใส โปร่งทะลุ' },
+  { value: 'crisp',     label: 'Crisp',     emoji: '✂️', desc: 'กรอบ คม สะอาด' },
 ]
 
 export const TEMPERATURE_OPTS = [
@@ -76,6 +85,29 @@ export const FEELING_OPTS = [
   { value: 'garden_fresh',      label: 'สดใสแบบฤดูใบไม้ผลิ',        emoji: '🤍' },
   { value: 'white_garden',      label: 'เหมือนสวนดอกไม้ขาว',        emoji: '🤍' },
   { value: 'airy_bloom',        label: 'ละมุนแบบดอกไม้โปร่ง',       emoji: '🤍' },
+  // Emotion & Mood
+  { value: 'mysterious',        label: 'ลึกลับ',                     emoji: '🤍' },
+  { value: 'seductive',         label: 'ยั่วยวนเบาๆ',                emoji: '🤍' },
+  { value: 'dreamy',            label: 'เคลิ้มฝัน',                  emoji: '🤍' },
+  { value: 'nostalgic',         label: 'หวนคิดถึงอดีต',             emoji: '🤍' },
+  { value: 'playful',           label: 'สนุกสดใส',                   emoji: '🤍' },
+  { value: 'cheerful',          label: 'แจ่มใส',                     emoji: '🤍' },
+  { value: 'uplifting',         label: 'ยกระดับอารมณ์',             emoji: '🤍' },
+  { value: 'grounding',         label: 'หนักแน่น สงบ',               emoji: '🤍' },
+  { value: 'meditative',        label: 'สมาธิ ผ่อนคลาย',            emoji: '🤍' },
+  // Personality
+  { value: 'creative',          label: 'มีความคิดสร้างสรรค์',       emoji: '🤍' },
+  { value: 'intellectual',      label: 'ดูมีความรู้',                emoji: '🤍' },
+  { value: 'artistic',          label: 'ดูเป็นศิลปิน',              emoji: '🤍' },
+  { value: 'free_spirited',     label: 'อิสระ ไม่ยึดติด',           emoji: '🤍' },
+  { value: 'independent',       label: 'เป็นตัวของตัวเอง',          emoji: '🤍' },
+  { value: 'powerful',          label: 'ทรงพลัง',                    emoji: '🤍' },
+  // Luxury
+  { value: 'expensive',         label: 'ดูแพง',                      emoji: '🤍' },
+  { value: 'couture',           label: 'หรูแบบ couture',             emoji: '🤍' },
+  { value: 'chic',              label: 'ชิคมีสไตล์',                 emoji: '🤍' },
+  { value: 'parisian',          label: 'หรูแบบปารีเซียง',           emoji: '🤍' },
+  { value: 'effortless',        label: 'ดูเรียบง่ายไม่ฝืน',         emoji: '🤍' },
 ]
 
 export const OPENING_OPTS = [
@@ -91,6 +123,14 @@ export const OPENING_OPTS = [
   { value: 'glow',         label: 'Glow',         desc: 'ฟุ้งเรืองๆ อบอุ่น' },
   { value: 'creamy_bloom', label: 'Creamy Bloom', desc: 'ค่อยๆ นุ่มขึ้น' },
   { value: 'clean_lift',   label: 'Clean Lift',   desc: 'สดขึ้นแล้วยกตัว' },
+  { value: 'sparkling',    label: 'Sparkling',    desc: 'เปิดประกายฟู่ฟ่อง' },
+  { value: 'green_burst',  label: 'Green Burst',  desc: 'พุ่งเขียวสดทันที' },
+  { value: 'tea_steam',    label: 'Tea Steam',    desc: 'เปิดแบบไอชาร้อนอ่อนๆ' },
+  { value: 'air_lift',     label: 'Air Lift',     desc: 'ยกตัวขึ้นเบาเหมือนอากาศ' },
+  { value: 'fresh_laundry_open', label: 'Fresh Laundry', desc: 'เปิดแบบผ้าซักสะอาด' },
+  { value: 'ocean_mist',   label: 'Ocean Mist',   desc: 'ละอองทะเลเปิดเบาๆ' },
+  { value: 'white_floral_bloom', label: 'White Floral Bloom', desc: 'ดอกไม้ขาวค่อยๆ บาน' },
+  { value: 'musky_veil',   label: 'Musky Veil',   desc: 'มัสก์ม่านบางเปิดตัว' },
 ]
 
 export const AVOID_PRESETS = [

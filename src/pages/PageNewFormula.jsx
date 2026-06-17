@@ -131,6 +131,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Healthy Skin',        th:'ผิวสุขภาพดี' },
         { v:'Well-Groomed Person', th:'คนดูแลตัวเองดี' },
         { v:'Soft Shampoo',        th:'แชมพูหอมละมุน' },
+        { v:'Shower Fresh',        th:'หลังอาบน้ำสดชื่น' },
+        { v:'Fresh Out of Bath',   th:'พึ่งออกจากห้องอาบน้ำ' },
+        { v:'Fresh Towels',       th:'ผ้าขนหนูสะอาดสด' },
+        { v:'Baby Soft',           th:'นุ่มแบบผิวเด็ก' },
       ]
     },
     {
@@ -142,6 +146,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Silk Fabric',         th:'ผ้าไหมนุ่มลื่น' },
         { v:'Expensive Fabric',    th:'ผ้าแพง' },
         { v:'Soft Glow',           th:'แสงอ่อนๆ รอบตัว' },
+        { v:'Hotel Sheets',        th:'ผ้าปูเตียงโรงแรม' },
+        { v:'Sun-Dried Linen',     th:'ผ้าตากแดดสะอาด' },
+        { v:'Fresh Laundry',       th:'ผ้าซักใหม่สะอาด' },
       ]
     },
     {
@@ -154,6 +161,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Modern Minimalism',   th:'มินิมอลทันสมัย' },
         { v:'Soft Aura',           th:'ออร่าอ่อนโยน' },
         { v:'Standing Close',      th:'ต้องเข้าใกล้ถึงได้กลิ่น' },
+        { v:'Old Money',           th:'หรูแบบดั้งเดิม ไม่โอ้อวด' },
+        { v:'Clean Girl',          th:'สาวสะอาดมินิมอล' },
+        { v:'Rich Without Trying', th:'ดูแพงโดยไม่ต้องพยายาม' },
       ]
     },
     {
@@ -162,6 +172,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Soft Musks',          th:'มัสก์นุ่ม' },
         { v:'Transparent Woods',   th:'ไม้โปร่งใส' },
         { v:'Sun-Warmed Skin',     th:'ผิวอุ่นแดดอ่อน' },
+        { v:'Cashmere Skin',       th:'ผิวนุ่มแบบแคชเมียร์' },
+        { v:'White Musks',         th:'มัสก์ขาวสะอาด' },
+        { v:'Velvet Skin',         th:'ผิวนุ่มแบบกำมะหยี่' },
+        { v:'Clean Woods',         th:'ไม้สะอาดโปร่ง' },
       ]
     },
     {
@@ -172,6 +186,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Cool Air',            th:'อากาศเย็นสดชื่น' },
         { v:'Fresh Air',           th:'อากาศบริสุทธิ์' },
         { v:'Urban Clean',         th:'ความสะอาดแบบเมือง' },
+        { v:'Open Window',         th:'เปิดหน้าต่างรับลม' },
+        { v:'Breeze Through Curtains', th:'ลมพัดผ่านม้วนผ้าม่าน' },
+        { v:'Ocean Air',           th:'อากาศริมทะเล' },
+        { v:'Mountain Air',        th:'อากาศบนภูเขา' },
       ]
     },
     {
@@ -183,6 +201,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Spring Petals',       th:'กลีบดอกฤดูใบไม้ผลิ' },
         { v:'Dewy Flowers',        th:'ดอกไม้เปียกน้ำค้าง' },
         { v:'Floral Skin',         th:'ดอกไม้บนผิว' },
+        { v:'White Bouquet',       th:'ดอกไม้ขาวรวมช่อ' },
+        { v:'Floating Petals',     th:'กลีบดอกลอยเบาๆ' },
+        { v:'Sheer Flowers',       th:'ดอกไม้โปร่งแสง' },
       ]
     },
     {
@@ -198,6 +219,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Clean Tea Accord',    th:'กลิ่นชาสะอาด' },
         { v:'Gentle Infusion',     th:'ชางนุ่มละมุน' },
         { v:'Whisper of Tea',      th:'กลิ่นชาแผ่วเบา' },
+        { v:'Green Tea',           th:'ชาเขียวสด' },
+        { v:'Matcha Veil',         th:'มัทฉะม่านบาง' },
+        { v:'Tea Ceremony',        th:'พิธีชงชา' },
+        { v:'Morning Tea',         th:'ชายามเช้า' },
       ]
     },
   ]
@@ -302,6 +327,31 @@ export default function PageNewFormula({ onBack, onCreate }) {
     { v:'Aldehydic',            th:'โซปี้แบบวินเทจ' },
     { v:'Medicinal',            th:'กลิ่นยา' },
     { v:'Greasy / Fatty',       th:'มันเยิ้ม' },
+    // Green
+    { v:'Green Bitter',         th:'เขียวขม' },
+    { v:'Crushed Leaves',       th:'ใบไม้บี้แตก' },
+    { v:'Herbal',               th:'สมุนไพรจัด' },
+    { v:'Vegetal',              th:'พืชผักดิบ' },
+    // White Floral (แยกชัด)
+    { v:'Indolic Jasmine',      th:'มะลิอินโดลิกแรง' },
+    { v:'Tuberose',             th:'ดอกซ่อนกลิ่นจัด' },
+    { v:'Orange Blossom Heavy', th:'ดอกส้มหนักจัด' },
+    { v:'Screechy White Floral',th:'ดอกไม้ขาวแสบจมูก' },
+    // Musk (เฉพาะแบบไม่ต้องการ)
+    { v:'Laundry Musk',         th:'มัสก์ผงซักฟอก' },
+    { v:'Detergent Musk',       th:'มัสก์น้ำยาซัก' },
+    { v:'Cleaning Product',     th:'กลิ่นน้ำยาทำความสะอาด' },
+    // Synthetic (เฉพาะ)
+    { v:'Aroma Chemical Heavy', th:'เคมีหอมหนักจัด' },
+    { v:'Molecule Heavy',       th:'โมเลกุลเดี่ยวหนัก' },
+    { v:'Ambroxan Bomb',        th:'แอมบรอกซานจัดมาก' },
+    { v:'Iso E Overdose',       th:'ไอโซอีเกินขนาด' },
+    // Modern Clean Killer
+    { v:'Aldehydes Heavy',      th:'อัลดีไฮด์จัด' },
+    { v:'Calone Heavy',         th:'คาโลนจัด' },
+    { v:'Metallic Notes',       th:'กลิ่นโลหะ' },
+    { v:'Ozone Overdose',       th:'โอโซนเกินขนาด' },
+    { v:'Green Notes Overdose', th:'กลิ่นเขียวเกินขนาด' },
   ]
 
   // ── Preferred material categories ──────────────────────────────────────────
@@ -358,6 +408,41 @@ export default function PageNewFormula({ onBack, onCreate }) {
     { v:'Pear',                th:'ลูกแพร์' },
     { v:'Apple',               th:'แอปเปิ้ลสด' },
     { v:'Peach',               th:'พีช' },
+    // Accords
+    { v:'Clean Musk',          th:'มัสก์สะอาด (accord)' },
+    { v:'Tea Accord',          th:'แอคคอร์ดชา' },
+    { v:'Clean Linen',         th:'ผ้าสะอาด (accord)' },
+    { v:'Soft Floral',         th:'ดอกไม้นุ่ม (accord)' },
+    { v:'Citrus Lift',         th:'ซิตรัสยกความสดชื่น' },
+    // Tea (เพิ่มชนิด)
+    { v:'Matcha',              th:'มัทฉะ' },
+    { v:'Oolong',              th:'ชาอูหลง' },
+    { v:'Black Tea',           th:'ชาดำ' },
+    { v:'Earl Grey',           th:'ชาเอิร์ลเกรย์' },
+    { v:'Mate',                th:'ชามาเต้' },
+    // Fruits
+    { v:'Fig',                 th:'มะเดื่อ' },
+    { v:'Lychee',              th:'ลิ้นจี่' },
+    { v:'Grapefruit',          th:'เกรปฟรุต' },
+    { v:'Yuzu',                th:'ยูซุ' },
+    { v:'Apricot',             th:'แอปริคอต' },
+    // Woods (เพิ่ม)
+    { v:'Cedarwood',           th:'ไม้ซีดาร์' },
+    { v:'Hinoki',              th:'ไม้ฮิโนกิ' },
+    { v:'Guaiac Wood',         th:'ไม้กวยแอค' },
+    { v:'Driftwood',           th:'ไม้ลอยน้ำ' },
+    // Air & Water
+    { v:'Ozonic',              th:'โอโซนสดชื่น' },
+    { v:'Aldehydes',           th:'อัลดีไฮด์เบา' },
+    { v:'Rain Accord',         th:'แอคคอร์ดสายฝน' },
+    { v:'Fresh Air Accord',    th:'แอคคอร์ดอากาศสด' },
+    { v:'Mineral Accord',      th:'แอคคอร์ดแร่ธาตุ' },
+    // Floral (เพิ่ม)
+    { v:'Rose',                th:'กุหลาบ' },
+    { v:'Osmanthus',           th:'หอมหมื่นลี้' },
+    { v:'Freesia',             th:'ฟรีเซีย' },
+    { v:'Violet',              th:'ไวโอเล็ต' },
+    { v:'Lily',                th:'ลิลลี่' },
   ]
   const AVOID_MAT_OPTS = [
     { v:'Heavy Ambroxan',       th:'แอมบร็อกซานหนัก' },

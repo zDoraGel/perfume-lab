@@ -34,7 +34,11 @@ export default function PageLotPlanning({ onSelectFormula }) {
   }, [formulas])
 
   const lotNumbers = useMemo(() => {
-    const nums = [...new Set(formulas.map(f => f.lot_number).filter(Boolean))]
+    const nums = [...new Set(
+      formulas
+        .map(f => f.lot_number)
+        .filter(n => typeof n === 'number' && Number.isFinite(n) && n > 0)
+    )]
     return nums.sort((a, b) => a - b)
   }, [formulas])
 
@@ -42,8 +46,9 @@ export default function PageLotPlanning({ onSelectFormula }) {
     setSaving(formula.id)
     try {
       const fields = { lot_status: status }
-      // ถ้าเปลี่ยนเป็น active แต่ยังไม่มี lot_number ให้ตั้งเป็น lot ล่าสุด+1 อัตโนมัติ
-      if (status === 'active' && !formula.lot_number) {
+      // ถ้าเปลี่ยนเป็น active แต่ยังไม่มี lot_number (หรือเลขไม่ถูกต้อง) ให้ตั้งเป็น lot ล่าสุด+1 อัตโนมัติ
+      const hasValidLot = typeof formula.lot_number === 'number' && formula.lot_number > 0
+      if (status === 'active' && !hasValidLot) {
         const maxLot = lotNumbers.length ? Math.max(...lotNumbers) : 0
         fields.lot_number = maxLot + 1
       }
@@ -58,7 +63,9 @@ export default function PageLotPlanning({ onSelectFormula }) {
   async function updateLotNumber(formula, lotNum) {
     setSaving(formula.id)
     try {
-      const fields = { lot_number: lotNum ? parseInt(lotNum) : null }
+      const parsed = lotNum === '' || lotNum == null ? null : parseInt(lotNum, 10)
+      const valid  = parsed != null && Number.isFinite(parsed) && parsed > 0 ? parsed : null
+      const fields = { lot_number: valid }
       await db.updateFormula(formula.id, fields)
       setFormulas(prev => prev.map(f => f.id === formula.id ? { ...f, ...fields } : f))
     } catch (e) {

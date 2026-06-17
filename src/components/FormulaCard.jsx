@@ -3,6 +3,20 @@ import { db } from '../lib/db'
 import { FEELING_OPTS } from '../constants/formulaDNA'
 import LabelGenerator from './LabelGenerator'
 
+// ช่วย parse field ที่อาจเป็น JSON array string เช่น '["a","b"]' หรือ comma string 'a,b'
+function toArray(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  const s = String(value).trim()
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s)
+      return Array.isArray(arr) ? arr.map(v => String(v).replace(/^"|"$/g, '')) : []
+    } catch { /* fall through */ }
+  }
+  return s.split(',').map(v => v.trim().replace(/^"|"$/g, '')).filter(Boolean)
+}
+
 const CARD_W = 340
 const CARD_H = 610
 const BG     = '#f8f5f0'
@@ -187,7 +201,7 @@ function deriveQuote(formula) {
     if (first.length > 12) return first
   }
   if (formula.name_meaning) return formula.name_meaning
-  const feel = formula.feeling?.split(',')[0]
+  const feel = toArray(formula.feeling)[0]
   const fallbacks = {
     quietly_clean: 'Like morning light on clean linen.',
     effortless_luxury: 'Worn like a second skin.',
@@ -298,7 +312,7 @@ const Div = ({my=6}) => (
 function CardFront({ formula, latestVersion, items, aliases, concentration }) {
   const ctx = [formula.feeling, formula.texture, formula.vibe].filter(Boolean).join(', ')
 
-  const feelingVals = formula.feeling ? formula.feeling.split(',').filter(Boolean) : []
+  const feelingVals = toArray(formula.feeling)
   const feelingEn   = feelingVals.slice(0,3).map(v => getFeelingLabel(v))
   const feelingTh   = feelingVals.slice(0,3).map(v => FEELING_OPTS.find(o => o.value===v.trim())?.label || '')
 
@@ -423,7 +437,7 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
 
 // ── Card Back ───────────────────────────────────────────────────────────────────
 function CardBack({ formula, latestVersion, items, aliases, traits, concentration }) {
-  const feelingVals = formula.feeling ? formula.feeling.split(',').map(v=>v.trim()).filter(Boolean) : []
+  const feelingVals = toArray(formula.feeling)
   const ctx = [formula.feeling, formula.texture, formula.vibe].filter(Boolean).join(', ')
 
   // Scent profile — weighted avg จาก traits DB
