@@ -114,6 +114,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
   const [nameMeaning,   setNameMeaning]   = useState('')
   const [nameSuggs,     setNameSuggs]     = useState([])
   const [nameLoading,   setNameLoading]   = useState(false)
+  const [meaningLoading, setMeaningLoading] = useState(false)
   const [saving,        setSaving]        = useState(false)
 
   useEffect(() => { db.getMaterials().then(setMaterials) }, [])
@@ -164,6 +165,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
         { v:'Old Money',           th:'หรูแบบดั้งเดิม ไม่โอ้อวด' },
         { v:'Clean Girl',          th:'สาวสะอาดมินิมอล' },
         { v:'Rich Without Trying', th:'ดูแพงโดยไม่ต้องพยายาม' },
+        { v:'Feminine Soft',       th:'อ่อนหวานแบบผู้หญิง' },
       ]
     },
     {
@@ -196,6 +198,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
       cat: 'Floral', icon: '🌸', color: '#8a3a68', bg: '#fceef7',
       opts: [
         { v:'Soft Floral',         th:'ดอกไม้นุ่ม' },
+        { v:'Fresh Floral',        th:'ดอกไม้สดชื่น' },
         { v:'Airy Bloom',          th:'ดอกไม้โปร่งเบา' },
         { v:'White Garden',        th:'สวนดอกไม้ขาว' },
         { v:'Spring Petals',       th:'กลีบดอกฤดูใบไม้ผลิ' },
@@ -443,6 +446,21 @@ export default function PageNewFormula({ onBack, onCreate }) {
     { v:'Freesia',             th:'ฟรีเซีย' },
     { v:'Violet',              th:'ไวโอเล็ต' },
     { v:'Lily',                th:'ลิลลี่' },
+    // Bergamot Tea Family
+    { v:'Orange Blossom',      th:'ดอกส้ม' },
+    { v:'Lavender',            th:'ลาเวนเดอร์' },
+    // Modern Clean (musk molecules)
+    { v:'Helvetolide',         th:'มัสก์โมเลกุลนุ่ม' },
+    { v:'Ethylene Brassylate', th:'มัสก์โมเลกุลกลม' },
+    // Green
+    { v:'Violet Leaf',         th:'ใบไวโอเล็ต' },
+    { v:'Bamboo',              th:'ไผ่' },
+    // Citrus
+    { v:'Mandarin',            th:'แมนดาริน' },
+    { v:'Lemon',               th:'เลมอน' },
+    // White Floral (สำหรับ AI เรียนรู้ ไม่ใช่ preference)
+    { v:'Jasmine',             th:'มะลิ' },
+    { v:'Tuberose',            th:'ดอกซ่อนกลิ่น' },
   ]
   const AVOID_MAT_OPTS = [
     { v:'Heavy Ambroxan',       th:'แอมบร็อกซานหนัก' },
@@ -461,6 +479,21 @@ export default function PageNewFormula({ onBack, onCreate }) {
     { v:'Rice Milk Overdose',   th:'น้ำนมข้าวเกินขนาด' },
     { v:'Creamy Notes',         th:'กลิ่นครีมทุกชนิด' },
     { v:'Milky Notes',          th:'กลิ่นนม' },
+    // Green Overdose
+    { v:'Violet Leaf',          th:'ใบไวโอเล็ต' },
+    { v:'Galbanum',             th:'กัลบานัม (เขียวจัด)' },
+    { v:'Green Notes Overdose', th:'กลิ่นเขียวเกินขนาด' },
+    // White Floral Heavy
+    { v:'Tuberose',             th:'ดอกซ่อนกลิ่น' },
+    { v:'Indolic Jasmine',      th:'มะลิอินโดลิก' },
+    { v:'Orange Blossom Heavy', th:'ดอกส้มหนักจัด' },
+    // Metallic / Aldehydic
+    { v:'Heavy Aldehydes',      th:'อัลดีไฮด์หนัก' },
+    { v:'Metallic Notes',       th:'กลิ่นโลหะ' },
+    // Spice
+    { v:'Clove',                th:'กานพลู' },
+    { v:'Nutmeg',               th:'จันทน์เทศ' },
+    { v:'Cinnamon Overdose',    th:'อบเชยเกินขนาด' },
   ]
 
   // ── Build vibe string ───────────────────────────────────────────────────────
@@ -493,6 +526,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
     'Transparent Woods':   { role:'base',  mats:['Iso E Super','Ambroxan','Cashmeran','Cedarwood'],              pct:45 },
     'Sun-Warmed Skin':     { role:'base',  mats:['Ambroxan','Sandalwood','White Musk'],                          pct:40 },
     'Standing Close':      { role:'base',  mats:['Ambrette Seed','White Musk','Hedione'],                        pct:50 },
+    'Feminine Soft':       { role:'heart', mats:['Soft Peony','Hedione','White Musk'],                          pct:35 },
     'Morning Dew':         { role:'top',   mats:['Lemon','Bergamot','Petitgrain','Green Tea'],                   pct:20 },
     'After Rain':          { role:'top',   mats:['Geosmin','Calone','Petitgrain','Green Leaves'],                pct:20 },
     'Cool Air':            { role:'top',   mats:['Calone','Floralozone','Petitgrain','Lemon'],                   pct:20 },
@@ -503,6 +537,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
     'White Garden':        { role:'heart', mats:['Hedione','Muguet','White Peony','Linalool'],                   pct:30 },
     'Spring Petals':       { role:'top',   mats:['Pear Blossom','Apple','Freesia','Linalool'],                   pct:25 },
     'Dewy Flowers':        { role:'top',   mats:['Floralozone','Hedione','Linalool','Green Tea'],                pct:20 },
+    'Fresh Floral':        { role:'heart', mats:['Hedione','Muguet','Linalool','Green Tea'],                    pct:30 },
     'Floral Skin':         { role:'heart', mats:['Hedione','White Musk','Linalool'],                             pct:30 },
     'Soft Glow':           { role:'heart', mats:['Hedione','Linalool','White Musk'],                             pct:30 },
   }
@@ -681,6 +716,19 @@ export default function PageNewFormula({ onBack, onCreate }) {
     )
     try { const p = JSON.parse(r.replace(/```json|```/g,'').trim()); setNameSuggs(p.names||[]) } catch {}
     setNameLoading(false)
+  }
+
+  async function genMeaning() {
+    if (!name.trim()) return
+    setMeaningLoading(true)
+    const vibe = buildVibeString()
+    const r = await callAI(
+      'creative director น้ำหอมลักชัวรี่ ตอบเป็นข้อความล้วน ไม่ต้อง JSON ไม่ต้องมีคำนำหรือเครื่องหมายคำพูด',
+      `ชื่อน้ำหอม "${name.trim()}" จาก vibe: "${vibe}" — เขียนความหมายของชื่อนี้เป็นภาษาไทย 1 ประโยคสั้นๆ ให้เชื่อมโยงกับ vibe ที่ให้มา`
+    )
+    const cleaned = r.replace(/```json|```/g,'').trim().replace(/^["']|["']$/g,'')
+    setNameMeaning(cleaned)
+    setMeaningLoading(false)
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -916,10 +964,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
                 {[
-                  { v:'Whisper', th:'Skin close — ใกล้ตัวเองเข้าใกล' },
-                  { v:'Aura',    th:'Moderate — personal space ~1 เมตร' },
-                  { v:'Presence',th:'Strong — ได้กลิ่นทั่วห้อง' },
-                  { v:'Signature',th:'Beast mode — ได้กลิ่นก่อนเข้าห้อง' },
+                  { v:'Whisper',   label:'Skin Scent',     th:'Skin close — ใกล้ตัวเองเข้าใกล' },
+                  { v:'Aura',      label:'Personal Space', th:'Moderate — personal space ~1 เมตร' },
+                  { v:'Presence',  label:'Room Presence',  th:'Strong — ได้กลิ่นทั่วห้อง' },
+                  { v:'Signature', label:'Statement',      th:'Beast mode — ได้กลิ่นก่อนเข้าห้อง' },
                 ].map(opt => (
                   <button key={opt.v} onClick={() => setDnaProjection(p => p === opt.v ? '' : opt.v)}
                     style={{ padding:'8px 14px', borderRadius:10, cursor:'pointer',
@@ -927,7 +975,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
                       background: dnaProjection === opt.v ? S.goldLt : 'transparent',
                       textAlign:'left', minWidth:140 }}>
                     <div style={{ fontSize:12, fontWeight:600, color: dnaProjection === opt.v ? S.gold : S.ink }}>
-                      {dnaProjection === opt.v ? '◈ ' : '○ '}{opt.v}
+                      {dnaProjection === opt.v ? '◈ ' : '○ '}{opt.label}
                     </div>
                     <div style={{ fontSize:10, color:S.textMid, marginTop:2 }}>{opt.th}</div>
                   </button>
@@ -1436,10 +1484,17 @@ export default function PageNewFormula({ onBack, onCreate }) {
                 style={{ ...iStyle, marginBottom:12, fontSize:13 }}/>
             )}
 
-            <Btn variant="outline" onClick={genNames} disabled={nameLoading}
-              style={{ width:'100%', marginBottom:12 }}>
-              {nameLoading ? 'Generating...' : '✦ ให้ AI เสนอชื่อ'}
-            </Btn>
+            {name.trim() ? (
+              <Btn variant="outline" onClick={genMeaning} disabled={meaningLoading}
+                style={{ width:'100%', marginBottom:12 }}>
+                {meaningLoading ? 'Generating...' : '✦ ให้ AI อธิบายความหมายชื่อ'}
+              </Btn>
+            ) : (
+              <Btn variant="outline" onClick={genNames} disabled={nameLoading}
+                style={{ width:'100%', marginBottom:12 }}>
+                {nameLoading ? 'Generating...' : '✦ ให้ AI เสนอชื่อ'}
+              </Btn>
+            )}
 
             {nameSuggs.length > 0 && (
               <div style={{ marginBottom:14 }}>
