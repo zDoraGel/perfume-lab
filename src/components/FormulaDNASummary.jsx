@@ -31,9 +31,23 @@ export default function FormulaDNASummary({ formula, items = [] }) {
     } catch { avoidCustom = dna.avoid }
   }
 
+  // ช่วย parse field ที่อาจเป็น JSON array string เช่น '["Airy","Dry"]' หรือ comma string เช่น 'Airy,Dry'
+  function toArray(value) {
+    if (!value) return []
+    if (Array.isArray(value)) return value
+    const s = String(value).trim()
+    if (s.startsWith('[')) {
+      try {
+        const arr = JSON.parse(s)
+        return Array.isArray(arr) ? arr.map(v => String(v).replace(/^"|"$/g, '')) : []
+      } catch { /* fall through */ }
+    }
+    return s.split(',').map(v => v.trim().replace(/^"|"$/g, '')).filter(Boolean)
+  }
+
   // parse weighted fields
   function parseWeighted(value = '', opts = [], maxPcts = {}) {
-    const vals = value ? value.split(',').filter(Boolean) : []
+    const vals = toArray(value)
     const pcts = maxPcts[vals.length] || [100]
     return vals.map((v, i) => ({
       label: getLabel(opts, v),
@@ -44,8 +58,8 @@ export default function FormulaDNASummary({ formula, items = [] }) {
 
   const textures     = parseWeighted(dna.texture,       TEXTURE_OPTS, WEIGHT_PCTS)
   const feelings     = parseWeighted(dna.feeling,       FEELING_OPTS, { 1:[100], 2:[70,30], 3:[60,25,15], 4:[50,25,15,10] })
-  const temperatures = dna.temperature ? dna.temperature.split(',').filter(Boolean) : []
-  const openings     = dna.opening_style ? dna.opening_style.split(',').filter(Boolean) : []
+  const temperatures = toArray(dna.temperature)
+  const openings     = toArray(dna.opening_style)
   const projection   = dna.projection ? PROJECTION_OPTS.find(o => o.value === dna.projection) : null
 
   return (

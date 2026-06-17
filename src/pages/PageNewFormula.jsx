@@ -169,6 +169,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
       opts: [
         { v:'Morning Dew',         th:'น้ำค้างเช้า' },
         { v:'After Rain',          th:'หลังฝนตก' },
+        { v:'Cool Air',            th:'อากาศเย็นสดชื่น' },
+        { v:'Fresh Air',           th:'อากาศบริสุทธิ์' },
+        { v:'Urban Clean',         th:'ความสะอาดแบบเมือง' },
       ]
     },
     {
@@ -289,6 +292,16 @@ export default function PageNewFormula({ onBack, onCreate }) {
     { v:'Animalic',             th:'กลิ่นสัตว์' },
     { v:'Soapy Clean',          th:'สะอาดแบบสบู่จัด' },
     { v:'Over-sweetened',       th:'หวานเกินไป' },
+    { v:'Too Sweet',            th:'หวานเกิน ไม่อยากใส่' },
+    { v:'Too Masculine',        th:'ดูผู้ชายเกินไป' },
+    { v:'Harsh Aquatic',        th:'ทะเลแรง/เคมี' },
+    { v:'Overwhelming Musk',    th:'มัสก์หนักอึดอัด' },
+    { v:'Sour / Fermented',     th:'เปรี้ยวหมัก' },
+    { v:'Rubber / Plastic',     th:'ยาง/พลาสติก' },
+    { v:'Incense Heavy',        th:'กำยานหนัก' },
+    { v:'Aldehydic',            th:'โซปี้แบบวินเทจ' },
+    { v:'Medicinal',            th:'กลิ่นยา' },
+    { v:'Greasy / Fatty',       th:'มันเยิ้ม' },
   ]
 
   // ── Preferred material categories ──────────────────────────────────────────
@@ -397,6 +410,9 @@ export default function PageNewFormula({ onBack, onCreate }) {
     'Standing Close':      { role:'base',  mats:['Ambrette Seed','White Musk','Hedione'],                        pct:50 },
     'Morning Dew':         { role:'top',   mats:['Lemon','Bergamot','Petitgrain','Green Tea'],                   pct:20 },
     'After Rain':          { role:'top',   mats:['Geosmin','Calone','Petitgrain','Green Leaves'],                pct:20 },
+    'Cool Air':            { role:'top',   mats:['Calone','Floralozone','Petitgrain','Lemon'],                   pct:20 },
+    'Fresh Air':           { role:'top',   mats:['Calone','Linalool','Bergamot','Green Leaves'],                 pct:20 },
+    'Urban Clean':         { role:'base',  mats:['Iso E Super','White Musk','Galaxolide','Petitgrain','Ambrette Seed'], pct:40 },
     'Soft Floral':         { role:'heart', mats:['Hedione','Pear Blossom','Linalool','Floralozone'],             pct:30 },
     'Airy Bloom':          { role:'heart', mats:['Hedione','Floralozone','Muguet','White Peony'],                pct:25 },
     'White Garden':        { role:'heart', mats:['Hedione','Muguet','White Peony','Linalool'],                   pct:30 },
@@ -909,6 +925,11 @@ export default function PageNewFormula({ onBack, onCreate }) {
                   { v:'Quiet', th:'เรียบนิ่ง ค่อยๆ ปรากฏ' },
                   { v:'Skin Close', th:'แนบผิว ใกล้ชิด' },
                   { v:'Glow', th:'ฟุ้งเรืองๆ อบอุ่น' },
+                  { v:'Clean Lift', th:'สะอาด ยกขึ้นเบาๆ' },
+                  { v:'Watery', th:'เหมือนน้ำไหล เบาใส' },
+                  { v:'Powdery Open', th:'เปิดด้วยแป้งอ่อนๆ' },
+                  { v:'Citrus Pop', th:'เปรี้ยวพุ่งสดชื่น' },
+                  { v:'Warm Embrace', th:'อบอุ่นโอบรอบตัว' },
                 ].map(opt => (
                   <button key={opt.v} onClick={() => setDnaOpening(p => p.includes(opt.v) ? p.filter(x=>x!==opt.v) : p.length < 2 ? [...p,opt.v] : p)}
                     style={{ padding:'6px 14px', borderRadius:10, cursor:'pointer',
