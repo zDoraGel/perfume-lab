@@ -145,6 +145,17 @@ export default function PageLotPlanning({ onSelectFormula }) {
                             style={{ width:44, padding:'4px 6px', borderRadius:6,
                               border:`1px solid ${S.border}`, fontSize:12, textAlign:'center' }}
                           />
+                          {f.lot_number != null && (
+                            <button onClick={() => updateLotNumber(f, '')}
+                              disabled={saving === f.id}
+                              title="ล้างเลข Lot"
+                              style={{ width:20, height:20, borderRadius:'50%', cursor:'pointer',
+                                border:`1px solid ${S.border}`, background:'transparent',
+                                color:S.textLt, fontSize:11, lineHeight:1,
+                                display:'flex', alignItems:'center', justifyContent:'center' }}>
+                              ✕
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
