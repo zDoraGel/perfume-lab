@@ -12,6 +12,7 @@ import PageMyBlends   from './pages/PageMyBlends'
 import PageDashboard  from './pages/PageDashboard'
 import PageRetailStock from './pages/PageRetailStock'
 import PageReport     from './pages/PageReport'
+import PageLotPlanning from './pages/PageLotPlanning'
 
 const NAV = [
   { id:'dashboard',   label:'Dashboard',  icon:'◉' },
@@ -20,6 +21,7 @@ const NAV = [
   { id:'materials',   label:'Materials',  icon:'⬡' },
   { id:'myblends',    label:'My Blends',  icon:'✦' },
   { id:'production',  label:'Production', icon:'○' },
+  { id:'lot',          label:'Lot',        icon:'▦' },
   { id:'retail',      label:'Retail',     icon:'⬘' },
   { id:'report',      label:'Report',     icon:'◱' },
   { id:'export',      label:'Export',     icon:'↓' },
@@ -92,6 +94,17 @@ export default function App() {
 
         {/* ── Production ───────────────────────────────────── */}
         {tab === 'production' && <PageProduction/>}
+
+        {/* ── Lot Planning ─────────────────────────────────── */}
+        {tab === 'lot' && (
+          <PageLotPlanning
+            onSelectFormula={f => {
+              setSelectedFormula(f)
+              setTab('formulas')
+              setFormulaPage('detail')
+            }}
+          />
+        )}
 
         {/* ── Retail Stock ─────────────────────────────────── */}
         {tab === 'retail' && <PageRetailStock/>}
