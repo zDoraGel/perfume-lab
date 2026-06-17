@@ -949,9 +949,15 @@ export default function PageNewFormula({ onBack, onCreate }) {
                 BEST FOR <span style={{ fontWeight:400, textTransform:'none', letterSpacing:0 }}>เหมาะกับโอกาสไหน</span>
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:7, marginBottom:16 }}>
-                {['Daily Wear','Office Day','Casual Date','Romantic Date','Weekend Brunch',
-                  'Evening Out','Spring & Summer','Fall & Winter','Skin Scent Lover',
-                  'Minimalist','Quiet Luxury','Gift','After Shower','Travel','Night Out','Self Care Day'].map(v => (
+                {['Daily Wear','Office Day','Work from Home','Meeting / Presentation',
+                  'Casual Date','First Date','Romantic Date','Evening Out','Night Out',
+                  'Weekend Brunch','Beach Day','Travel','Study Session','Lazy Sunday',
+                  'Self Care Day','Meditation / Yoga','Gym / Active','Bedtime / Sleep',
+                  'Spring & Summer','Fall & Winter','Hot & Humid Weather','Rainy Season','Cool Season',
+                  'Skin Scent Lover','Minimalist','Quiet Luxury','Gift',
+                  'After Shower','Clean Girl Aesthetic','Effortless Chic',
+                  'The One Who Smells Amazing','Signature Scent',
+                  'Wedding Guest','Date Night In','Everyday Luxury','Just Because'].map(v => (
                   <button key={v} onClick={() => setDnaBestFor(p => p.includes(v) ? p.filter(x=>x!==v) : [...p,v])}
                     style={{ padding:'5px 12px', borderRadius:20, cursor:'pointer', fontSize:11,
                       border:`1.5px solid ${dnaBestFor.includes(v) ? S.gold : S.border}`,

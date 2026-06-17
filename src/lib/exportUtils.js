@@ -14,7 +14,21 @@ function getDensity(family) {
 }
 
 
-// ── Strip Thai characters ──────────────────────────────────────────────────────
+// ── Array helper ──────────────────────────────────────────────────────────────
+function toArr(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  const s = String(value).trim()
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s)
+      return Array.isArray(arr) ? arr.map(v => String(v).replace(/^"|"$/g, '')) : []
+    } catch { /* fall through */ }
+  }
+  return s.split(',').map(v => v.trim().replace(/^"|"$/g, '')).filter(Boolean)
+}
+
+
 function stripThai(str) {
   if (!str) return ''
   return str.replace(/[\u0E00-\u0E7F]+/g, '').replace(/\s+/g, ' ').trim()
@@ -203,13 +217,13 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion, shar
       doc.text(`Projection: ${formula.projection}`, 20, y); y += 3
     }
     if (formula.texture) {
-      doc.text(`Texture: ${formula.texture.split(',').join(' · ')}`, 20, y); y += 3
+      doc.text(`Texture: ${toArr(formula.texture).join(' · ')}`, 20, y); y += 3
     }
     if (formula.feeling) {
-      doc.text(`Feeling: ${stripThai(formula.feeling.split(',').join(' · '))}`, 20, y); y += 3
+      doc.text(`Feeling: ${stripThai(toArr(formula.feeling).join(' · '))}`, 20, y); y += 3
     }
     if (formula.opening_style) {
-      doc.text(`Opening: ${formula.opening_style.split(',').join(' + ')}`, 20, y); y += 3
+      doc.text(`Opening: ${toArr(formula.opening_style).join(' + ')}`, 20, y); y += 3
     }
     y += 3
     doc.setDrawColor(232, 228, 220)
