@@ -113,10 +113,15 @@ function SimplePicker({ opts, value = '', onChange, max = 2, showEmoji = false }
 
 // ── Best For Section ──────────────────────────────────────────────────────────
 const BEST_FOR_PRESETS = [
-  'Daily Wear', 'Office Day', 'Casual Date', 'Romantic Date',
-  'Weekend Brunch', 'Evening Out', 'Spring & Summer', 'Fall & Winter',
-  'Skin Scent Lover', 'Minimalist', 'Quiet Luxury', 'Gift',
-  'After Shower', 'Travel', 'Night Out', 'Self Care Day',
+  'Daily Wear','Office Day','Work from Home','Meeting / Presentation',
+  'Casual Date','First Date','Romantic Date','Evening Out','Night Out',
+  'Weekend Brunch','Beach Day','Travel','Study Session','Lazy Sunday',
+  'Self Care Day','Meditation / Yoga','Gym / Active','Bedtime / Sleep',
+  'Spring & Summer','Fall & Winter','Hot & Humid Weather','Rainy Season','Cool Season',
+  'Skin Scent Lover','Minimalist','Quiet Luxury','Gift',
+  'After Shower','Clean Girl Aesthetic','Effortless Chic',
+  'The One Who Smells Amazing','Signature Scent',
+  'Wedding Guest','Date Night In','Everyday Luxury','Just Because',
 ]
 
 function BestForPicker({ value = '', onChange }) {
