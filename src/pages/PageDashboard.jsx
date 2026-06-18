@@ -140,7 +140,7 @@ function LineChart({ data }) {
 }
 
 // ── Donut chart (SVG, no deps) ────────────────────────────────────────────────
-function DonutChart({ segments, centerLabel, centerValue }) {
+function DonutChart({ segments, centerLabel, centerValue, centerColor }) {
   const total = segments.reduce((s, x) => s + x.value, 0)
   if (total <= 0) return (
     <div style={{ textAlign:'center', padding:'24px 0', color:S.textLt, fontSize:12 }}>
@@ -168,7 +168,7 @@ function DonutChart({ segments, centerLabel, centerValue }) {
               transform={`rotate(${rotation} ${CX} ${CY})`}/>
           )
         })}
-        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={13} fontWeight="700" fill={S.text}>
+        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={13} fontWeight="700" fill={centerColor || S.text}>
           {centerValue}
         </text>
         <text x={CX} y={CY + 10} textAnchor="middle" fontSize={8} fill={S.textLt}>
@@ -348,6 +348,7 @@ export default function PageDashboard({ onNavigate }) {
   const [sales7d,       setSales7d]       = useState([])
   const [topSellers,    setTopSellers]    = useState([])
   const [expensesMonth, setExpensesMonth] = useState({ total: 0, items: [] })
+  const [revenueMonth,  setRevenueMonth]  = useState({ revenue: 0, profit: 0 })
 
   async function handleSendReport() {
     setSending(true)
@@ -398,13 +399,15 @@ export default function PageDashboard({ onNavigate }) {
       db.getSalesLast7Days().catch(() => []),
       db.getTopRetailSellers().catch(() => []),
       db.getExpensesThisMonth().catch(() => ({ total: 0, items: [] })),
-    ]).then(([ps, ms, rs, s7, top, exp]) => {
+      db.getRevenueThisMonth().catch(() => ({ revenue: 0, profit: 0 })),
+    ]).then(([ps, ms, rs, s7, top, exp, revMonth]) => {
       setProdSum(ps)
       setMonthly(ms)
       setRetail(rs)
       setSales7d(s7)
       setTopSellers(top)
       setExpensesMonth(exp)
+      setRevenueMonth(revMonth)
       setLoading(false)
     })
     loadTrends()
@@ -453,12 +456,12 @@ export default function PageDashboard({ onNavigate }) {
   }))
   const bestSellerTotal = topSellers.reduce((s, t) => s + t.qty_sold, 0)
 
-  // ── Donut 2 — revenue vs expenses (เดือนนี้) ──
+  // ── Donut 2 — รายได้ vs ค่าใช้จ่าย (เดือนนี้ — ใช้ revenueMonth ให้ตรงช่วงเวลากับ expensesMonth) ──
   const revenueVsExpenseSegments = [
-    { label:'รายได้', value: retailRevenue, color: S.green },
+    { label:'รายได้', value: revenueMonth.revenue, color: S.green },
     { label:'ค่าใช้จ่าย', value: expensesMonth.total, color: S.red },
   ]
-  const netProfit = retailRevenue - expensesMonth.total
+  const netProfit = revenueMonth.revenue - expensesMonth.total
 
   return (
     <div>
@@ -559,7 +562,8 @@ export default function PageDashboard({ onNavigate }) {
             รายได้ vs ค่าใช้จ่าย (เดือนนี้)
           </div>
           <DonutChart segments={revenueVsExpenseSegments}
-            centerLabel="กำไรสุทธิ" centerValue={`฿${Math.round(netProfit).toLocaleString()}`}/>
+            centerLabel="กำไรสุทธิ" centerValue={`฿${Math.round(netProfit).toLocaleString()}`}
+            centerColor={netProfit < 0 ? S.red : S.green}/>
         </div>
       </div>
 

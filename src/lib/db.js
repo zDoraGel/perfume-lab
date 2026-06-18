@@ -376,6 +376,7 @@ export const db = {
     const { data } = await supabase
       .from('retail_stock')
       .select('id, name, brand, qty_total, qty_sold, alert_at, price_per_unit, cost_per_unit, is_favorite')
+      .eq('is_discontinued', false)
       .order('created_at', { ascending: false })
     return (data || []).map(r => ({
       ...r,
@@ -435,5 +436,23 @@ export const db = {
       .gte('expense_date', monthStart)
     const total = (data || []).reduce((s, e) => s + (e.amount ?? 0), 0)
     return { total, items: data || [] }
+  },
+
+  // ── Revenue เดือนนี้ (ช่วงเวลาเดียวกับ getExpensesThisMonth เพื่อเทียบกำไรสุทธิได้ถูกต้อง) ──
+  async getRevenueThisMonth() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      .toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('retail_stock_logs')
+      .select('qty, sell_price, cost_price')
+      .eq('type', 'out')
+      .gte('logged_at', monthStart)
+    let revenue = 0, profit = 0
+    for (const l of (data || [])) {
+      const qty = l.qty ?? 0
+      revenue += (l.sell_price ?? 0) * qty
+      profit  += ((l.sell_price ?? 0) - (l.cost_price ?? 0)) * qty
+    }
+    return { revenue, profit }
   },
 }
