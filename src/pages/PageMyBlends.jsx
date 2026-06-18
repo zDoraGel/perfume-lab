@@ -68,6 +68,7 @@ function VersionForm({ adaptationId, ver, materials, onSaved, onCancel }) {
   const [restDays,   setRestDays]   = useState('14')
   const [notes,      setNotes]      = useState('')
   const [items,      setItems]      = useState([{ matId:'', grams:'' }])
+  const [sellPrice,  setSellPrice]  = useState('')
   const [saving,     setSaving]     = useState(false)
 
   const iStyle = { width:'100%', padding:'8px 12px', borderRadius:8, fontSize:14,
@@ -86,6 +87,7 @@ function VersionForm({ adaptationId, ver, materials, onSaved, onCancel }) {
       blended_at:    blendedAt,
       rest_days:     parseInt(restDays) || 14,
       notes:         notes || null,
+      sell_price:    sellPrice ? parseFloat(sellPrice) : null,
       status:        'Resting', qty_sold: 0,
     }).select().single()
 
@@ -266,6 +268,27 @@ function VersionForm({ adaptationId, ver, materials, onSaved, onCancel }) {
           style={{ ...iStyle, resize:'none' }}/>
       </div>
 
+      {/* ราคาขาย */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>
+          ราคาขาย (฿/ขวด)
+        </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <input type="number" inputMode="decimal" value={sellPrice}
+            onChange={e => setSellPrice(e.target.value)}
+            placeholder="เช่น 490"
+            style={{ ...iStyle, marginBottom:0, flex:1 }}/>
+          {sellPrice && qty && (
+            <div style={{ fontSize:12, color:S.green, fontWeight:600, flexShrink:0 }}>
+              รวม ฿{(parseFloat(sellPrice) * parseInt(qty || 1)).toLocaleString()}
+            </div>
+          )}
+        </div>
+        <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
+          * ราคาที่กำหนดเองต่อขวด — ใช้คำนวณกำไรใน My Blends
+        </div>
+      </div>
+
       <div style={{ display:'flex', gap:8 }}>
         <button onClick={save} disabled={saving}
           style={{ flex:1, padding:'10px 0', borderRadius:10, cursor:'pointer',
@@ -303,6 +326,7 @@ function VersionCard({ v, materials, onUpdate }) {
   const [eDate,    setEDate]    = useState(v.blended_at || '')
   const [eRest,    setERest]    = useState(String(v.rest_days   || '14'))
   const [eNotes,   setENotes]   = useState(v.notes || '')
+  const [ePrice,   setEPrice]   = useState(String(v.sell_price  || ''))
   const [eItems,   setEItems]   = useState([])
 
   useEffect(() => {
@@ -331,6 +355,7 @@ function VersionCard({ v, materials, onUpdate }) {
       blended_at:  eDate,
       rest_days:   parseInt(eRest)      || 14,
       notes:       eNotes || null,
+      sell_price:  ePrice ? parseFloat(ePrice) : null,
     }).eq('id', v.id)
 
     // update items — delete all then re-insert
@@ -388,6 +413,21 @@ function VersionCard({ v, materials, onUpdate }) {
               return `Alcohol ${v.alcohol_pct?.toFixed(0)}%`
             })()}
           </div>
+          {v.sell_price != null && (
+            <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:5 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:S.green }}>
+                ฿{Number(v.sell_price).toLocaleString()} / ขวด
+              </span>
+              <span style={{ fontSize:10, color:S.textLt }}>
+                รวม ฿{(v.sell_price * (v.qty_bottles || 1)).toLocaleString()}
+              </span>
+              {v.qty_sold > 0 && (
+                <span style={{ fontSize:10, color:S.green, fontWeight:600 }}>
+                  · ขายแล้ว ฿{(v.sell_price * v.qty_sold).toLocaleString()}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
           <button onClick={e => { e.stopPropagation(); setEditing(p=>!p); setExpanded(false) }}
@@ -554,7 +594,23 @@ function VersionCard({ v, materials, onUpdate }) {
               style={{ ...iStyle, resize:'none' }}/>
           </div>
 
-          <button onClick={saveEdit} disabled={saving}
+          {/* ราคาขาย */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>
+              ราคาขาย (฿/ขวด)
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              <input type="number" inputMode="decimal" value={ePrice}
+                onChange={e => setEPrice(e.target.value)}
+                placeholder="เช่น 490"
+                style={{ ...iStyle, marginBottom:0, flex:1 }}/>
+              {ePrice && eQty && (
+                <div style={{ fontSize:12, color:S.green, fontWeight:600, flexShrink:0 }}>
+                  รวม ฿{(parseFloat(ePrice) * parseInt(eQty || 1)).toLocaleString()}
+                </div>
+              )}
+            </div>
+          </div>
             style={{ width:'100%', padding:'10px 0', borderRadius:10, cursor:'pointer',
               fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
               background:S.gold, border:'none', color:'#fff', opacity: saving ? .6 : 1 }}>

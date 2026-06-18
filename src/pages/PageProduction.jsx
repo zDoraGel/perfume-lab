@@ -232,6 +232,7 @@ export default function PageProduction() {
   const [stock,     setStock]     = useState([])
   const [loading,   setLoading]   = useState(true)
   const [showForm,  setShowForm]  = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null) // batch id ที่กำลังจะลบ
 
   useEffect(() => {
     db.getFormulas().then(d => { setFormulas(d); setLoading(false) })
@@ -252,9 +253,9 @@ export default function PageProduction() {
   }
 
   async function deleteBatch(id) {
-    if (!confirm('ลบ batch นี้?')) return
     await db.deleteBatch(id)
-    reload()
+    setDeleteConfirm(null)
+    await reload()
   }
 
   return (
@@ -367,11 +368,74 @@ export default function PageProduction() {
                         </div>
                         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                           <StockBadge remaining={b.qty_produced - b.qty_sold}/>
-                          <button onClick={() => deleteBatch(b.id)}
-                            style={{ fontSize:12, color:S.textLt, background:'none',
-                              border:'none', cursor:'pointer', padding:'4px 8px' }}>×</button>
+                          {deleteConfirm === b.id ? (
+                            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                              <span style={{ fontSize:11, color:S.red }}>ลบ batch นี้?</span>
+                              <button onClick={() => deleteBatch(b.id)}
+                                style={{ fontSize:11, fontWeight:700, color:'#fff',
+                                  background:S.red, border:'none', borderRadius:8,
+                                  padding:'3px 10px', cursor:'pointer' }}>ลบ</button>
+                              <button onClick={() => setDeleteConfirm(null)}
+                                style={{ fontSize:11, color:S.textMid, background:'none',
+                                  border:`1px solid ${S.border}`, borderRadius:8,
+                                  padding:'3px 8px', cursor:'pointer' }}>ยกเลิก</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setDeleteConfirm(b.id)}
+                              style={{ fontSize:13, color:S.textLt, background:'none',
+                                border:'none', cursor:'pointer', padding:'4px 8px',
+                                lineHeight:1 }}>×</button>
+                          )}
                         </div>
                       </div>
+
+                      {/* คู่มือผสมขวด */}
+                      {(() => {
+                        const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
+                        const fill = calcBottleFill(0, concMap[b.concentration] || 'EdP_Signature', b.bottle_ml, 0)
+                        if (!fill) return null
+                        const qty = b.qty_produced
+                        return (
+                          <div style={{ margin:'6px 0 4px', padding:'10px 12px',
+                            background:'#f0f5f2', borderRadius:8,
+                            border:`1px solid #c8ddd0` }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:S.green,
+                              letterSpacing:.8, textTransform:'uppercase', marginBottom:6 }}>
+                              🧪 คู่มือผสม — {qty} ขวด × {b.bottle_ml}ml
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                              <div style={{ background:S.white, borderRadius:6,
+                                padding:'7px 10px', border:`1px solid #d8ede2` }}>
+                                <div style={{ fontSize:9, color:S.textLt, marginBottom:2,
+                                  textTransform:'uppercase', letterSpacing:.5 }}>Concentrate</div>
+                                <div style={{ fontSize:15, fontWeight:700, color:S.gold,
+                                  fontFamily:'Cormorant Garamond,serif' }}>
+                                  {(fill.concInBottle * qty).toFixed(2)} g
+                                </div>
+                                <div style={{ fontSize:10, color:S.textMid }}>
+                                  {fill.concInBottle} g × {qty}
+                                </div>
+                              </div>
+                              <div style={{ background:S.white, borderRadius:6,
+                                padding:'7px 10px', border:`1px solid #d8ede2` }}>
+                                <div style={{ fontSize:9, color:S.textLt, marginBottom:2,
+                                  textTransform:'uppercase', letterSpacing:.5 }}>Alcohol</div>
+                                <div style={{ fontSize:15, fontWeight:700, color:'#4a7a8a',
+                                  fontFamily:'Cormorant Garamond,serif' }}>
+                                  {(fill.alcoholInBottle * qty).toFixed(1)} ml
+                                </div>
+                                <div style={{ fontSize:10, color:S.textMid }}>
+                                  {fill.alcoholInBottle} ml × {qty}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize:10, color:S.textMid, marginTop:6 }}>
+                              รวม {b.bottle_ml * qty} ml · {fill.concentrationPct}% concentration
+                            </div>
+                          </div>
+                        )
+                      })()}
+
                       {/* Aging Log ใต้แต่ละ batch */}
                       <div style={{ marginTop:4, marginBottom:8 }}>
                         <AgingLog
