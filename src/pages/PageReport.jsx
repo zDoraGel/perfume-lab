@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { S } from '../constants/theme'
+import { S, FC } from '../constants/theme'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(n)  { return n != null ? Number(n).toLocaleString() : '—' }
@@ -38,6 +38,58 @@ function StatBox({ label, value, sub, color }) {
       <div style={{ fontSize: 20, fontWeight: 700, color: color || S.gold, fontFamily: 'Inter,sans-serif' }}>{value}</div>
       <div style={{ fontSize: 11, color: S.textMid, marginTop: 2 }}>{label}</div>
       {sub && <div style={{ fontSize: 10, color: S.textLt, marginTop: 1 }}>{sub}</div>}
+    </div>
+  )
+}
+
+// ── Donut chart (SVG, no deps) — เหมือนกับใน PageDashboard.jsx ──────────────────
+function DonutChart({ segments, centerLabel, centerValue, centerColor }) {
+  const total = segments.reduce((s, x) => s + x.value, 0)
+  if (total <= 0) return (
+    <div style={{ textAlign:'center', padding:'24px 0', color:S.textLt, fontSize:12 }}>
+      No data yet
+    </div>
+  )
+
+  const R = 46, CX = 56, CY = 56, STROKE = 16
+  const circumference = 2 * Math.PI * R
+  let offset = 0
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+      <svg width={112} height={112} viewBox="0 0 112 112" style={{ flexShrink:0 }}>
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke={S.bg} strokeWidth={STROKE}/>
+        {segments.map((seg, i) => {
+          const frac = seg.value / total
+          const len  = frac * circumference
+          const dash = `${len} ${circumference - len}`
+          const rotation = (offset / circumference) * 360 - 90
+          offset += len
+          return (
+            <circle key={i} cx={CX} cy={CY} r={R} fill="none" stroke={seg.color}
+              strokeWidth={STROKE} strokeDasharray={dash}
+              transform={`rotate(${rotation} ${CX} ${CY})`}/>
+          )
+        })}
+        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={13} fontWeight="700" fill={centerColor || S.text}>
+          {centerValue}
+        </text>
+        <text x={CX} y={CY + 10} textAnchor="middle" fontSize={8} fill={S.textLt}>
+          {centerLabel}
+        </text>
+      </svg>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+        {segments.map((seg, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:seg.color, flexShrink:0 }}/>
+            <span style={{ fontSize:11, color:S.textMid, flex:1, minWidth:0, whiteSpace:'nowrap',
+              overflow:'hidden', textOverflow:'ellipsis' }}>{seg.label}</span>
+            <span style={{ fontSize:11, fontWeight:600, color:S.text, flexShrink:0 }}>
+              {total > 0 ? Math.round((seg.value/total)*100) : 0}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -167,10 +219,11 @@ export default function PageReport() {
       const retailCostAlt    = (retail || []).reduce((s, r) => s + (r.cost_per_unit  || 0) * r.qty_sold, 0)
 
       // 5. Materials usage
-      const { data: items } = await supabase
-        .from('formula_version_items')
-        .select('material_id, grams, material:materials(id, name, family, cost)')
+      const { data: items, error: itemsError } = await supabase
+        .from('formula_items')
+        .select('version_id, material_id, grams, material:materials(id, name, family, cost)')
         .in('version_id', (versions || []).map(v => v.id))
+      if (itemsError) console.error('formula_items query error:', itemsError)
 
       const matUsage = {}
       ;(items || []).forEach(i => {
@@ -180,6 +233,55 @@ export default function PageReport() {
         matUsage[id].count += 1
       })
       const topMaterials = Object.values(matUsage).sort((a, b) => b.grams - a.grams).slice(0, 10)
+
+      // ── Cost Overview (COGS จริงตามปริมาณที่ผลิต ไม่ใช่แค่สูตรที่ blend ทดลอง) ──
+      // เตรียม lookup: version_id -> { totalGrams, totalCost, family -> cost }
+      const versionCostMap = {}
+      ;(items || []).forEach(i => {
+        const vId = i.version_id
+        if (!versionCostMap[vId]) versionCostMap[vId] = { totalGrams: 0, totalCost: 0, byFamily: {} }
+        const grams = parseFloat(i.grams || 0)
+        const cost  = i.material?.cost != null ? grams * parseFloat(i.material.cost) : 0
+        const fam   = i.material?.family || 'Others'
+        versionCostMap[vId].totalGrams += grams
+        versionCostMap[vId].totalCost  += cost
+        versionCostMap[vId].byFamily[fam] = (versionCostMap[vId].byFamily[fam] || 0) + cost
+      })
+      // batch_ml ของแต่ละ version (default 15ml เหมือนที่ใช้ทั่วระบบ)
+      const versionBatchMl = {}
+      ;(versions || []).forEach(v => { versionBatchMl[v.id] = v.batch_ml || 15 })
+
+      // เดินตาม batches จริงที่ผลิต → หา version ล่าสุดของสูตรนั้นที่อยู่ในช่วงเวลานี้ → คิดต้นทุนตาม ml ที่ผลิตจริง
+      let totalCOGS = 0
+      const familyCOGS = {}
+      ;(batches || []).forEach(b => {
+        const vList = fVersions[b.formula_id] || []
+        if (!vList.length) return
+        const latestV = vList[vList.length - 1]
+        const vCost   = versionCostMap[latestV.id]
+        if (!vCost || !vCost.totalGrams) return
+        const batchMl   = versionBatchMl[latestV.id]
+        const costPerMl = vCost.totalCost / batchMl
+        const producedMl = (b.bottle_ml || 0) * (b.qty_produced || 0)
+        const batchCOGS  = costPerMl * producedMl
+        totalCOGS += batchCOGS
+        // แบ่ง COGS ของ batch นี้ตามสัดส่วน family เดิมของสูตร
+        Object.entries(vCost.byFamily).forEach(([fam, famCost]) => {
+          const famShare = vCost.totalCost > 0 ? famCost / vCost.totalCost : 0
+          familyCOGS[fam] = (familyCOGS[fam] || 0) + batchCOGS * famShare
+        })
+      })
+      const totalProducedMl = (batches || [])
+        .reduce((s, b) => s + (b.bottle_ml || 0) * (b.qty_produced || 0), 0)
+      const avgCostPerMl = totalProducedMl > 0 ? totalCOGS / totalProducedMl : 0
+
+      const familyCostBreakdown = Object.entries(familyCOGS)
+        .map(([family, cost]) => ({
+          family,
+          cost,
+          pct: totalCOGS > 0 ? (cost / totalCOGS) * 100 : 0,
+        }))
+        .sort((a, b) => b.cost - a.cost)
 
       // 6. Saved trends
       const { data: trends } = await supabase
@@ -215,6 +317,10 @@ export default function PageReport() {
         retailQtySold: retailQtySold || (retail || []).reduce((s, r) => s + r.qty_sold, 0),
         // materials
         topMaterials,
+        // cost overview
+        totalCOGS,
+        avgCostPerMl,
+        familyCostBreakdown,
         // trends
         trends: trends || [],
       })
@@ -556,6 +662,37 @@ export default function PageReport() {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+          </Section>
+          )}
+
+          {/* ── Cost Overview ── */}
+          {(activeSection === 'all' || activeSection === 'materials') && (
+          <Section title="◐ Cost Overview" color={S.gold}>
+            {report.totalCOGS === 0 ? (
+              <div style={{ color: S.textLt, fontSize: 13 }}>ไม่มีข้อมูล (ต้องมีการผลิตในช่วงนี้)</div>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 16 }}>
+                  <StatBox label="Total COGS"   value={fmtB(Math.round(report.totalCOGS))} color={S.gold}/>
+                  <StatBox label="Avg Cost / ml" value={`฿${report.avgCostPerMl.toFixed(2)}`} color={S.gold}/>
+                </div>
+                {report.familyCostBreakdown.length > 0 && (
+                  <DonutChart
+                    segments={report.familyCostBreakdown.map(f => ({
+                      value: f.cost,
+                      label: f.family,
+                      color: FC[f.family]?.c || S.textLt,
+                    }))}
+                    centerValue={fmtB(Math.round(report.totalCOGS))}
+                    centerLabel="COGS"
+                    centerColor={S.gold}
+                  />
+                )}
+                <div style={{ fontSize: 10, color: S.textLt, marginTop: 10, lineHeight: 1.5 }}>
+                  * คำนวณจากต้นทุนวัตถุดิบของสูตร (version ล่าสุด) × ปริมาณที่ผลิตจริงในช่วงนี้
                 </div>
               </div>
             )}
