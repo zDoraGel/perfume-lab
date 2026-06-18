@@ -383,4 +383,57 @@ export const db = {
       isLow: (r.qty_total - r.qty_sold) <= r.alert_at,
     }))
   },
+
+  // ── Sales timeline (สำหรับ Dashboard chart) ──────────────────────────────────
+  async getSalesLast7Days() {
+    const today = new Date()
+    const start = new Date(today)
+    start.setDate(start.getDate() - 6)
+    const startStr = start.toISOString().slice(0, 10)
+
+    const { data } = await supabase
+      .from('retail_stock_logs')
+      .select('qty, sell_price, cost_price, logged_at')
+      .eq('type', 'out')
+      .gte('logged_at', startStr)
+
+    const map = {}
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start)
+      d.setDate(d.getDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      map[key] = { key, label: d.toLocaleDateString('th-TH', { day:'numeric', month:'short' }), revenue: 0, qty: 0 }
+    }
+    for (const log of (data || [])) {
+      const key = (log.logged_at || '').slice(0, 10)
+      if (!map[key]) continue
+      const qty = log.qty ?? 0
+      map[key].revenue += (log.sell_price ?? 0) * qty
+      map[key].qty     += qty
+    }
+    return Object.values(map)
+  },
+
+  // ── Best sellers (สำหรับ Dashboard donut — สินค้าแยกตัว) ────────────────────────
+  async getTopRetailSellers(limit = 5) {
+    const { data } = await supabase
+      .from('retail_stock')
+      .select('name, brand, qty_sold')
+      .eq('is_discontinued', false)
+      .order('qty_sold', { ascending: false })
+      .limit(limit)
+    return (data || []).filter(r => (r.qty_sold ?? 0) > 0)
+  },
+
+  // ── Expenses (สำหรับ Dashboard donut — รายได้ vs ค่าใช้จ่าย) ──────────────────────
+  async getExpensesThisMonth() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      .toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('expenses')
+      .select('amount, category')
+      .gte('expense_date', monthStart)
+    const total = (data || []).reduce((s, e) => s + (e.amount ?? 0), 0)
+    return { total, items: data || [] }
+  },
 }

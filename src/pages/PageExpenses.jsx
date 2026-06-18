@@ -36,7 +36,7 @@ async function deleteExpense(id) {
   if (error) throw error
 }
 
-export default function PageExpenses() {
+export default function PageExpenses({ onBack }) {
   const [expenses,  setExpenses]  = useState([])
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
@@ -95,6 +95,14 @@ export default function PageExpenses() {
   return (
     <div>
       <div style={{ marginBottom:20 }}>
+        {onBack && (
+          <button onClick={onBack}
+            style={{ display:'flex', alignItems:'center', gap:4, background:'none', border:'none',
+              cursor:'pointer', padding:0, marginBottom:10, fontSize:12, color:S.textMid,
+              fontFamily:'Inter,sans-serif' }}>
+            ← Dashboard
+          </button>
+        )}
         <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:24,
           color:S.text, fontStyle:'italic' }}>ค่าใช้จ่าย</div>
         <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>

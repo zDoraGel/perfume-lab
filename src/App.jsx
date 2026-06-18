@@ -16,25 +16,63 @@ import PageLotPlanning from './pages/PageLotPlanning'
 import PageExpenses    from './pages/PageExpenses'
 
 const NAV = [
-  { id:'dashboard',   label:'Dashboard',  icon:'◉' },
-  { id:'formulas',    label:'Formulas',   icon:'◈' },
-  { id:'accords',     label:'Accords',    icon:'◎' },
-  { id:'materials',   label:'Materials',  icon:'⬡' },
-  { id:'myblends',    label:'My Blends',  icon:'✦' },
-  { id:'production',  label:'Production', icon:'○' },
-  { id:'lot',          label:'Lot',        icon:'▦' },
-  { id:'expenses',    label:'Expenses',   icon:'🧾' },
-  { id:'retail',      label:'Retail',     icon:'⬘' },
-  { id:'report',      label:'Report',     icon:'◱' },
-  { id:'export',      label:'Export',     icon:'↓' },
+  { id:'dashboard', label:'Dashboard', icon:'◉' },
+  { id:'formula',   label:'Formula',   icon:'◈' },
+  { id:'orders',    label:'Orders',    icon:'○' },
+  { id:'finance',   label:'Finance',   icon:'◱' },
+  { id:'more',      label:'More',      icon:'⬡' },
 ]
 
+const ORDERS_SUBTABS = [
+  { id:'production', label:'Production' },
+  { id:'retail',      label:'Retail' },
+  { id:'myblends',    label:'My Blends' },
+  { id:'lot',         label:'Lot' },
+]
+
+const FINANCE_SUBTABS = [
+  { id:'report',   label:'Report' },
+  { id:'expenses', label:'Expenses' },
+  { id:'export',   label:'Export' },
+]
+
+const MORE_SUBTABS = [
+  { id:'accords', label:'Accords' },
+]
+
+function SubTabBar({ items, active, onChange }) {
+  return (
+    <div style={{ display:'flex', gap:6, overflowX:'auto', WebkitOverflowScrolling:'touch',
+      scrollbarWidth:'none', msOverflowStyle:'none', marginBottom:18 }}>
+      {items.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)}
+          style={{ flexShrink:0, padding:'7px 16px', borderRadius:20, cursor:'pointer',
+            fontSize:12, fontFamily:'Inter,sans-serif', fontWeight: active === t.id ? 600 : 400,
+            border:`1.5px solid ${active === t.id ? S.gold : S.border}`,
+            background: active === t.id ? S.goldLt : 'transparent',
+            color: active === t.id ? S.gold : S.textMid }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
-  const [tab,             setTab]             = useState('formulas')
+  const [tab,             setTab]             = useState('formula')
+  const [ordersSub,       setOrdersSub]       = useState('production')
+  const [financeSub,      setFinanceSub]      = useState('report')
+  const [moreSub,         setMoreSub]         = useState('accords')
   const [formulaPage,     setFormulaPage]     = useState('list')
   const [selectedFormula, setSelectedFormula] = useState(null)
 
-  const inSubPage = tab === 'formulas' && formulaPage !== 'list'
+  const inSubPage = tab === 'formula' && formulaPage !== 'list'
+
+  function goFormulaDetail(f) {
+    setSelectedFormula(f)
+    setTab('formula')
+    setFormulaPage('detail')
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:S.bg }}>
@@ -63,80 +101,86 @@ export default function App() {
       <div style={{ maxWidth:600, margin:'0 auto', padding:'20px 16px 90px' }}>
 
         {/* ── Dashboard ────────────────────────────────────── */}
-        {tab === 'dashboard' && <PageDashboard onNavigate={setTab}/>}
+        {tab === 'dashboard' && (
+          <PageDashboard onNavigate={t => {
+            // map dashboard quick-action targets to new tab structure
+            if (t === 'expenses') { setTab('finance'); setFinanceSub('expenses') }
+            else if (t === 'export') { setTab('finance'); setFinanceSub('export') }
+            else if (t === 'report') { setTab('finance'); setFinanceSub('report') }
+            else if (t === 'lot') { setTab('orders'); setOrdersSub('lot') }
+            else if (t === 'formulas') { setTab('formula'); setFormulaPage('list') }
+            else setTab(t)
+          }}/>
+        )}
 
-        {/* ── Formulas ─────────────────────────────────────── */}
-        {tab === 'formulas' && formulaPage === 'list' && (
+        {/* ── Formula ──────────────────────────────────────── */}
+        {tab === 'formula' && formulaPage === 'list' && (
           <PageList
             onSelect={f => { setSelectedFormula(f); setFormulaPage('detail') }}
             onCreate={() => setFormulaPage('newFormula')}
           />
         )}
-        {tab === 'formulas' && formulaPage === 'newFormula' && (
+        {tab === 'formula' && formulaPage === 'newFormula' && (
           <PageNewFormula
             onBack={() => setFormulaPage('list')}
             onCreate={f => { setSelectedFormula(f); setFormulaPage('detail') }}
           />
         )}
-        {tab === 'formulas' && formulaPage === 'detail' && selectedFormula && (
+        {tab === 'formula' && formulaPage === 'detail' && selectedFormula && (
           <PageDetail
             formula={selectedFormula}
             onBack={() => setFormulaPage('list')}
           />
         )}
 
-        {/* ── Accords ──────────────────────────────────────── */}
-        {tab === 'accords' && <PageAccords/>}
-
-        {/* ── Materials ────────────────────────────────────── */}
-        {tab === 'materials' && <PageMaterials/>}
-
-        {/* ── My Blends ────────────────────────────────────── */}
-        {tab === 'myblends' && <PageMyBlends/>}
-
-        {/* ── Production ───────────────────────────────────── */}
-        {tab === 'production' && <PageProduction/>}
-
-        {/* ── Lot Planning ─────────────────────────────────── */}
-        {tab === 'lot' && (
-          <PageLotPlanning
-            onSelectFormula={f => {
-              setSelectedFormula(f)
-              setTab('formulas')
-              setFormulaPage('detail')
-            }}
-          />
+        {/* ── Orders (Production / Retail / My Blends / Lot) ── */}
+        {tab === 'orders' && (
+          <>
+            <SubTabBar items={ORDERS_SUBTABS} active={ordersSub} onChange={setOrdersSub}/>
+            {ordersSub === 'production' && <PageProduction/>}
+            {ordersSub === 'retail'     && <PageRetailStock/>}
+            {ordersSub === 'myblends'   && <PageMyBlends/>}
+            {ordersSub === 'lot' && (
+              <PageLotPlanning onSelectFormula={goFormulaDetail}/>
+            )}
+          </>
         )}
 
-        {/* ── Retail Stock ─────────────────────────────────── */}
-        {tab === 'retail' && <PageRetailStock/>}
+        {/* ── Finance (Report / Expenses / Export) ──────────── */}
+        {tab === 'finance' && (
+          <>
+            <SubTabBar items={FINANCE_SUBTABS} active={financeSub} onChange={setFinanceSub}/>
+            {financeSub === 'report'   && <PageReport/>}
+            {financeSub === 'expenses' && <PageExpenses onBack={() => setTab('dashboard')}/>}
+            {financeSub === 'export'   && <PageExport/>}
+          </>
+        )}
 
-        {/* ── Report ───────────────────────────────────────── */}
-        {tab === 'report' && <PageReport/>}
-
-        {/* ── Export ───────────────────────────────────────── */}
-        {tab === 'export' && <PageExport/>}
-
-        {/* ── Expenses ─────────────────────────────────────── */}
-        {tab === 'expenses' && <PageExpenses/>}
+        {/* ── More (Accords / Materials) ─────────────────────── */}
+        {tab === 'more' && (
+          <>
+            <SubTabBar items={[...MORE_SUBTABS, { id:'materials', label:'Materials' }]}
+              active={moreSub} onChange={setMoreSub}/>
+            {moreSub === 'accords'   && <PageAccords/>}
+            {moreSub === 'materials' && <PageMaterials/>}
+          </>
+        )}
       </div>
 
       {/* Bottom Nav */}
       {!inSubPage && (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:20,
           background:S.white, borderTop:`1px solid ${S.border}` }}>
-          <div style={{ display:'flex', overflowX:'auto', WebkitOverflowScrolling:'touch',
-            scrollbarWidth:'none', msOverflowStyle:'none',
-            maxWidth:600, margin:'0 auto' }}>
+          <div style={{ display:'flex', maxWidth:600, margin:'0 auto' }}>
             {NAV.map(n => {
               const active = tab === n.id
               return (
                 <button key={n.id}
                   onClick={() => {
                     setTab(n.id)
-                    if (n.id === 'formulas') setFormulaPage('list')
+                    if (n.id === 'formula') setFormulaPage('list')
                   }}
-                  style={{ flexShrink:0, minWidth:68, padding:'12px 0 14px',
+                  style={{ flex:1, padding:'12px 0 14px',
                     background:'none', border:'none', cursor:'pointer',
                     display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
                   <span style={{ fontSize:18, lineHeight:1, color: active ? S.gold : S.textLt }}>

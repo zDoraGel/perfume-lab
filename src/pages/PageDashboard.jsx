@@ -107,6 +107,90 @@ function BarChart({ data }) {
   )
 }
 
+// ── Line chart (SVG, no deps) — sales last 7 days ─────────────────────────────
+function LineChart({ data }) {
+  if (!data.length) return (
+    <div style={{ textAlign:'center', padding:'32px 0', color:S.textLt, fontSize:13 }}>
+      No data yet
+    </div>
+  )
+
+  const maxVal = Math.max(...data.map(d => d.revenue), 1)
+  const W = 320, H = 110, PAD = 8
+  const colW = (W - PAD * 2) / (data.length - 1 || 1)
+  const scaleY = v => H - 16 - (v / maxVal) * (H - 32)
+
+  const points = data.map((d, i) => [PAD + i * colW, scaleY(d.revenue)])
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ')
+  const areaPath = `${linePath} L${points[points.length-1][0]},${H} L${points[0][0]},${H} Z`
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H + 16}`} style={{ width:'100%', overflow:'visible' }}>
+      <path d={areaPath} fill={S.greenBg} opacity={.7}/>
+      <path d={linePath} fill="none" stroke={S.green} strokeWidth="2"/>
+      {points.map((p, i) => (
+        <circle key={i} cx={p[0]} cy={p[1]} r={2.5} fill={S.green}/>
+      ))}
+      {data.map((d, i) => (
+        <text key={d.key} x={PAD + i * colW} y={H + 12} textAnchor="middle"
+          fontSize={8} fill={S.textLt}>{d.label}</text>
+      ))}
+    </svg>
+  )
+}
+
+// ── Donut chart (SVG, no deps) ────────────────────────────────────────────────
+function DonutChart({ segments, centerLabel, centerValue }) {
+  const total = segments.reduce((s, x) => s + x.value, 0)
+  if (total <= 0) return (
+    <div style={{ textAlign:'center', padding:'24px 0', color:S.textLt, fontSize:12 }}>
+      No data yet
+    </div>
+  )
+
+  const R = 46, CX = 56, CY = 56, STROKE = 16
+  const circumference = 2 * Math.PI * R
+  let offset = 0
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+      <svg width={112} height={112} viewBox="0 0 112 112" style={{ flexShrink:0 }}>
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke={S.bg} strokeWidth={STROKE}/>
+        {segments.map((seg, i) => {
+          const frac = seg.value / total
+          const len  = frac * circumference
+          const dash = `${len} ${circumference - len}`
+          const rotation = (offset / circumference) * 360 - 90
+          offset += len
+          return (
+            <circle key={i} cx={CX} cy={CY} r={R} fill="none" stroke={seg.color}
+              strokeWidth={STROKE} strokeDasharray={dash}
+              transform={`rotate(${rotation} ${CX} ${CY})`}/>
+          )
+        })}
+        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={13} fontWeight="700" fill={S.text}>
+          {centerValue}
+        </text>
+        <text x={CX} y={CY + 10} textAnchor="middle" fontSize={8} fill={S.textLt}>
+          {centerLabel}
+        </text>
+      </svg>
+      <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
+        {segments.map((seg, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:8, height:8, borderRadius:'50%', background:seg.color, flexShrink:0 }}/>
+            <span style={{ fontSize:11, color:S.textMid, flex:1, minWidth:0, whiteSpace:'nowrap',
+              overflow:'hidden', textOverflow:'ellipsis' }}>{seg.label}</span>
+            <span style={{ fontSize:11, fontWeight:600, color:S.text, flexShrink:0 }}>
+              {total > 0 ? Math.round((seg.value/total)*100) : 0}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Stock alert row ───────────────────────────────────────────────────────────
 function AlertRow({ name, remaining, total, isRetail }) {
   const pct = total > 0 ? Math.round((remaining / total) * 100) : 0
@@ -261,6 +345,9 @@ export default function PageDashboard({ onNavigate }) {
   const [fetching,   setFetching]   = useState(false)
   const [sending,    setSending]    = useState(false)
   const [alertsOpen, setAlertsOpen] = useState(false)
+  const [sales7d,       setSales7d]       = useState([])
+  const [topSellers,    setTopSellers]    = useState([])
+  const [expensesMonth, setExpensesMonth] = useState({ total: 0, items: [] })
 
   async function handleSendReport() {
     setSending(true)
@@ -308,10 +395,16 @@ export default function PageDashboard({ onNavigate }) {
       db.getProductionSummary(),
       db.getMonthlySeries(),
       db.getRetailStockSummary().catch(() => []),
-    ]).then(([ps, ms, rs]) => {
+      db.getSalesLast7Days().catch(() => []),
+      db.getTopRetailSellers().catch(() => []),
+      db.getExpensesThisMonth().catch(() => ({ total: 0, items: [] })),
+    ]).then(([ps, ms, rs, s7, top, exp]) => {
       setProdSum(ps)
       setMonthly(ms)
       setRetail(rs)
+      setSales7d(s7)
+      setTopSellers(top)
+      setExpensesMonth(exp)
       setLoading(false)
     })
     loadTrends()
@@ -349,6 +442,24 @@ export default function PageDashboard({ onNavigate }) {
 
   const isEmpty = totalProduced === 0 && retail.length === 0
 
+  // ── 7-day sales chart derived values ──
+  const revenue7dTotal = sales7d.reduce((s, d) => s + d.revenue, 0)
+  const todayRevenue   = sales7d.length > 0 ? sales7d[sales7d.length - 1].revenue : 0
+
+  // ── Donut 1 — best sellers (retail) ──
+  const DONUT_COLORS = [S.green, S.gold, '#85B7EB', '#F0997B', S.textLt]
+  const bestSellerSegments = topSellers.map((t, i) => ({
+    label: t.name, value: t.qty_sold, color: DONUT_COLORS[i % DONUT_COLORS.length],
+  }))
+  const bestSellerTotal = topSellers.reduce((s, t) => s + t.qty_sold, 0)
+
+  // ── Donut 2 — revenue vs expenses (เดือนนี้) ──
+  const revenueVsExpenseSegments = [
+    { label:'รายได้', value: retailRevenue, color: S.green },
+    { label:'ค่าใช้จ่าย', value: expensesMonth.total, color: S.red },
+  ]
+  const netProfit = retailRevenue - expensesMonth.total
+
   return (
     <div>
       {/* Header */}
@@ -363,16 +474,31 @@ export default function PageDashboard({ onNavigate }) {
         </div>
       </div>
 
-      {/* Stat grid 2x2 */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
-        <Stat label="ยอดขายวันนี้" value={retailRevenue > 0 ? `฿${Math.round(retailRevenue).toLocaleString()}` : '—'}
-          sub={`${retailSold} ขวดขายแล้ว`} color={S.green}/>
-        <Stat label="In-house Stock" value={totalRemaining}
-          sub="คงเหลือจากผลิตเอง" color={totalRemaining <= 5 ? S.amber : S.text}/>
-        <Stat label="Retail Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
-          sub="ราคาขาย − ต้นทุน" color={S.green}/>
-        <Stat label="Total Produced" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
-          sub={`ผลิตแล้ว ${totalSold} ขวด`}/>
+      {/* Revenue hero card */}
+      <div style={{ background:S.greenBg, border:`1px solid #c9dba8`,
+        borderRadius:14, padding:'16px 18px', marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.green, textTransform:'uppercase', letterSpacing:.8 }}>
+          ยอดขายวันนี้
+        </div>
+        <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
+          <div style={{ fontSize:30, fontWeight:700, color:'#173404',
+            fontFamily:'Cormorant Garamond,serif' }}>
+            ฿{Math.round(todayRevenue).toLocaleString()}
+          </div>
+        </div>
+        <div style={{ fontSize:11, color:S.green, marginTop:4 }}>
+          7 วันล่าสุดรวม ฿{Math.round(revenue7dTotal).toLocaleString()}
+        </div>
+      </div>
+
+      {/* Stat row x3 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:14 }}>
+        <Stat label="In-house" value={totalRemaining}
+          sub="คงเหลือ" color={totalRemaining <= 5 ? S.amber : S.text}/>
+        <Stat label="Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
+          sub="เดือนนี้" color={S.green}/>
+        <Stat label="ผลิตแล้ว" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
+          sub={`${totalSold} ขวด`}/>
       </div>
 
       {/* Quick actions icon grid */}
@@ -401,6 +527,39 @@ export default function PageDashboard({ onNavigate }) {
               </span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Sales chart — 7 วันล่าสุด */}
+      <div style={{ background:S.white, border:`1px solid ${S.border}`,
+        borderRadius:12, padding:'16px', marginBottom:16 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+          textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
+          Sales Overview · 7 วันล่าสุด
+        </div>
+        <LineChart data={sales7d}/>
+      </div>
+
+      {/* Donut charts x2 */}
+      <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
+        <div style={{ background:S.white, border:`1px solid ${S.border}`,
+          borderRadius:12, padding:'16px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+            textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
+            สินค้าขายดี (Retail)
+          </div>
+          <DonutChart segments={bestSellerSegments}
+            centerLabel="ขวด" centerValue={bestSellerTotal}/>
+        </div>
+
+        <div style={{ background:S.white, border:`1px solid ${S.border}`,
+          borderRadius:12, padding:'16px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+            textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
+            รายได้ vs ค่าใช้จ่าย (เดือนนี้)
+          </div>
+          <DonutChart segments={revenueVsExpenseSegments}
+            centerLabel="กำไรสุทธิ" centerValue={`฿${Math.round(netProfit).toLocaleString()}`}/>
         </div>
       </div>
 
