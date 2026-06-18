@@ -109,6 +109,7 @@ export default function App() {
             else if (t === 'report') { setTab('finance'); setFinanceSub('report') }
             else if (t === 'lot') { setTab('orders'); setOrdersSub('lot') }
             else if (t === 'formulas') { setTab('formula'); setFormulaPage('list') }
+            else if (t === 'new-formula') { setTab('formula'); setFormulaPage('newFormula') }
             else setTab(t)
           }}/>
         )}

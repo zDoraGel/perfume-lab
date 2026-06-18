@@ -247,8 +247,25 @@ export const db = {
         notes:        notes || null,
       })
       .select().single()
-    if (error) console.error('createBatch error:', error)
-    return data
+    if (error) {
+      console.error('createBatch error:', error)
+      return { data: null, deduction: null, error }
+    }
+
+    // หักสต็อกวัตถุดิบอัตโนมัติตาม batch ที่ผลิตจริง (bottle_ml × qty_produced)
+    const totalMl = parseInt(bottle_ml) * parseInt(qty_produced)
+    let deduction = null
+    try {
+      deduction = await this.deductStockFromBatch(formulaId, totalMl)
+      if (!deduction.ok) {
+        console.warn('deductStockFromBatch skipped:', deduction.reason)
+      }
+    } catch (e) {
+      console.error('deductStockFromBatch error:', e)
+      deduction = { ok: false, reason: e.message }
+    }
+
+    return { data, deduction, error: null }
   },
   async updateBatchSold(batchId, qty_sold) {
     const { data } = await supabase

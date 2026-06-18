@@ -1,125 +1,151 @@
-import { S } from '../constants/theme'
+import { S, FC, FAMILIES } from '../constants/theme'
 
-// map DNA values → numeric scores 0–100
-function scoreProjection(v) {
-  return { whisper:20, aura:50, presence:75, signature:100 }[v] ?? 0
-}
-function scoreTexture(v) {
-  // heaviness: powdery=60, creamy=75, watery=25, dry=50, resinous=90, fizzy=30, velvety=70, airy=20
-  return { powdery:60, creamy:75, watery:25, dry:50, resinous:90, fizzy:30, velvety:70, airy:20 }[v] ?? 50
-}
-function scoreTemperature(v) {
-  return { icy:5, cool:25, neutral:50, warm:75, hot:100 }[v] ?? 50
+// ── Helpers ────────────────────────────────────────────────────────────────
+// คำนวณ % ของแต่ละ family จาก items (ตาม grams) แล้วกรองเฉพาะ family ที่มีใช้จริง
+function computeFamilyPercents(items = []) {
+  const totals = {}
+  let totalG = 0
+
+  items.forEach(it => {
+    const family = it.material?.family || it.family
+    const grams  = parseFloat(it.grams || 0)
+    if (!family || !grams) return
+    totals[family] = (totals[family] || 0) + grams
+    totalG += grams
+  })
+
+  if (!totalG) return []
+
+  // เรียงตาม FAMILIES order เดิม แต่เอาเฉพาะตัวที่มีค่า > 0
+  return FAMILIES
+    .filter(f => totals[f] > 0)
+    .map(f => ({
+      family: f,
+      pct: (totals[f] / totalG) * 100,
+      color: FC[f]?.c  || S.gold,
+      bg:    FC[f]?.bg || S.goldLt,
+    }))
 }
 
-// Radar axes
-const AXES = [
-  { key:'projection',   label:'Projection'  },
-  { key:'texture',      label:'Richness'    },
-  { key:'temperature',  label:'Warmth'      },
-  { key:'complexity',   label:'Complexity'  },
-  { key:'brightness',   label:'Brightness'  },
-]
-
-function polarToXY(angleDeg, r, cx, cy) {
-  const rad = (angleDeg - 90) * (Math.PI / 180)
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
+// แปลงพิกัด polar -> cartesian รอบจุดศูนย์กลาง (cx, cy)
+function point(cx, cy, radius, angle) {
+  return {
+    x: cx + radius * Math.cos(angle - Math.PI / 2),
+    y: cy + radius * Math.sin(angle - Math.PI / 2),
+  }
 }
 
 export default function FormulaRadarChart({ formula, items = [] }) {
-  const cx = 110, cy = 110, maxR = 80
+  const data = computeFamilyPercents(items)
 
-  // derive scores from DNA
-  const projScore    = scoreProjection(formula.projection)
-  const textureScore = formula.texture
-    ? scoreTexture(formula.texture.split(',')[0])
-    : 50
-  const tempScore    = formula.temperature
-    ? scoreTemperature(formula.temperature.split(',')[0])
-    : 50
+  if (!data.length) return null
 
-  // complexity from ingredient count
-  const complexityScore = Math.min(100, (items.length / 12) * 100)
+  // ต้องมีอย่างน้อย 3 แกนถึงจะวาด polygon ได้อย่างมีความหมาย — ถ้าน้อยกว่านั้นโชว์เป็น breakdown แทน
+  if (data.length < 3) {
+    return (
+      <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${S.border}` }}>
+        <div style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:1.2,
+          textTransform:'uppercase', marginBottom:10, fontFamily:'Inter,sans-serif' }}>
+          ✦ Scent Profile
+        </div>
+        <div style={{ fontSize:11, color:S.textLt, marginBottom:8 }}>
+          ต้องมีอย่างน้อย 3 families ถึงจะแสดงเป็น radar chart ได้ — ตอนนี้มี {data.length} family
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+          {[...data].sort((a, b) => b.pct - a.pct).map((d, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <span style={{ width:8, height:8, borderRadius:'50%',
+                background:d.color, flexShrink:0 }} />
+              <span style={{ fontSize:11, color:S.textMid, flex:1 }}>{d.family}</span>
+              <span style={{ fontSize:11, fontWeight:600, color:S.text }}>
+                {d.pct.toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-  // brightness: citrus/fresh heavy = bright, woody/ambery = dark
-  const brightFamilies = ['Citrus','Fresh']
-  const darkFamilies   = ['Woody','Ambery','Gourmand','Musk']
-  const totalG = items.reduce((s,i) => s + parseFloat(i.grams||0), 0)
-  const brightG = items.filter(i => brightFamilies.includes(i.material?.family))
-    .reduce((s,i) => s + parseFloat(i.grams||0), 0)
-  const darkG = items.filter(i => darkFamilies.includes(i.material?.family))
-    .reduce((s,i) => s + parseFloat(i.grams||0), 0)
-  const brightnessScore = totalG > 0
-    ? Math.round(50 + ((brightG - darkG * 0.5) / totalG) * 50)
-    : 50
+  const SIZE   = 220
+  const CX     = SIZE / 2
+  const CY     = SIZE / 2
+  const R_MAX  = SIZE / 2 - 36 // เว้นที่ไว้สำหรับ label
+  const N      = data.length
+  const STEP   = (Math.PI * 2) / N
+  const RINGS  = [0.25, 0.5, 0.75, 1]
 
-  const scores = [projScore, textureScore, tempScore, complexityScore, brightnessScore]
+  // หา max % เพื่อ scale แกน (ขั้นต่ำ 30% กันกราฟดูเล็กเกินไปตอนมี family เดียวเด่น)
+  const maxPct = Math.max(30, ...data.map(d => d.pct))
 
-  // check if anything meaningful
-  const hasDNA = formula.projection || formula.texture || formula.temperature
-  const hasItems = items.length > 0
-  if (!hasDNA && !hasItems) return null
-
-  // polygon points
-  const n = AXES.length
-  const dataPoints = scores.map((s, i) => {
-    const angle = (360 / n) * i
-    const r     = (s / 100) * maxR
-    return polarToXY(angle, r, cx, cy)
-  })
-  const dataPath = dataPoints.map((p, i) => `${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z'
-
-  // grid rings
-  const rings = [0.25, 0.5, 0.75, 1]
+  const axisPoints = data.map((d, i) => point(CX, CY, R_MAX, i * STEP))
+  const dataPoints  = data.map((d, i) => point(CX, CY, (d.pct / maxPct) * R_MAX, i * STEP))
+  const polygonPath = dataPoints.map(p => `${p.x},${p.y}`).join(' ')
 
   return (
-    <div style={{ marginTop:14, marginBottom:4 }}>
+    <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${S.border}` }}>
       <div style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:1.2,
-        textTransform:'uppercase', marginBottom:8, fontFamily:'Inter,sans-serif' }}>
-        ✦ Formula Profile
+        textTransform:'uppercase', marginBottom:10, fontFamily:'Inter,sans-serif' }}>
+        ✦ Scent Profile
       </div>
-      <div style={{ display:'flex', justifyContent:'center' }}>
-        <svg viewBox="0 0 220 220" style={{ width:200, height:200 }}>
-          {/* grid rings */}
-          {rings.map(f => {
-            const pts = Array.from({ length:n }, (_, i) => {
-              const angle = (360 / n) * i
-              return polarToXY(angle, f * maxR, cx, cy)
-            })
-            const d = pts.map((p,i) => `${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z'
-            return <path key={f} d={d} fill="none" stroke={S.border} strokeWidth={f===1?1:.5}/>
+
+      <div style={{ display:'flex', alignItems:'center', gap:18, flexWrap:'wrap' }}>
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+          {/* Background rings */}
+          {RINGS.map((r, ri) => {
+            const ringPts = Array.from({ length: N }, (_, i) =>
+              point(CX, CY, R_MAX * r, i * STEP))
+            const ringPath = ringPts.map(p => `${p.x},${p.y}`).join(' ')
+            return (
+              <polygon key={ri} points={ringPath} fill="none"
+                stroke={S.border} strokeWidth={ri === RINGS.length - 1 ? 1.2 : 0.8} />
+            )
           })}
 
-          {/* axis lines */}
-          {AXES.map((_, i) => {
-            const angle = (360 / n) * i
-            const end   = polarToXY(angle, maxR, cx, cy)
-            return <line key={i} x1={cx} y1={cy} x2={end.x} y2={end.y}
-              stroke={S.border} strokeWidth=".5"/>
-          })}
-
-          {/* data polygon */}
-          <path d={dataPath} fill={S.gold} fillOpacity={.18} stroke={S.gold} strokeWidth={1.5}/>
-
-          {/* data points */}
-          {dataPoints.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={3} fill={S.gold}/>
+          {/* Axis lines */}
+          {axisPoints.map((p, i) => (
+            <line key={i} x1={CX} y1={CY} x2={p.x} y2={p.y}
+              stroke={S.border} strokeWidth={0.8} />
           ))}
 
-          {/* axis labels */}
-          {AXES.map((ax, i) => {
-            const angle   = (360 / n) * i
-            const labelR  = maxR + 18
-            const pos     = polarToXY(angle, labelR, cx, cy)
-            const anchor  = pos.x < cx - 5 ? 'end' : pos.x > cx + 5 ? 'start' : 'middle'
+          {/* Data polygon */}
+          <polygon points={polygonPath} fill={S.gold} fillOpacity={0.18}
+            stroke={S.gold} strokeWidth={1.6} strokeLinejoin="round" />
+
+          {/* Data points */}
+          {dataPoints.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r={3} fill={data[i].color} />
+          ))}
+
+          {/* Axis labels */}
+          {axisPoints.map((p, i) => {
+            const labelPt = point(CX, CY, R_MAX + 18, i * STEP)
+            const anchor  = Math.abs(labelPt.x - CX) < 4 ? 'middle'
+              : labelPt.x > CX ? 'start' : 'end'
             return (
-              <text key={i} x={pos.x} y={pos.y + 4} textAnchor={anchor}
-                fontSize={9} fill={S.textMid} fontFamily="Inter,sans-serif">
-                {ax.label}
+              <text key={i} x={labelPt.x} y={labelPt.y}
+                textAnchor={anchor} dominantBaseline="middle"
+                fontSize={9.5} fontFamily="Inter,sans-serif" fontWeight={600}
+                fill={data[i].color}>
+                {data[i].family}
               </text>
             )
           })}
         </svg>
+
+        {/* % breakdown list */}
+        <div style={{ display:'flex', flexDirection:'column', gap:5, flex:1, minWidth:120 }}>
+          {[...data].sort((a, b) => b.pct - a.pct).map((d, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:7 }}>
+              <span style={{ width:8, height:8, borderRadius:'50%',
+                background:d.color, flexShrink:0 }} />
+              <span style={{ fontSize:11, color:S.textMid, flex:1 }}>{d.family}</span>
+              <span style={{ fontSize:11, fontWeight:600, color:S.text }}>
+                {d.pct.toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

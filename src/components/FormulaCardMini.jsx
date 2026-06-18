@@ -29,14 +29,27 @@ const feelingMap = {
   second_skin:'second skin', airy_bloom:'airy bloom',
 }
 
+function toArray(value) {
+  if (!value) return []
+  if (Array.isArray(value)) return value
+  const s = String(value).trim()
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s)
+      return Array.isArray(arr) ? arr.map(v => String(v).replace(/^"|"$/g, '')) : []
+    } catch { /* fall through */ }
+  }
+  return s.split(',').map(v => v.trim().replace(/^"|"$/g, '')).filter(Boolean)
+}
+
 function getFeelingLabels(formula) {
   if (formula.feeling) {
-    return formula.feeling.split(',').map(v => {
+    return toArray(formula.feeling).map(v => {
       const k = v.trim().toLowerCase().replace(/-/g,'_').replace(/\s+/g,'_')
       return feelingMap[k] || v.trim().toLowerCase().replace(/_/g,' ')
     }).filter(Boolean).slice(0,3)
   }
-  if (formula.vibe) return formula.vibe.split(',').map(s=>s.trim()).slice(0,3)
+  if (formula.vibe) return toArray(formula.vibe).slice(0,3)
   return []
 }
 

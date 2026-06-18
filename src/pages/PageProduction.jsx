@@ -52,13 +52,16 @@ function BatchForm({ formulaId, onSave }) {
   async function save() {
     if (!qty || parseInt(qty) <= 0) return
     setSaving(true)
-    const totalMl = parseInt(bottle_ml) * parseInt(qty)
-    const batch = await db.createBatch(formulaId, {
+    const { data: batch, deduction, error } = await db.createBatch(formulaId, {
       concentration, bottle_ml, qty_produced: qty, produced_at: date, notes
     })
-    // หัก stock อัตโนมัติ
-    const result = await db.deductStockFromBatch(formulaId, totalMl)
-    setDeductResult(result)
+    if (error) {
+      alert('บันทึก batch ไม่สำเร็จ: ' + error.message)
+      setSaving(false)
+      return
+    }
+    // หัก stock อัตโนมัติ (createBatch เรียกให้แล้วข้างใน — ไม่ต้องเรียกซ้ำ)
+    setDeductResult(deduction)
     setQty(''); setNotes('')
     onSave?.()
     setSaving(false)

@@ -60,6 +60,27 @@ Deno.serve(async (req) => {
       .select('stock_id, type, qty, cost_price, sell_price, created_at')
       .gte('created_at', monthStart)
 
+    // expense_date เป็น date column (YYYY-MM-DD) — ต้องใช้ date string ไม่ใช่ full ISO datetime
+    const monthStartDate = new Date(today.getFullYear(), today.getMonth(), 1)
+      .toISOString().split('T')[0]
+
+    const { data: expenses } = await supabase
+      .from('expenses')
+      .select('category, amount, expense_date')
+      .gte('expense_date', monthStartDate)
+
+    const monthExpenseTotal = (expenses || [])
+      .reduce((s, e) => s + (e.amount || 0), 0)
+
+    const expenseByCategory = (expenses || []).reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + (e.amount || 0)
+      return acc
+    }, {} as Record<string, number>)
+
+    const CATEGORY_LABEL: Record<string, string> = {
+      card: 'การ์ด', box: 'กล่อง', material: 'วัตถุดิบนอกระบบ', other: 'อื่นๆ',
+    }
+
     // ยอดขายวันนี้
     const todayLogs = (retailLogs || []).filter(l =>
       l.type === 'out' && l.created_at?.startsWith(todayStr))
@@ -72,9 +93,11 @@ Deno.serve(async (req) => {
     const monthRevenue = (retailLogs || [])
       .filter(l => l.type === 'out')
       .reduce((s, l) => s + (l.sell_price || 0) * l.qty, 0)
-    const monthProfit  = monthRevenue - (retailLogs || [])
+    const monthProfitBeforeExpenses = monthRevenue - (retailLogs || [])
       .filter(l => l.type === 'out')
       .reduce((s, l) => s + (l.cost_price || 0) * l.qty, 0)
+
+    const monthProfit = monthProfitBeforeExpenses - monthExpenseTotal
 
     // stock alert
     const lowStock = (retail || []).filter(r => {
@@ -228,6 +251,36 @@ Deno.serve(async (req) => {
           },
 
           { type: 'separator' },
+
+          // ── ค่าใช้จ่ายเดือนนี้ ──
+          ...(monthExpenseTotal > 0 ? [
+            {
+              type: 'box',
+              layout: 'vertical',
+              paddingAll: '16px',
+              backgroundColor: '#F8F6F2',
+              contents: [
+                {
+                  type: 'box',
+                  layout: 'horizontal',
+                  contents: [
+                    { type: 'text', text: '🧾 ค่าใช้จ่ายเดือนนี้', size: 'xs', color: '#6B6560', weight: 'bold', flex: 3 },
+                    { type: 'text', text: `-${fmtB(monthExpenseTotal)}`, size: 'xs', color: '#8B3A2E', weight: 'bold', flex: 1, align: 'end' },
+                  ]
+                },
+                ...Object.entries(expenseByCategory).map(([cat, amt]) => ({
+                  type: 'box',
+                  layout: 'horizontal',
+                  margin: 'sm',
+                  contents: [
+                    { type: 'text', text: CATEGORY_LABEL[cat] || cat, size: 'xs', color: '#3D2E1E', flex: 3 },
+                    { type: 'text', text: fmtB(amt as number), size: 'xs', color: '#6B6560', flex: 1, align: 'end' },
+                  ]
+                })),
+              ]
+            },
+            { type: 'separator' },
+          ] : []),
 
           // ── Top Sellers ──
           ...(topSellers.length > 0 ? [
