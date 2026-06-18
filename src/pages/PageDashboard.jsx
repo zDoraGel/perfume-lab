@@ -252,7 +252,7 @@ function TrendCard({ trend, onToggleSaved, onToggleDone, onNote }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function PageDashboard() {
+export default function PageDashboard({ onNavigate }) {
   const [loading,    setLoading]    = useState(true)
   const [prodSum,    setProdSum]    = useState([])
   const [monthly,    setMonthly]    = useState([])
@@ -260,6 +260,7 @@ export default function PageDashboard() {
   const [trends,     setTrends]     = useState([])
   const [fetching,   setFetching]   = useState(false)
   const [sending,    setSending]    = useState(false)
+  const [alertsOpen, setAlertsOpen] = useState(false)
 
   async function handleSendReport() {
     setSending(true)
@@ -351,25 +352,58 @@ export default function PageDashboard() {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom:20 }}>
-        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:22,
-          color:S.gold, fontStyle:'italic', marginBottom:2 }}>Dashboard</div>
-        <div style={{ fontSize:11, color:S.textLt, textTransform:'uppercase', letterSpacing:1 }}>
-          Business Overview
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:10, color:S.textLt, textTransform:'uppercase', letterSpacing:2 }}>
+          Perfume Creation Studio
+        </div>
+        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:24,
+          color:S.text, fontStyle:'italic', marginTop:2 }}>Linen Theory</div>
+        <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>
+          Welcome back ✦ {new Date().toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' })}
         </div>
       </div>
 
-      {/* Send Report Button */}
-      <button onClick={handleSendReport} disabled={sending}
-        style={{ width:'100%', padding:'12px 0', borderRadius:12, marginBottom:16,
-          border:`1.5px solid ${S.gold}`, background: sending ? S.bg : S.goldLt,
-          cursor: sending ? 'default' : 'pointer',
-          display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-        <span style={{ fontSize:16 }}>📊</span>
-        <span style={{ fontSize:13, fontWeight:600, color:S.gold, fontFamily:'Inter,sans-serif' }}>
-          {sending ? 'กำลังส่ง...' : 'ส่ง Daily Report → LINE'}
-        </span>
-      </button>
+      {/* Stat grid 2x2 */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
+        <Stat label="ยอดขายวันนี้" value={retailRevenue > 0 ? `฿${Math.round(retailRevenue).toLocaleString()}` : '—'}
+          sub={`${retailSold} ขวดขายแล้ว`} color={S.green}/>
+        <Stat label="In-house Stock" value={totalRemaining}
+          sub="คงเหลือจากผลิตเอง" color={totalRemaining <= 5 ? S.amber : S.text}/>
+        <Stat label="Retail Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
+          sub="ราคาขาย − ต้นทุน" color={S.green}/>
+        <Stat label="Total Produced" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
+          sub={`ผลิตแล้ว ${totalSold} ขวด`}/>
+      </div>
+
+      {/* Quick actions icon grid */}
+      <div style={{ background:S.white, border:`1px solid ${S.border}`,
+        borderRadius:12, padding:'14px', marginBottom:16 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+          textTransform:'uppercase', letterSpacing:.8, marginBottom:10 }}>
+          เมนูด่วน
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:6 }}>
+          {[
+            { icon:'📊', label:'Report',     onClick: handleSendReport, busy: sending },
+            { icon:'🧾', label:'ค่าใช้จ่าย', onClick: () => onNavigate && onNavigate('expenses') },
+            { icon:'🏷️', label:'Label',      onClick: () => onNavigate && onNavigate('label') },
+            { icon:'⚗️', label:'Formula',    onClick: () => onNavigate && onNavigate('new-formula') },
+            { icon:'⬇️', label:'Export',     onClick: () => onNavigate && onNavigate('export') },
+            { icon:'📦', label:'Lot',        onClick: () => onNavigate && onNavigate('lot-planning') },
+          ].map((a, i) => (
+            <button key={i} onClick={a.onClick} disabled={a.busy}
+              style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+                padding:'8px 2px', borderRadius:10, border:'none', cursor: a.busy ? 'default' : 'pointer',
+                background:S.goldLt, opacity: a.busy ? 0.6 : 1 }}>
+              <span style={{ fontSize:18 }}>{a.icon}</span>
+              <span style={{ fontSize:9.5, color:S.textMid, textAlign:'center', lineHeight:1.2,
+                fontFamily:'Inter,sans-serif' }}>
+                {a.busy ? '...' : a.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {isEmpty ? (
         <div style={{ textAlign:'center', padding:'60px 0' }}>
@@ -379,28 +413,22 @@ export default function PageDashboard() {
         </div>
       ) : (
         <>
-          {/* ── Stats grid ── */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20 }}>
-            <Stat label="Total Produced" value={totalProduced + retailSold > 0 ? totalProduced : '—'}
-              sub={`ผลิตแล้ว ${totalSold} ขวด`} />
-            <Stat label="In-house Stock" value={totalRemaining}
-              sub="คงเหลือจากผลิตเอง" color={totalRemaining <= 5 ? S.amber : S.text}/>
-            <Stat label="Retail Sold" value={retailSold}
-              sub={retailRevenue > 0 ? `รายได้ ฿${retailRevenue.toLocaleString()}` : 'ยังไม่มีข้อมูลราคา'}
-              color={S.gold}/>
-            <Stat label="Retail Profit" value={retailProfit > 0 ? `฿${Math.round(retailProfit).toLocaleString()}` : '—'}
-              sub="ราคาขาย − ต้นทุน" color={S.green}/>
-          </div>
-
           {/* ── Alert ── */}
           {alerts.length > 0 && (
             <div style={{ background:S.amberBg, border:`1px solid #e8c870`,
               borderRadius:12, padding:'12px 16px', marginBottom:20 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:S.amber,
-                textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
-                ⚠ Needs attention · {alerts.length} items
-              </div>
-              {alerts.map((a,i) => (
+              <button onClick={() => setAlertsOpen(o => !o)}
+                style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+                  background:'none', border:'none', cursor:'pointer', padding:0,
+                  marginBottom: alertsOpen ? 8 : 0 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:S.amber,
+                  textTransform:'uppercase', letterSpacing:.8 }}>
+                  ⚠ Needs attention · {alerts.length} items
+                </span>
+                <span style={{ fontSize:12, color:S.amber, transform: alertsOpen ? 'rotate(180deg)' : 'none',
+                  transition:'transform .2s' }}>▾</span>
+              </button>
+              {alertsOpen && alerts.map((a,i) => (
                 <AlertRow key={i} {...a}/>
               ))}
             </div>
