@@ -13,6 +13,7 @@ import PageDashboard  from './pages/PageDashboard'
 import PageRetailStock from './pages/PageRetailStock'
 import PageReport     from './pages/PageReport'
 import PageLotPlanning from './pages/PageLotPlanning'
+import PageExpenses    from './pages/PageExpenses'
 
 const NAV = [
   { id:'dashboard',   label:'Dashboard',  icon:'◉' },
@@ -22,6 +23,7 @@ const NAV = [
   { id:'myblends',    label:'My Blends',  icon:'✦' },
   { id:'production',  label:'Production', icon:'○' },
   { id:'lot',          label:'Lot',        icon:'▦' },
+  { id:'expenses',    label:'Expenses',   icon:'🧾' },
   { id:'retail',      label:'Retail',     icon:'⬘' },
   { id:'report',      label:'Report',     icon:'◱' },
   { id:'export',      label:'Export',     icon:'↓' },
@@ -61,7 +63,7 @@ export default function App() {
       <div style={{ maxWidth:600, margin:'0 auto', padding:'20px 16px 90px' }}>
 
         {/* ── Dashboard ────────────────────────────────────── */}
-        {tab === 'dashboard' && <PageDashboard/>}
+        {tab === 'dashboard' && <PageDashboard onNavigate={setTab}/>}
 
         {/* ── Formulas ─────────────────────────────────────── */}
         {tab === 'formulas' && formulaPage === 'list' && (
@@ -114,6 +116,9 @@ export default function App() {
 
         {/* ── Export ───────────────────────────────────────── */}
         {tab === 'export' && <PageExport/>}
+
+        {/* ── Expenses ─────────────────────────────────────── */}
+        {tab === 'expenses' && <PageExpenses/>}
       </div>
 
       {/* Bottom Nav */}

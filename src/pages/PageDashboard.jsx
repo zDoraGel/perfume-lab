@@ -386,10 +386,9 @@ export default function PageDashboard({ onNavigate }) {
           {[
             { icon:'📊', label:'Report',     onClick: handleSendReport, busy: sending },
             { icon:'🧾', label:'ค่าใช้จ่าย', onClick: () => onNavigate && onNavigate('expenses') },
-            { icon:'🏷️', label:'Label',      onClick: () => onNavigate && onNavigate('label') },
-            { icon:'⚗️', label:'Formula',    onClick: () => onNavigate && onNavigate('new-formula') },
+            { icon:'⚗️', label:'Formula',    onClick: () => onNavigate && onNavigate('formulas') },
             { icon:'⬇️', label:'Export',     onClick: () => onNavigate && onNavigate('export') },
-            { icon:'📦', label:'Lot',        onClick: () => onNavigate && onNavigate('lot-planning') },
+            { icon:'📦', label:'Lot',        onClick: () => onNavigate && onNavigate('lot') },
           ].map((a, i) => (
             <button key={i} onClick={a.onClick} disabled={a.busy}
               style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5,
