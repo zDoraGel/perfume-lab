@@ -234,7 +234,8 @@ export const db = {
       .order('produced_at', { ascending: false })
     return data || []
   },
-  async createBatch(formulaId, { concentration, bottle_ml, qty_produced, produced_at, notes }) {
+  async createBatch(formulaId, { concentration, bottle_ml, qty_produced, produced_at, notes,
+    alcohol_mix, concentrate_ml, alcohol_ml_per_bottle, sell_price }) {
     const { data, error } = await supabase
       .from('production_batches')
       .insert({
@@ -245,6 +246,10 @@ export const db = {
         qty_sold:     0,
         produced_at:  produced_at || new Date().toISOString().split('T')[0],
         notes:        notes || null,
+        alcohol_mix:           (alcohol_mix && alcohol_mix.length) ? alcohol_mix : null,
+        concentrate_ml:        concentrate_ml != null ? parseFloat(concentrate_ml) : null,
+        alcohol_ml_per_bottle: alcohol_ml_per_bottle != null ? parseFloat(alcohol_ml_per_bottle) : null,
+        sell_price:            sell_price != null ? parseFloat(sell_price) : null,
       })
       .select().single()
     if (error) {
@@ -275,6 +280,11 @@ export const db = {
       .select().single()
     return data
   },
+
+  async deleteBatch(batchId) {
+    await supabase.from('production_batches').delete().eq('id', batchId)
+  },
+
   // ── Aging Logs ─────────────────────────────────────────────────────────────
   async getAgingLogs(batchId) {
     const { data } = await supabase.from('aging_logs')

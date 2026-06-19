@@ -47,13 +47,52 @@ function BatchForm({ formulaId, onSave }) {
   const [notes,         setNotes]         = useState('')
   const [saving,        setSaving]        = useState(false)
   const [deductResult,  setDeductResult]  = useState(null)
+  const [alcoholMix,    setAlcoholMix]    = useState([{ brand:'', ml:'', isCustom:false }])
+  const [concentrateMl, setConcentrateMl] = useState('')
+  const [sellPrice,     setSellPrice]     = useState('')
+  const [overridden,    setOverridden]    = useState(false) // true ถ้า user แก้ ml เอง ไม่ auto-fill ทับแล้ว
+
+  // auto-fill หัวเชื้อ + alcohol แถวแรก จาก calcBottleFill ทุกครั้งที่เปลี่ยน concentration/ขนาดขวด (จนกว่าจะแก้เอง)
+  useEffect(() => {
+    if (overridden) return
+    const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
+    const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
+    if (fill) {
+      setConcentrateMl(fill.concInBottle != null ? String(fill.concInBottle) : '')
+      setAlcoholMix(prev => {
+        const ml = fill.alcoholInBottle != null ? String(fill.alcoholInBottle) : ''
+        if (prev.length === 1 && !prev[0].brand) {
+          return [{ ...prev[0], ml }]
+        }
+        return prev
+      })
+    }
+  }, [concentration, bottle_ml, overridden])
+
+
+  const ALCOHOL_PRESETS = ['DEB', 'BLISS', 'Ethanol 95%']
+
+  function addAlcoholRow() {
+    setAlcoholMix(prev => [...prev, { brand:'', ml:'', isCustom:false }])
+  }
+  function removeAlcoholRow(idx) {
+    setAlcoholMix(prev => prev.filter((_, i) => i !== idx))
+  }
+  function updateAlcoholRow(idx, field, value) {
+    setAlcoholMix(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+  }
+  const alcoholMixTotalMl = alcoholMix.reduce((s, r) => s + (parseFloat(r.ml) || 0), 0)
 
 
   async function save() {
     if (!qty || parseInt(qty) <= 0) return
     setSaving(true)
     const { data: batch, deduction, error } = await db.createBatch(formulaId, {
-      concentration, bottle_ml, qty_produced: qty, produced_at: date, notes
+      concentration, bottle_ml, qty_produced: qty, produced_at: date, notes,
+      alcohol_mix: alcoholMix.filter(r => r.brand && r.ml).map(r => ({ brand: r.brand, ml: r.ml })),
+      concentrate_ml: concentrateMl ? parseFloat(concentrateMl) : null,
+      alcohol_ml_per_bottle: alcoholMixTotalMl ? alcoholMixTotalMl : null,
+      sell_price: sellPrice ? parseFloat(sellPrice) : null,
     })
     if (error) {
       alert('บันทึก batch ไม่สำเร็จ: ' + error.message)
@@ -62,7 +101,8 @@ function BatchForm({ formulaId, onSave }) {
     }
     // หัก stock อัตโนมัติ (createBatch เรียกให้แล้วข้างใน — ไม่ต้องเรียกซ้ำ)
     setDeductResult(deduction)
-    setQty(''); setNotes('')
+    setQty(''); setNotes(''); setSellPrice('')
+    setAlcoholMix([{ brand:'', ml:'', isCustom:false }]); setOverridden(false)
     onSave?.()
     setSaving(false)
   }
@@ -105,10 +145,10 @@ function BatchForm({ formulaId, onSave }) {
         <div>
           <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
             fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ขนาดขวด</div>
-          <div style={{ display:'flex', gap:8 }}>
-            {[15,30].map(ml => (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {[5,10,15,30,50,100].map(ml => (
               <button key={ml} onClick={() => setBottleMl(ml)}
-                style={{ flex:1, padding:'8px 0', borderRadius:8, cursor:'pointer',
+                style={{ flex:'1 1 27%', minWidth:56, padding:'8px 0', borderRadius:8, cursor:'pointer',
                   fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
                   border:`1.5px solid ${bottle_ml===ml ? S.gold : S.border}`,
                   background: bottle_ml===ml ? S.goldLt : S.white,
@@ -125,6 +165,115 @@ function BatchForm({ formulaId, onSave }) {
             onChange={e => setQty(e.target.value)}
             placeholder="เช่น 10"
             style={{ ...inputStyle }}/>
+        </div>
+      </div>
+
+      {/* Alcohol Mix — ผสมได้หลายยี่ห้อ */}
+      <div style={{ marginBottom:10 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+          <div style={{ fontSize:11, color:S.textMid,
+            fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>
+            Alcohol ที่ใช้ผสม
+          </div>
+          <button onClick={addAlcoholRow}
+            style={{ fontSize:11, color:S.gold, background:'none', border:'none',
+              cursor:'pointer', fontWeight:600, padding:0 }}>
+            + เพิ่มยี่ห้อ
+          </button>
+        </div>
+
+        {alcoholMix.map((row, idx) => (
+          <div key={idx} style={{ background:S.white, border:`1px solid ${S.border}`,
+            borderRadius:10, padding:10, marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                {ALCOHOL_PRESETS.map(b => (
+                  <button key={b}
+                    onClick={() => setAlcoholMix(prev => prev.map((r, i) =>
+                      i === idx ? { ...r, brand: b, isCustom: false } : r))}
+                    style={{ padding:'5px 12px', borderRadius:16, cursor:'pointer',
+                      fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:600,
+                      border:`1.5px solid ${!row.isCustom && row.brand === b ? S.gold : S.border}`,
+                      background: !row.isCustom && row.brand === b ? S.goldLt : 'transparent',
+                      color: !row.isCustom && row.brand === b ? S.gold : S.textMid }}>
+                    {b}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setAlcoholMix(prev => prev.map((r, i) =>
+                    i === idx ? { ...r, brand: r.isCustom ? r.brand : '', isCustom: true } : r))}
+                  style={{ padding:'5px 12px', borderRadius:16, cursor:'pointer',
+                    fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:600,
+                    border:`1.5px solid ${row.isCustom ? S.gold : S.border}`,
+                    background: row.isCustom ? S.goldLt : 'transparent',
+                    color: row.isCustom ? S.gold : S.textMid }}>
+                  อื่นๆ
+                </button>
+              </div>
+              {alcoholMix.length > 1 && (
+                <button onClick={() => removeAlcoholRow(idx)}
+                  style={{ fontSize:13, color:S.textLt, background:'none', border:'none',
+                    cursor:'pointer', padding:'2px 4px', flexShrink:0 }}>×</button>
+              )}
+            </div>
+            <div style={{ display:'flex', gap:6 }}>
+              {row.isCustom && (
+                <input value={row.brand} onChange={e => updateAlcoholRow(idx, 'brand', e.target.value)}
+                  placeholder="พิมพ์ยี่ห้อเอง"
+                  style={{ ...inputStyle, flex:1.4 }}/>
+              )}
+              <input type="number" step="0.01" value={row.ml}
+                onChange={e => updateAlcoholRow(idx, 'ml', e.target.value)}
+                placeholder="ml"
+                style={{ ...inputStyle, flex:1 }}/>
+            </div>
+          </div>
+        ))}
+
+        {alcoholMixTotalMl > 0 && (
+          <div style={{ fontSize:10, color:S.textLt, marginTop:2 }}>
+            รวม Alcohol {alcoholMixTotalMl.toFixed(2)} ml/ขวด
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>
+          หัวเชื้อ (ml/ขวด)
+        </div>
+        <input type="number" step="0.01" value={concentrateMl}
+          onChange={e => { setConcentrateMl(e.target.value); setOverridden(true) }}
+          placeholder="0.00"
+          style={{ ...inputStyle }}/>
+      </div>
+      {overridden && (
+        <div style={{ fontSize:10, color:S.textLt, marginTop:-6, marginBottom:10 }}>
+          * แก้ไขเองแล้ว — ไม่ auto-fill ทับจนกว่าจะกดรีเซ็ต{' '}
+          <button onClick={() => setOverridden(false)}
+            style={{ color:S.gold, textDecoration:'underline', background:'none',
+              border:'none', cursor:'pointer', fontSize:10, padding:0 }}>
+            รีเซ็ตเป็นค่าคำนวณ
+          </button>
+        </div>
+      )}
+
+      {/* ราคาขาย */}
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>
+          ราคาขาย (฿/ขวด)
+        </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <input type="number" inputMode="decimal" value={sellPrice}
+            onChange={e => setSellPrice(e.target.value)}
+            placeholder="เช่น 690"
+            style={{ ...inputStyle, flex:1 }}/>
+          {sellPrice && qty && (
+            <div style={{ fontSize:12, color:S.green, fontWeight:600, flexShrink:0, whiteSpace:'nowrap' }}>
+              รวม ฿{(parseFloat(sellPrice) * parseInt(qty || 1)).toLocaleString()}
+            </div>
+          )}
         </div>
       </div>
 
@@ -147,21 +296,30 @@ function BatchForm({ formulaId, onSave }) {
 
       {/* Cost preview */}
       {qty && parseInt(qty) > 0 && (() => {
-        const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-        const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
-        const alcoholCost = fill ? fill.alcoholInBottle * parseInt(qty) * 0.35 : 0
+        const alcoholMlEach = alcoholMixTotalMl
+        const alcoholCost = alcoholMlEach * parseInt(qty) * 0.35
         const bottleCostEach = { 5:35, 10:55, 15:65, 30:90, 50:130, 100:200 }[bottle_ml] || 90
         const bottleCostTotal = bottleCostEach * parseInt(qty)
         const totalCost = alcoholCost + bottleCostTotal
+        const costPerBottle = totalCost / parseInt(qty)
+        const profitPerBottle = sellPrice ? parseFloat(sellPrice) - costPerBottle : null
+        const validMix = alcoholMix.filter(r => r.brand && r.ml)
         return (
           <div style={{ background:S.white, border:`1px solid ${S.border}`,
             borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
             <div style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:1,
               textTransform:'uppercase', marginBottom:8 }}>ต้นทุน batch นี้ (ไม่รวม concentrate)</div>
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
-              <span style={{ color:S.textMid }}>Alcohol</span>
-              <span>฿{alcoholCost.toFixed(2)}</span>
-            </div>
+            {validMix.length > 0 ? validMix.map((r, i) => (
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
+                <span style={{ color:S.textMid }}>Alcohol ({r.brand})</span>
+                <span>฿{(parseFloat(r.ml) * parseInt(qty) * 0.35).toFixed(2)}</span>
+              </div>
+            )) : (
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
+                <span style={{ color:S.textMid }}>Alcohol</span>
+                <span>฿{alcoholCost.toFixed(2)}</span>
+              </div>
+            )}
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
               <span style={{ color:S.textMid }}>ขวด × {qty}</span>
               <span>฿{bottleCostTotal.toFixed(0)}</span>
@@ -171,6 +329,15 @@ function BatchForm({ formulaId, onSave }) {
               <span>รวม</span>
               <span style={{ color:S.gold }}>฿{totalCost.toFixed(0)}</span>
             </div>
+            {profitPerBottle != null && (
+              <div style={{ borderTop:`1px solid ${S.border}`, marginTop:6, paddingTop:6,
+                display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:600 }}>
+                <span style={{ color:S.textMid }}>กำไร/ขวด (ไม่รวม concentrate)</span>
+                <span style={{ color: profitPerBottle >= 0 ? S.green : S.red }}>
+                  ฿{profitPerBottle.toFixed(0)}
+                </span>
+              </div>
+            )}
           </div>
         )
       })()}
@@ -232,7 +399,6 @@ export default function PageProduction() {
   const [stock,     setStock]     = useState([])
   const [loading,   setLoading]   = useState(true)
   const [showForm,  setShowForm]  = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(null) // batch id ที่กำลังจะลบ
 
   useEffect(() => {
     db.getFormulas().then(d => { setFormulas(d); setLoading(false) })
@@ -253,9 +419,9 @@ export default function PageProduction() {
   }
 
   async function deleteBatch(id) {
+    if (!confirm('ลบ batch นี้?')) return
     await db.deleteBatch(id)
-    setDeleteConfirm(null)
-    await reload()
+    reload()
   }
 
   return (
@@ -347,17 +513,43 @@ export default function PageProduction() {
                             {b.produced_at}
                             {b.notes && ` · ${b.notes}`}
                           </div>
+                          {(b.alcohol_mix?.length > 0 || b.alcohol_brand || b.concentrate_ml != null) && (
+                            <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
+                              {b.concentrate_ml != null && `หัวเชื้อ ${b.concentrate_ml}ml/ขวด`}
+                              {b.alcohol_mix?.length > 0
+                                ? ` · ${b.alcohol_mix.map(r => `${r.brand} ${r.ml}ml`).join(' + ')}`
+                                : (b.alcohol_brand && ` · ${b.alcohol_brand}`)}
+                            </div>
+                          )}
                           {(() => {
                             const bottleCostEach = { 5:35,10:55,15:65,30:90,50:130,100:200 }[b.bottle_ml] || 90
-                            const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-                            const fill = calcBottleFill(0, concMap[b.concentration] || 'EdP_Signature', b.bottle_ml, 0)
-                            const alcoholCost = fill ? fill.alcoholInBottle * b.qty_produced * 0.35 : 0
+                            let alcoholMlEach = b.alcohol_ml_per_bottle
+                            if (alcoholMlEach == null) {
+                              const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
+                              const fill = calcBottleFill(0, concMap[b.concentration] || 'EdP_Signature', b.bottle_ml, 0)
+                              alcoholMlEach = fill ? fill.alcoholInBottle : 0
+                            }
+                            const alcoholCost = alcoholMlEach * b.qty_produced * 0.35
                             const totalCost = (bottleCostEach * b.qty_produced) + alcoholCost
+                            const costPerBottle = totalCost / b.qty_produced
+                            const profitPerBottle = b.sell_price != null ? b.sell_price - costPerBottle : null
                             return (
-                              <div style={{ fontSize:11, color:S.textMid, marginTop:2 }}>
-                                ต้นทุน (ขวด+alcohol) ฿{totalCost.toFixed(0)}
-                                {' · '}฿{(totalCost/b.qty_produced).toFixed(0)}/ขวด
-                              </div>
+                              <>
+                                <div style={{ fontSize:11, color:S.textMid, marginTop:2 }}>
+                                  ต้นทุน (ขวด+alcohol) ฿{totalCost.toFixed(0)}
+                                  {' · '}฿{costPerBottle.toFixed(0)}/ขวด
+                                </div>
+                                {b.sell_price != null && (
+                                  <div style={{ fontSize:11, marginTop:2, display:'flex', gap:8 }}>
+                                    <span style={{ color:S.green, fontWeight:600 }}>
+                                      ขาย ฿{Number(b.sell_price).toLocaleString()}/ขวด
+                                    </span>
+                                    <span style={{ color: profitPerBottle >= 0 ? S.green : S.red }}>
+                                      กำไร ฿{profitPerBottle.toFixed(0)}/ขวด
+                                    </span>
+                                  </div>
+                                )}
+                              </>
                             )
                           })()}
                           {b.qty_sold > 0 && (
@@ -368,74 +560,11 @@ export default function PageProduction() {
                         </div>
                         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                           <StockBadge remaining={b.qty_produced - b.qty_sold}/>
-                          {deleteConfirm === b.id ? (
-                            <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-                              <span style={{ fontSize:11, color:S.red }}>ลบ batch นี้?</span>
-                              <button onClick={() => deleteBatch(b.id)}
-                                style={{ fontSize:11, fontWeight:700, color:'#fff',
-                                  background:S.red, border:'none', borderRadius:8,
-                                  padding:'3px 10px', cursor:'pointer' }}>ลบ</button>
-                              <button onClick={() => setDeleteConfirm(null)}
-                                style={{ fontSize:11, color:S.textMid, background:'none',
-                                  border:`1px solid ${S.border}`, borderRadius:8,
-                                  padding:'3px 8px', cursor:'pointer' }}>ยกเลิก</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setDeleteConfirm(b.id)}
-                              style={{ fontSize:13, color:S.textLt, background:'none',
-                                border:'none', cursor:'pointer', padding:'4px 8px',
-                                lineHeight:1 }}>×</button>
-                          )}
+                          <button onClick={() => deleteBatch(b.id)}
+                            style={{ fontSize:12, color:S.textLt, background:'none',
+                              border:'none', cursor:'pointer', padding:'4px 8px' }}>×</button>
                         </div>
                       </div>
-
-                      {/* คู่มือผสมขวด */}
-                      {(() => {
-                        const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-                        const fill = calcBottleFill(0, concMap[b.concentration] || 'EdP_Signature', b.bottle_ml, 0)
-                        if (!fill) return null
-                        const qty = b.qty_produced
-                        return (
-                          <div style={{ margin:'6px 0 4px', padding:'10px 12px',
-                            background:'#f0f5f2', borderRadius:8,
-                            border:`1px solid #c8ddd0` }}>
-                            <div style={{ fontSize:10, fontWeight:700, color:S.green,
-                              letterSpacing:.8, textTransform:'uppercase', marginBottom:6 }}>
-                              🧪 คู่มือผสม — {qty} ขวด × {b.bottle_ml}ml
-                            </div>
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                              <div style={{ background:S.white, borderRadius:6,
-                                padding:'7px 10px', border:`1px solid #d8ede2` }}>
-                                <div style={{ fontSize:9, color:S.textLt, marginBottom:2,
-                                  textTransform:'uppercase', letterSpacing:.5 }}>Concentrate</div>
-                                <div style={{ fontSize:15, fontWeight:700, color:S.gold,
-                                  fontFamily:'Cormorant Garamond,serif' }}>
-                                  {(fill.concInBottle * qty).toFixed(2)} g
-                                </div>
-                                <div style={{ fontSize:10, color:S.textMid }}>
-                                  {fill.concInBottle} g × {qty}
-                                </div>
-                              </div>
-                              <div style={{ background:S.white, borderRadius:6,
-                                padding:'7px 10px', border:`1px solid #d8ede2` }}>
-                                <div style={{ fontSize:9, color:S.textLt, marginBottom:2,
-                                  textTransform:'uppercase', letterSpacing:.5 }}>Alcohol</div>
-                                <div style={{ fontSize:15, fontWeight:700, color:'#4a7a8a',
-                                  fontFamily:'Cormorant Garamond,serif' }}>
-                                  {(fill.alcoholInBottle * qty).toFixed(1)} ml
-                                </div>
-                                <div style={{ fontSize:10, color:S.textMid }}>
-                                  {fill.alcoholInBottle} ml × {qty}
-                                </div>
-                              </div>
-                            </div>
-                            <div style={{ fontSize:10, color:S.textMid, marginTop:6 }}>
-                              รวม {b.bottle_ml * qty} ml · {fill.concentrationPct}% concentration
-                            </div>
-                          </div>
-                        )
-                      })()}
-
                       {/* Aging Log ใต้แต่ละ batch */}
                       <div style={{ marginTop:4, marginBottom:8 }}>
                         <AgingLog

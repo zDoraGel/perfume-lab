@@ -293,7 +293,7 @@ function VersionForm({ adaptationId, ver, materials, onSaved, onCancel }) {
         <button onClick={save} disabled={saving}
           style={{ flex:1, padding:'10px 0', borderRadius:10, cursor:'pointer',
             fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
-            background:S.gold, border:'none', color:'#fff', opacity: saving?.6:1 }}>
+            background:S.gold, border:'none', color:'#fff', opacity: saving ? 0.6 : 1 }}>
           {saving ? 'Saving...' : '✓ บันทึก'}
         </button>
         <button onClick={onCancel}
@@ -414,7 +414,7 @@ function VersionCard({ v, materials, onUpdate }) {
             })()}
           </div>
           {v.sell_price != null && (
-            <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:5 }}>
+            <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:5, flexWrap:'wrap' }}>
               <span style={{ fontSize:12, fontWeight:700, color:S.green }}>
                 ฿{Number(v.sell_price).toLocaleString()} / ขวด
               </span>
@@ -611,9 +611,11 @@ function VersionCard({ v, materials, onUpdate }) {
               )}
             </div>
           </div>
+
+          <button onClick={saveEdit} disabled={saving}
             style={{ width:'100%', padding:'10px 0', borderRadius:10, cursor:'pointer',
               fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
-              background:S.gold, border:'none', color:'#fff', opacity: saving ? .6 : 1 }}>
+              background:S.gold, border:'none', color:'#fff', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Saving...' : '✓ บันทึกการแก้ไข'}
           </button>
         </div>
@@ -792,7 +794,7 @@ function BlendForm({ onSaved, onCancel, existingGroups = [] }) {
           style={{ flex:1, padding:'10px 0', borderRadius:10, cursor:'pointer',
             fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
             background:S.gold, border:'none', color:'#fff',
-            opacity: (!name.trim()||!sourceName.trim()||saving) ? .6 : 1 }}>
+            opacity: (!name.trim()||!sourceName.trim()||saving) ? 0.6 : 1 }}>
           {saving ? 'Saving...' : '✓ สร้าง Blend'}
         </button>
         <button onClick={onCancel}
