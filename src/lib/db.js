@@ -234,6 +234,27 @@ export const db = {
       .order('produced_at', { ascending: false })
     return data || []
   },
+
+  // ดึง batch ทุกสูตรทีเดียว แล้ว group ตาม formula_id — ใช้โชว์ "ผลิตแล้วหรือยัง" ในหน้า list
+  // ไม่ต้องกดเข้าไปทีละสูตร
+  async getBatchSummaryByFormula() {
+    const { data } = await supabase
+      .from('production_batches')
+      .select('formula_id, qty_produced, qty_sold, produced_at')
+    const summary = {}
+    ;(data || []).forEach(b => {
+      if (!summary[b.formula_id]) {
+        summary[b.formula_id] = { produced: 0, sold: 0, batchCount: 0, lastProducedAt: null }
+      }
+      summary[b.formula_id].produced += b.qty_produced || 0
+      summary[b.formula_id].sold     += b.qty_sold || 0
+      summary[b.formula_id].batchCount += 1
+      if (!summary[b.formula_id].lastProducedAt || b.produced_at > summary[b.formula_id].lastProducedAt) {
+        summary[b.formula_id].lastProducedAt = b.produced_at
+      }
+    })
+    return summary
+  },
   async createBatch(formulaId, { concentration, bottle_ml, qty_produced, produced_at, notes,
     alcohol_mix, concentrate_ml, alcohol_ml_per_bottle, sell_price }) {
     const { data, error } = await supabase
@@ -465,6 +486,20 @@ export const db = {
     return { total, items: data || [] }
   },
 
+  // ── ค่าใช้จ่ายแยกตามกลุ่ม (production / myblends / retail / ไม่ระบุ) ────────────
+  // allTime=true ใช้สำหรับเทียบกับ My Blends ที่เป็นยอดสะสม (ไม่มีข้อมูลแยกเดือน)
+  async getExpensesByGroupThisMonth(group, allTime = false) {
+    let query = supabase.from('expenses').select('amount, for_group')
+    if (!allTime) {
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+        .toISOString().slice(0, 10)
+      query = query.gte('expense_date', monthStart)
+    }
+    const { data } = await query
+    const filtered = (data || []).filter(e => e.for_group === group)
+    return filtered.reduce((s, e) => s + (e.amount ?? 0), 0)
+  },
+
   // ── Revenue เดือนนี้ (ช่วงเวลาเดียวกับ getExpensesThisMonth เพื่อเทียบกำไรสุทธิได้ถูกต้อง) ──
   async getRevenueThisMonth() {
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -483,7 +518,7 @@ export const db = {
     return { revenue, profit }
   },
 
-  // ── ยอดขายรวม Retail (เดือนนี้) + My Blends (สะสมทั้งหมด) แยกกลุ่มให้ดู ──────────────
+  // ── ยอดขายรวม Retail (เดือนนี้) + My Blends (สะสมทั้งหมด) แยกกลุ่ม พร้อมหักค่าใช้จ่ายตามกลุ่ม ──
   // หมายเหตุ: My Blends ไม่มี timestamp ต่อการขายแบบ retail_stock_logs จึงนับเป็นยอดสะสม
   // ทั้งหมดตั้งแต่สร้าง version มา ไม่ใช่ยอดเฉพาะเดือนนี้ — ใช้ดูภาพรวมเชิงเปรียบเทียบกลุ่ม
   // ไม่ใช่ตัวเลขที่เทียบเดือนต่อเดือนได้ตรง 100%
@@ -507,10 +542,21 @@ export const db = {
     const myBlendsRevenue = (versions || [])
       .reduce((s, v) => s + (v.sell_price ?? 0) * (v.qty_sold ?? 0), 0)
 
+    // ค่าใช้จ่ายแยกตามกลุ่ม — retail หักแบบเดือนนี้ (ตรงกับ revenue), myBlends หักแบบสะสม
+    const [retailExpenses, myBlendsExpenses] = await Promise.all([
+      this.getExpensesByGroupThisMonth('retail', false),
+      this.getExpensesByGroupThisMonth('myblends', true),
+    ])
+
+    const retailProfit   = retailRevenue - retailExpenses
+    const myBlendsProfit = myBlendsRevenue - myBlendsExpenses
+
     return {
-      total: retailRevenue + myBlendsRevenue,
-      retail:    { revenue: retailRevenue,    label: 'Retail (เดือนนี้)' },
-      myBlends:  { revenue: myBlendsRevenue,  label: 'My Blends (สะสมทั้งหมด)' },
+      total:        retailRevenue + myBlendsRevenue,
+      totalExpenses: retailExpenses + myBlendsExpenses,
+      totalProfit:  retailProfit + myBlendsProfit,
+      retail:    { revenue: retailRevenue,   expenses: retailExpenses,   profit: retailProfit,   label: 'Retail (เดือนนี้)' },
+      myBlends:  { revenue: myBlendsRevenue, expenses: myBlendsExpenses, profit: myBlendsProfit, label: 'My Blends (สะสมทั้งหมด)' },
     }
   },
 }

@@ -394,6 +394,7 @@ function StockSummary({ stock }) {
 
 export default function PageProduction() {
   const [formulas,  setFormulas]  = useState([])
+  const [batchSummary, setBatchSummary] = useState({}) // formula_id -> { produced, sold, batchCount, lastProducedAt }
   const [selected,  setSelected]  = useState(null)
   const [batches,   setBatches]   = useState([])
   const [stock,     setStock]     = useState([])
@@ -401,7 +402,11 @@ export default function PageProduction() {
   const [showForm,  setShowForm]  = useState(false)
 
   useEffect(() => {
-    db.getFormulas().then(d => { setFormulas(d); setLoading(false) })
+    Promise.all([db.getFormulas(), db.getBatchSummaryByFormula()]).then(([f, bs]) => {
+      setFormulas(f)
+      setBatchSummary(bs)
+      setLoading(false)
+    })
   }, [])
 
   async function selectFormula(f) {
@@ -413,8 +418,10 @@ export default function PageProduction() {
 
   async function reload() {
     if (!selected) return
-    const [b, s] = await Promise.all([db.getBatches(selected.id), db.getStock(selected.id)])
-    setBatches(b); setStock(s)
+    const [b, s, bs] = await Promise.all([
+      db.getBatches(selected.id), db.getStock(selected.id), db.getBatchSummaryByFormula()
+    ])
+    setBatches(b); setStock(s); setBatchSummary(bs)
     setShowForm(false)
   }
 
@@ -443,24 +450,42 @@ export default function PageProduction() {
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {loading ? (
               <div style={{ color:S.textLt, fontSize:13 }}>Loading...</div>
-            ) : formulas.map(f => (
-              <button key={f.id} onClick={() => selectFormula(f)}
-                style={{ textAlign:'left', padding:'12px 16px', borderRadius:10,
-                  cursor:'pointer', fontFamily:'Inter,sans-serif',
-                  border:`1.5px solid ${selected?.id===f.id ? S.gold : S.border}`,
-                  background: selected?.id===f.id ? S.goldLt : S.white,
-                  color:S.ink }}>
-                <div style={{ fontSize:14, fontWeight:600,
-                  fontFamily:'Cormorant Garamond,serif' }}>{f.name}</div>
-                {f.concentration_type && (
-                  <span style={{ fontSize:10, color:CONC_COLOR[f.concentration_type]?.c || S.textMid,
-                    background:CONC_COLOR[f.concentration_type]?.bg, padding:'1px 8px',
-                    borderRadius:10, marginTop:2, display:'inline-block' }}>
-                    {f.concentration_type}
-                  </span>
-                )}
-              </button>
-            ))}
+            ) : formulas.map(f => {
+              const summary = batchSummary[f.id]
+              return (
+                <button key={f.id} onClick={() => selectFormula(f)}
+                  style={{ textAlign:'left', padding:'12px 16px', borderRadius:10,
+                    cursor:'pointer', fontFamily:'Inter,sans-serif',
+                    border:`1.5px solid ${selected?.id===f.id ? S.gold : S.border}`,
+                    background: selected?.id===f.id ? S.goldLt : S.white,
+                    color:S.ink }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:600,
+                        fontFamily:'Cormorant Garamond,serif' }}>{f.name}</div>
+                      {f.concentration_type && (
+                        <span style={{ fontSize:10, color:CONC_COLOR[f.concentration_type]?.c || S.textMid,
+                          background:CONC_COLOR[f.concentration_type]?.bg, padding:'1px 8px',
+                          borderRadius:10, marginTop:2, display:'inline-block' }}>
+                          {f.concentration_type}
+                        </span>
+                      )}
+                    </div>
+                    {summary ? (
+                      <span style={{ fontSize:10, fontWeight:700, color:S.green, background:'#eef4ee',
+                        padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap', flexShrink:0 }}>
+                        ✓ ผลิตแล้ว {summary.produced} ขวด
+                      </span>
+                    ) : (
+                      <span style={{ fontSize:10, color:S.textLt, background:S.bg,
+                        padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap', flexShrink:0 }}>
+                        ยังไม่ผลิต
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
 

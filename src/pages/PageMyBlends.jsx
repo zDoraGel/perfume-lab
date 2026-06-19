@@ -830,6 +830,11 @@ export default function PageMyBlends() {
   const [eSupplier,   setESupplier]   = useState('')
   const [eSourceCost, setESourceCost] = useState('')
   const [eGoal,       setEGoal]       = useState('')
+  const [myBlendsExpenses, setMyBlendsExpenses] = useState(0)
+
+  useEffect(() => {
+    db.getExpensesByGroupThisMonth('myblends', true).then(setMyBlendsExpenses).catch(() => {})
+  }, [])
 
   useEffect(() => {
     Promise.all([getAdaptations(), db.getMaterials()]).then(([b, m]) => {
@@ -889,6 +894,7 @@ export default function PageMyBlends() {
   const totalReady   = versions.filter(v => v.status!=='Sold Out' && daysLeft(v.blended_at, v.rest_days)<=0).reduce((s,v)=>(s+(v.qty_bottles||0)-(v.qty_sold||0)),0)
   const totalResting = versions.filter(v => v.status!=='Sold Out' && daysLeft(v.blended_at, v.rest_days)>0).reduce((s,v)=>(s+(v.qty_bottles||0)-(v.qty_sold||0)),0)
   const totalRevenue = versions.reduce((s,v) => s + (v.sell_price != null ? v.sell_price * (v.qty_sold||0) : 0), 0)
+  const netProfit = totalRevenue - myBlendsExpenses
 
   return (
     <div style={{ fontFamily:'Inter,sans-serif' }}>
@@ -1095,10 +1101,16 @@ export default function PageMyBlends() {
                 {totalRevenue > 0 && (
                   <div style={{ background:S.white, borderRadius:10, padding:'8px 14px',
                     border:`1px solid ${S.border}`, textAlign:'center' }}>
-                    <div style={{ fontSize:18, fontWeight:600, color:S.green }}>
-                      ฿{totalRevenue.toLocaleString()}
+                    <div style={{ fontSize:18, fontWeight:600,
+                      color: netProfit >= 0 ? S.green : S.red }}>
+                      ฿{netProfit.toLocaleString()}
                     </div>
-                    <div style={{ fontSize:10, color:S.textMid }}>รายได้รวม</div>
+                    <div style={{ fontSize:10, color:S.textMid }}>กำไรสุทธิ</div>
+                    {myBlendsExpenses > 0 && (
+                      <div style={{ fontSize:9, color:S.textLt, marginTop:2 }}>
+                        (รายได้ ฿{totalRevenue.toLocaleString()} − ค่าใช้จ่าย ฿{myBlendsExpenses.toLocaleString()})
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

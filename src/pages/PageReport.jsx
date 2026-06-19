@@ -532,18 +532,28 @@ export default function PageReport() {
                   return (
                     <div key={f.id} style={{ background: S.white, border: `1px solid ${S.border}`,
                       borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Cormorant Garamond,serif',
                             color: S.ink }}>{f.name}</div>
                           {f.vibe && <div style={{ fontSize: 11, color: S.textLt, marginTop: 2 }}>{f.vibe}</div>}
                         </div>
-                        <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+                        <div style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                           <span style={{ color: S.textMid }}>Blend <b>{vs.length}</b></span>
                           <span style={{ color: S.green }}>✓ {vs.filter(v => v.status === 'Success').length}</span>
-                          {b.produced > 0 && <span style={{ color: S.gold }}>ผลิต <b>{b.produced}</b> ขวด</span>}
+                          {b.produced > 0 && (
+                            <span style={{ color: S.gold, background: S.goldLt, padding: '3px 9px',
+                              borderRadius: 20, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              📦 ผลิตแล้ว {b.produced} ขวด
+                            </span>
+                          )}
                         </div>
                       </div>
+                      {vs.length === 0 && b.produced > 0 && (
+                        <div style={{ fontSize: 11, color: S.textLt, marginTop: 6, fontStyle: 'italic' }}>
+                          * ไม่มี blend สูตรใหม่ในช่วงนี้ — ใช้สูตรที่มีอยู่แล้วผลิตขายต่อ
+                        </div>
+                      )}
                       {vs.length > 0 && (
                         <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {vs.map(v => (
@@ -720,8 +730,34 @@ export default function PageReport() {
                 { value: report.revenueBreakdown.myBlends.revenue, label: report.revenueBreakdown.myBlends.label,  color: '#8a3a68' },
               ]}
               centerValue={fmtB(Math.round(report.revenueBreakdown.total))}
-              centerLabel="รวมทั้งหมด"
+              centerLabel="รายได้รวม"
             />
+
+            {/* กำไรสุทธิหลังหักค่าใช้จ่ายแต่ละกลุ่ม */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                <span style={{ color: S.textMid }}>{report.revenueBreakdown.retail.label}</span>
+                <span style={{ fontWeight: 600,
+                  color: report.revenueBreakdown.retail.profit >= 0 ? S.green : S.red }}>
+                  {fmtB(Math.round(report.revenueBreakdown.retail.profit))}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
+                <span style={{ color: S.textMid }}>{report.revenueBreakdown.myBlends.label}</span>
+                <span style={{ fontWeight: 600,
+                  color: report.revenueBreakdown.myBlends.profit >= 0 ? S.green : S.red }}>
+                  {fmtB(Math.round(report.revenueBreakdown.myBlends.profit))}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700,
+                paddingTop: 8, borderTop: `1px solid ${S.border}` }}>
+                <span>กำไรสุทธิรวม (หักค่าใช้จ่ายแล้ว)</span>
+                <span style={{ color: report.revenueBreakdown.totalProfit >= 0 ? S.green : S.red }}>
+                  {fmtB(Math.round(report.revenueBreakdown.totalProfit))}
+                </span>
+              </div>
+            </div>
+
             <div style={{ fontSize: 10, color: S.textLt, marginTop: 10, lineHeight: 1.5 }}>
               * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail เป็นยอดเฉพาะช่วงเวลาที่เลือกด้านบน — เทียบกันตรงๆ ไม่ได้ 100%
             </div>

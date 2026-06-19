@@ -581,8 +581,34 @@ export default function PageDashboard({ onNavigate }) {
                 { value: revenueBreakdown.retail.revenue,   label: revenueBreakdown.retail.label,   color: S.green },
                 { value: revenueBreakdown.myBlends.revenue, label: revenueBreakdown.myBlends.label,  color: '#8a3a68' },
               ]}
-              centerLabel="รวมทั้งหมด"
+              centerLabel="รายได้รวม"
               centerValue={`฿${Math.round(revenueBreakdown.total).toLocaleString()}`}/>
+
+            {/* กำไรสุทธิหลังหักค่าใช้จ่ายแต่ละกลุ่ม */}
+            <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${S.border}` }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:6 }}>
+                <span style={{ color:S.textMid }}>{revenueBreakdown.retail.label}</span>
+                <span style={{ fontWeight:600,
+                  color: revenueBreakdown.retail.profit >= 0 ? S.green : S.red }}>
+                  ฿{Math.round(revenueBreakdown.retail.profit).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:8 }}>
+                <span style={{ color:S.textMid }}>{revenueBreakdown.myBlends.label}</span>
+                <span style={{ fontWeight:600,
+                  color: revenueBreakdown.myBlends.profit >= 0 ? S.green : S.red }}>
+                  ฿{Math.round(revenueBreakdown.myBlends.profit).toLocaleString()}
+                </span>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700,
+                paddingTop:6, borderTop:`1px solid ${S.border}` }}>
+                <span>กำไรสุทธิรวม (หักค่าใช้จ่ายแล้ว)</span>
+                <span style={{ color: revenueBreakdown.totalProfit >= 0 ? S.green : S.red }}>
+                  ฿{Math.round(revenueBreakdown.totalProfit).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
             <div style={{ fontSize:10, color:S.textLt, marginTop:10, lineHeight:1.5 }}>
               * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail เป็นยอดเดือนนี้เท่านั้น — เทียบกันตรงๆ ไม่ได้ 100%
             </div>
