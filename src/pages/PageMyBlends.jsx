@@ -831,6 +831,10 @@ export default function PageMyBlends() {
   const [eSourceCost, setESourceCost] = useState('')
   const [eGoal,       setEGoal]       = useState('')
   const [myBlendsExpenses, setMyBlendsExpenses] = useState(0)
+  const [purchaseModal, setPurchaseModal] = useState(null) // blend ที่กำลังบันทึกการซื้อหัวเชื้อ
+  const [purchaseSize, setPurchaseSize] = useState('')
+  const [purchaseGroups, setPurchaseGroups] = useState(['myblends']) // default ติ๊ก myblends ไว้ก่อน
+  const [purchaseSaving, setPurchaseSaving] = useState(false)
 
   useEffect(() => {
     db.getExpensesByGroupThisMonth('myblends', true).then(setMyBlendsExpenses).catch(() => {})
@@ -889,6 +893,31 @@ export default function PageMyBlends() {
     await supabase.from('adaptations').delete().eq('id', id)
     setSelected(null); setVersions([])
     reload()
+  }
+
+  async function handleRecordSourcePurchase(blend, sizeG, groups) {
+    const size = parseFloat(sizeG)
+    if (!size || size <= 0) { alert('กรอกจำนวนกรัมที่ซื้อ'); return }
+    const total = size * (blend.source_cost || 0)
+    setPurchaseSaving(true)
+    try {
+      await db.createExpense({
+        expense_date: new Date().toISOString().slice(0, 10),
+        category: 'material',
+        amount: total,
+        note: `${blend.source_name}${blend.source_supplier ? ' ('+blend.source_supplier+')' : ''} ${size}g`,
+        for_groups: groups,
+      })
+      // เก็บขนาดล่าสุดที่ซื้อไว้ดูย้อนหลังได้ (ไม่กระทบ source_cost ที่ใช้คำนวณต้นทุนต่อกรัมในสูตร)
+      await supabase.from('adaptations').update({ source_purchase_size: size }).eq('id', blend.id)
+      setPurchaseModal(null)
+      setPurchaseSize('')
+      setPurchaseGroups(['myblends'])
+      reload()
+    } catch (e) {
+      alert('บันทึกไม่สำเร็จ: ' + e.message)
+    }
+    setPurchaseSaving(false)
   }
 
   const totalReady   = versions.filter(v => v.status!=='Sold Out' && daysLeft(v.blended_at, v.rest_days)<=0).reduce((s,v)=>(s+(v.qty_bottles||0)-(v.qty_sold||0)),0)
@@ -1053,7 +1082,15 @@ export default function PageMyBlends() {
                       fontStyle:'italic' }}>{selected.goal}</div>
                   )}
                 </div>
-                <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:8 }}>
+                <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:8, flexWrap:'wrap' }}>
+                  {selected.source_cost != null && (
+                    <button onClick={() => setPurchaseModal(selected)}
+                      style={{ fontSize:11, fontWeight:600, color:'#3b6d11', background:'#f0f5ee',
+                        border:'1px solid #c8ddc0', borderRadius:16,
+                        padding:'3px 10px', cursor:'pointer', fontFamily:'Inter,sans-serif' }}>
+                      💰 ซื้อ
+                    </button>
+                  )}
                   <button onClick={startEditBlend}
                     style={{ fontSize:11, color:S.gold, background:S.white,
                       border:`1px solid ${S.goldBd}`, borderRadius:16,
@@ -1152,6 +1189,82 @@ export default function PageMyBlends() {
               ยังไม่มี record — กด "+ บันทึกการผสม" เพื่อเริ่มค่ะ
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal บันทึกการซื้อหัวเชื้อ — กรอกกี่กรัม คำนวณยอดรวมจาก source_cost (฿/g) อัตโนมัติ */}
+      {purchaseModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}
+          onClick={() => !purchaseSaving && setPurchaseModal(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:S.white, borderRadius:14, padding:20, width:'100%', maxWidth:360 }}>
+            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:18,
+              fontStyle:'italic', color:S.ink, marginBottom:4 }}>
+              บันทึกการซื้อหัวเชื้อ
+            </div>
+            <div style={{ fontSize:13, color:S.textMid, marginBottom:14 }}>
+              {purchaseModal.source_name}
+              {purchaseModal.source_supplier && ` · ${purchaseModal.source_supplier}`}
+              {' · ฿'}{purchaseModal.source_cost}/g
+            </div>
+
+            <div style={{ fontSize:11, color:S.textMid, marginBottom:5 }}>ซื้อกี่กรัม</div>
+            <input type="number" inputMode="decimal" value={purchaseSize}
+              onChange={e => setPurchaseSize(e.target.value)}
+              placeholder="เช่น 50"
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, fontSize:14,
+                border:`1px solid ${S.border}`, outline:'none', boxSizing:'border-box', marginBottom:6 }}/>
+            {purchaseSize && parseFloat(purchaseSize) > 0 && (
+              <div style={{ fontSize:12, color:S.green, fontWeight:600, marginBottom:14 }}>
+                รวม ฿{(parseFloat(purchaseSize) * (purchaseModal.source_cost || 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </div>
+            )}
+
+            <div style={{ fontSize:11, color:S.textMid, marginBottom:6, marginTop:8 }}>
+              สำหรับกลุ่ม (เลือกได้หลายกลุ่ม)
+            </div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:18 }}>
+              {[
+                { v:'production', label:'Production', icon:'⚗️' },
+                { v:'myblends',   label:'My Blends',   icon:'🧪' },
+                { v:'retail',     label:'Retail',      icon:'🛍️' },
+                { v:'material',   label:'Material',    icon:'🧴' },
+              ].map(g => {
+                const active = purchaseGroups.includes(g.v)
+                return (
+                  <button key={g.v}
+                    onClick={() => setPurchaseGroups(prev =>
+                      prev.includes(g.v) ? prev.filter(x => x !== g.v) : [...prev, g.v])}
+                    disabled={purchaseSaving}
+                    style={{ padding:'6px 14px', borderRadius:20, cursor: purchaseSaving ? 'default' : 'pointer',
+                      fontSize:12, border:`1.5px solid ${active ? S.gold : S.border}`,
+                      background: active ? S.goldLt : 'transparent',
+                      color: active ? S.gold : S.textMid,
+                      fontWeight: active ? 600 : 400,
+                      opacity: purchaseSaving ? 0.6 : 1 }}>
+                    {g.icon} {g.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            <button onClick={() => handleRecordSourcePurchase(purchaseModal, purchaseSize, purchaseGroups)}
+              disabled={purchaseSaving || !purchaseSize || parseFloat(purchaseSize) <= 0}
+              style={{ width:'100%', padding:'10px 0', borderRadius:10,
+                cursor: (purchaseSaving || !purchaseSize) ? 'default' : 'pointer',
+                border:'none', background: (purchaseSaving || !purchaseSize) ? S.border : S.gold, color:'#fff',
+                fontSize:13, fontWeight:600, fontFamily:'Inter,sans-serif', marginBottom:8,
+                opacity: (purchaseSaving || !purchaseSize) ? 0.6 : 1 }}>
+              {purchaseSaving ? 'กำลังบันทึก...' : '✓ บันทึก'}
+            </button>
+            <button onClick={() => setPurchaseModal(null)} disabled={purchaseSaving}
+              style={{ width:'100%', padding:'8px 0', borderRadius:10, cursor:'pointer',
+                border:'none', background:'transparent', color:S.textLt,
+                fontSize:12, fontFamily:'Inter,sans-serif' }}>
+              ยกเลิก
+            </button>
+          </div>
         </div>
       )}
     </div>
