@@ -616,6 +616,7 @@ export default function PageRetailStock() {
   const [logItem,     setLogItem]     = useState(null)   // log drawer
   const [search,      setSearch]      = useState('')
   const [filter,      setFilter]      = useState('all')  // all | low | empty
+  const [brandFilter, setBrandFilter] = useState('all')  // 'all' or a specific brand name
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -661,10 +662,28 @@ export default function PageRetailStock() {
     const rem = i.qty_total - i.qty_sold
     if (filter === 'low'   && !(rem > 0 && rem <= i.alert_at)) return false
     if (filter === 'empty' && rem > 0) return false
+    if (brandFilter !== 'all' && (i.brand || 'ไม่มีแบรนด์') !== brandFilter) return false
     if (search && !i.name.toLowerCase().includes(search.toLowerCase()) &&
         !(i.brand||'').toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
+
+  // รายชื่อแบรนด์ทั้งหมด เรียงตามจำนวนขวด (มากไปน้อย) เพื่อโชว์แบรนด์หลักก่อน
+  const brandCounts = {}
+  items.forEach(i => {
+    const b = i.brand || 'ไม่มีแบรนด์'
+    brandCounts[b] = (brandCounts[b] || 0) + 1
+  })
+  const brandList = Object.keys(brandCounts).sort((a, b) => brandCounts[b] - brandCounts[a])
+
+  // จัดกลุ่มรายการที่ผ่าน filter แล้ว ตามแบรนด์ (รักษาลำดับเดิมของแต่ละกลุ่ม)
+  const groupedByBrand = {}
+  filtered.forEach(item => {
+    const b = item.brand || 'ไม่มีแบรนด์'
+    if (!groupedByBrand[b]) groupedByBrand[b] = []
+    groupedByBrand[b].push(item)
+  })
+  const brandGroupOrder = brandList.filter(b => groupedByBrand[b]?.length)
 
   return (
     <div>
@@ -705,6 +724,30 @@ export default function PageRetailStock() {
         ))}
       </div>
 
+      {/* Brand filter chips — โชว์เฉพาะตอนมีมากกว่า 1 แบรนด์ */}
+      {brandList.length > 1 && (
+        <div style={{ display:'flex', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+          <button onClick={() => setBrandFilter('all')}
+            style={{ padding:'5px 12px', borderRadius:16, cursor:'pointer',
+              border:`1.5px solid ${brandFilter==='all' ? S.gold : S.border}`,
+              background: brandFilter==='all' ? S.goldLt : 'transparent',
+              fontSize:11, fontWeight:600, color: brandFilter==='all' ? S.gold : S.textMid,
+              fontFamily:'Inter,sans-serif' }}>
+            ทุกแบรนด์
+          </button>
+          {brandList.map(b => (
+            <button key={b} onClick={() => setBrandFilter(b)}
+              style={{ padding:'5px 12px', borderRadius:16, cursor:'pointer',
+                border:`1.5px solid ${brandFilter===b ? S.gold : S.border}`,
+                background: brandFilter===b ? S.goldLt : 'transparent',
+                fontSize:11, fontWeight:600, color: brandFilter===b ? S.gold : S.textMid,
+                fontFamily:'Inter,sans-serif' }}>
+              {b} <span style={{ opacity:.6, fontWeight:400 }}>({brandCounts[b]})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Add/Edit form */}
       {(showForm || editItem) && (
         <StockForm
@@ -714,7 +757,7 @@ export default function PageRetailStock() {
         />
       )}
 
-      {/* List */}
+      {/* List — แยกกลุ่มตามแบรนด์ */}
       {loading ? (
         <div style={{ textAlign:'center', color:S.textLt, padding:40, fontSize:13 }}>กำลังโหลด…</div>
       ) : filtered.length === 0 ? (
@@ -725,18 +768,32 @@ export default function PageRetailStock() {
           </div>
         </div>
       ) : (
-        filtered.map(item => (
-          <StockCard
-            key={item.id}
-            item={item}
-            onEdit={i => { setEditItem(i); setShowForm(false) }}
-            onDelete={handleDelete}
-            onTransaction={setTxItem}
-            onLogs={setLogItem}
-            onRecommend={handleRecommend}
-            onFavorite={handleFavorite}
-            onDiscontinue={handleDiscontinue}
-          />
+        brandGroupOrder.map(brand => (
+          <div key={brand} style={{ marginBottom:24 }}>
+            {brandList.length > 1 && (
+              <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:10,
+                paddingBottom:6, borderBottom:`1.5px solid ${S.border}` }}>
+                <span style={{ fontFamily:'Cormorant Garamond,serif', fontSize:17,
+                  fontStyle:'italic', color:S.gold }}>{brand}</span>
+                <span style={{ fontSize:11, color:S.textLt }}>
+                  {groupedByBrand[brand].length} ขวด
+                </span>
+              </div>
+            )}
+            {groupedByBrand[brand].map(item => (
+              <StockCard
+                key={item.id}
+                item={item}
+                onEdit={i => { setEditItem(i); setShowForm(false) }}
+                onDelete={handleDelete}
+                onTransaction={setTxItem}
+                onLogs={setLogItem}
+                onRecommend={handleRecommend}
+                onFavorite={handleFavorite}
+                onDiscontinue={handleDiscontinue}
+              />
+            ))}
+          </div>
         ))
       )}
 

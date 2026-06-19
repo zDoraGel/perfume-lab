@@ -349,6 +349,7 @@ export default function PageDashboard({ onNavigate }) {
   const [topSellers,    setTopSellers]    = useState([])
   const [expensesMonth, setExpensesMonth] = useState({ total: 0, items: [] })
   const [revenueMonth,  setRevenueMonth]  = useState({ revenue: 0, profit: 0 })
+  const [revenueBreakdown, setRevenueBreakdown] = useState(null)
 
   async function handleSendReport() {
     setSending(true)
@@ -400,7 +401,8 @@ export default function PageDashboard({ onNavigate }) {
       db.getTopRetailSellers().catch(() => []),
       db.getExpensesThisMonth().catch(() => ({ total: 0, items: [] })),
       db.getRevenueThisMonth().catch(() => ({ revenue: 0, profit: 0 })),
-    ]).then(([ps, ms, rs, s7, top, exp, revMonth]) => {
+      db.getRevenueBreakdown().catch(() => null),
+    ]).then(([ps, ms, rs, s7, top, exp, revMonth, revBreakdown]) => {
       setProdSum(ps)
       setMonthly(ms)
       setRetail(rs)
@@ -408,6 +410,7 @@ export default function PageDashboard({ onNavigate }) {
       setTopSellers(top)
       setExpensesMonth(exp)
       setRevenueMonth(revMonth)
+      setRevenueBreakdown(revBreakdown)
       setLoading(false)
     })
     loadTrends()
@@ -515,7 +518,7 @@ export default function PageDashboard({ onNavigate }) {
           {[
             { icon:'📊', label:'Report',     onClick: handleSendReport, busy: sending },
             { icon:'🧾', label:'ค่าใช้จ่าย', onClick: () => onNavigate && onNavigate('expenses') },
-            { icon:'⚗️', label:'Formula',    onClick: () => onNavigate && onNavigate('new-formula') },
+            { icon:'⚗️', label:'Formula',    onClick: () => onNavigate && onNavigate('formulas') },
             { icon:'⬇️', label:'Export',     onClick: () => onNavigate && onNavigate('export') },
             { icon:'📦', label:'Lot',        onClick: () => onNavigate && onNavigate('lot') },
           ].map((a, i) => (
@@ -565,6 +568,26 @@ export default function PageDashboard({ onNavigate }) {
             centerLabel="กำไรสุทธิ" centerValue={`฿${Math.round(netProfit).toLocaleString()}`}
             centerColor={netProfit < 0 ? S.red : S.green}/>
         </div>
+
+        {revenueBreakdown && revenueBreakdown.total > 0 && (
+          <div style={{ background:S.white, border:`1px solid ${S.border}`,
+            borderRadius:12, padding:'16px' }}>
+            <div style={{ fontSize:11, fontWeight:700, color:S.gold,
+              textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
+              ยอดรวมรายได้ — Retail + My Blends
+            </div>
+            <DonutChart
+              segments={[
+                { value: revenueBreakdown.retail.revenue,   label: revenueBreakdown.retail.label,   color: S.green },
+                { value: revenueBreakdown.myBlends.revenue, label: revenueBreakdown.myBlends.label,  color: '#8a3a68' },
+              ]}
+              centerLabel="รวมทั้งหมด"
+              centerValue={`฿${Math.round(revenueBreakdown.total).toLocaleString()}`}/>
+            <div style={{ fontSize:10, color:S.textLt, marginTop:10, lineHeight:1.5 }}>
+              * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail เป็นยอดเดือนนี้เท่านั้น — เทียบกันตรงๆ ไม่ได้ 100%
+            </div>
+          </div>
+        )}
       </div>
 
       {isEmpty ? (

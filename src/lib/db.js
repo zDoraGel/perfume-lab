@@ -482,4 +482,35 @@ export const db = {
     }
     return { revenue, profit }
   },
+
+  // ── ยอดขายรวม Retail (เดือนนี้) + My Blends (สะสมทั้งหมด) แยกกลุ่มให้ดู ──────────────
+  // หมายเหตุ: My Blends ไม่มี timestamp ต่อการขายแบบ retail_stock_logs จึงนับเป็นยอดสะสม
+  // ทั้งหมดตั้งแต่สร้าง version มา ไม่ใช่ยอดเฉพาะเดือนนี้ — ใช้ดูภาพรวมเชิงเปรียบเทียบกลุ่ม
+  // ไม่ใช่ตัวเลขที่เทียบเดือนต่อเดือนได้ตรง 100%
+  async getRevenueBreakdown() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      .toISOString().slice(0, 10)
+
+    // Retail — เดือนนี้
+    const { data: retailLogs } = await supabase
+      .from('retail_stock_logs')
+      .select('qty, sell_price')
+      .eq('type', 'out')
+      .gte('logged_at', monthStart)
+    const retailRevenue = (retailLogs || [])
+      .reduce((s, l) => s + (l.sell_price ?? 0) * (l.qty ?? 0), 0)
+
+    // My Blends — สะสมทั้งหมด (ไม่มีข้อมูลแยกเดือน)
+    const { data: versions } = await supabase
+      .from('adaptation_versions')
+      .select('qty_sold, sell_price')
+    const myBlendsRevenue = (versions || [])
+      .reduce((s, v) => s + (v.sell_price ?? 0) * (v.qty_sold ?? 0), 0)
+
+    return {
+      total: retailRevenue + myBlendsRevenue,
+      retail:    { revenue: retailRevenue,    label: 'Retail (เดือนนี้)' },
+      myBlends:  { revenue: myBlendsRevenue,  label: 'My Blends (สะสมทั้งหมด)' },
+    }
+  },
 }

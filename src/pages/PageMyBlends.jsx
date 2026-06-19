@@ -346,16 +346,20 @@ function VersionCard({ v, materials, onUpdate }) {
 
   async function saveEdit() {
     setSaving(true)
+    const newQtyBottles = parseInt(eQty) || 1
+    const stillFullySold = (v.qty_sold || 0) >= newQtyBottles && newQtyBottles > 0
+    const newStatus = stillFullySold ? 'Sold Out' : (v.status === 'Sold Out' ? null : v.status)
     await supabase.from('adaptation_versions').update({
       source_pct:  parseFloat(eSrcPct)  || 0,
       alcohol_pct:   eAlcohols.reduce((s,a) => s + (parseFloat(a.ml)||0), 0) / (parseInt(eBatchMl)||30) * 100,
       alcohol_notes: JSON.stringify(eAlcohols.filter(a=>a.name&&a.ml)),
       batch_ml:    parseInt(eBatchMl)   || 30,
-      qty_bottles: parseInt(eQty)       || 1,
+      qty_bottles: newQtyBottles,
       blended_at:  eDate,
       rest_days:   parseInt(eRest)      || 14,
       notes:       eNotes || null,
       sell_price:  ePrice ? parseFloat(ePrice) : null,
+      status:      newStatus,
     }).eq('id', v.id)
 
     // update items — delete all then re-insert
@@ -378,7 +382,10 @@ function VersionCard({ v, materials, onUpdate }) {
   async function updateSold() {
     setSaving(true)
     const sold = parseInt(soldInput) || 0
-    const newStatus = sold >= (v.qty_bottles||0) ? 'Sold Out' : v.status
+    const isFullySold = sold >= (v.qty_bottles || 0) && (v.qty_bottles || 0) > 0
+    // ขายครบ → Sold Out / ขายไม่ครบ (รวมถึงกรณีแก้ยอดขายลดลงทีหลัง) → เคลียร์ status พิเศษ
+    // กลับไปให้ daysLeft() คำนวณ Resting/Ready ตามวันที่จริง
+    const newStatus = isFullySold ? 'Sold Out' : null
     await supabase.from('adaptation_versions').update({ qty_sold: sold, status: newStatus }).eq('id', v.id)
     setSaving(false)
     onUpdate()
@@ -881,6 +888,7 @@ export default function PageMyBlends() {
 
   const totalReady   = versions.filter(v => v.status!=='Sold Out' && daysLeft(v.blended_at, v.rest_days)<=0).reduce((s,v)=>(s+(v.qty_bottles||0)-(v.qty_sold||0)),0)
   const totalResting = versions.filter(v => v.status!=='Sold Out' && daysLeft(v.blended_at, v.rest_days)>0).reduce((s,v)=>(s+(v.qty_bottles||0)-(v.qty_sold||0)),0)
+  const totalRevenue = versions.reduce((s,v) => s + (v.sell_price != null ? v.sell_price * (v.qty_sold||0) : 0), 0)
 
   return (
     <div style={{ fontFamily:'Inter,sans-serif' }}>
@@ -1084,6 +1092,15 @@ export default function PageMyBlends() {
                   <div style={{ fontSize:18, fontWeight:600, color:'#4a6aa8' }}>{totalResting}</div>
                   <div style={{ fontSize:10, color:S.textMid }}>กำลัง rest</div>
                 </div>
+                {totalRevenue > 0 && (
+                  <div style={{ background:S.white, borderRadius:10, padding:'8px 14px',
+                    border:`1px solid ${S.border}`, textAlign:'center' }}>
+                    <div style={{ fontSize:18, fontWeight:600, color:S.green }}>
+                      ฿{totalRevenue.toLocaleString()}
+                    </div>
+                    <div style={{ fontSize:10, color:S.textMid }}>รายได้รวม</div>
+                  </div>
+                )}
               </div>
             )}
           </div>

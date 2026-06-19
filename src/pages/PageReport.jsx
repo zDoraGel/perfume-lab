@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
 import { S, FC } from '../constants/theme'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -290,6 +291,9 @@ export default function PageReport() {
         .eq('is_saved', true)
         .order('fetched_at', { ascending: false })
 
+      // 7. Revenue breakdown — Retail (เดือนนี้) + My Blends (สะสมทั้งหมด)
+      const revenueBreakdown = await db.getRevenueBreakdown().catch(() => null)
+
       setReport({
         dateFrom, dateTo,
         // personal
@@ -321,6 +325,8 @@ export default function PageReport() {
         totalCOGS,
         avgCostPerMl,
         familyCostBreakdown,
+        // revenue breakdown (retail + my blends)
+        revenueBreakdown,
         // trends
         trends: trends || [],
       })
@@ -696,6 +702,29 @@ export default function PageReport() {
                 </div>
               </div>
             )}
+          </Section>
+          )}
+
+          {/* ── Revenue Breakdown — Retail + My Blends ── */}
+          {(activeSection === 'all' || activeSection === 'materials') && report.revenueBreakdown && report.revenueBreakdown.total > 0 && (
+          <Section title="◐ ยอดรวมรายได้ — Retail + My Blends" color={S.gold}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, marginBottom: 16 }}>
+              <StatBox label={report.revenueBreakdown.retail.label}
+                value={fmtB(Math.round(report.revenueBreakdown.retail.revenue))} color={S.green}/>
+              <StatBox label={report.revenueBreakdown.myBlends.label}
+                value={fmtB(Math.round(report.revenueBreakdown.myBlends.revenue))} color="#8a3a68"/>
+            </div>
+            <DonutChart
+              segments={[
+                { value: report.revenueBreakdown.retail.revenue,   label: report.revenueBreakdown.retail.label,   color: S.green },
+                { value: report.revenueBreakdown.myBlends.revenue, label: report.revenueBreakdown.myBlends.label,  color: '#8a3a68' },
+              ]}
+              centerValue={fmtB(Math.round(report.revenueBreakdown.total))}
+              centerLabel="รวมทั้งหมด"
+            />
+            <div style={{ fontSize: 10, color: S.textLt, marginTop: 10, lineHeight: 1.5 }}>
+              * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail เป็นยอดเฉพาะช่วงเวลาที่เลือกด้านบน — เทียบกันตรงๆ ไม่ได้ 100%
+            </div>
           </Section>
           )}
 
