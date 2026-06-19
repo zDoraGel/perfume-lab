@@ -188,10 +188,10 @@ function MatModal({ mat, onClose, onSave }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <NumInput label="ราคาต่อขวด/ล็อต (฿)" value={purchasePrice}
               onChange={v => { setPurchasePrice(v); setCost('') }}
-              placeholder="เช่น 110"/>
+              placeholder="เช่น 110" decimal/>
             <NumInput label="ขนาดที่ซื้อ (g)" value={purchaseSize}
               onChange={v => { setPurchaseSize(v); setCost('') }}
-              placeholder="เช่น 30"/>
+              placeholder="เช่น 30" decimal/>
           </div>
           {autoCost && (
             <div style={{ fontSize:12, color:S.gold, fontWeight:600, marginTop:4 }}>
@@ -716,6 +716,9 @@ export default function PageMaterials() {
   const [filterFam, setFilterFam] = useState('All')
   const [modal,       setModal]       = useState(null)
   const [openTraits,  setOpenTraits]  = useState(null) // materialId ที่ expand อยู่
+  const [purchaseModal, setPurchaseModal] = useState(null) // material ที่กำลังบันทึกการซื้อ
+  const [purchaseSaving, setPurchaseSaving] = useState(false)
+  const [purchaseGroups, setPurchaseGroups] = useState(['material']) // default ติ๊ก material ไว้ก่อน เพิ่มกลุ่มอื่นได้
 
   async function load() {
     setLoading(true)
@@ -734,6 +737,24 @@ export default function PageMaterials() {
     if (!window.confirm('ลบ "' + mat.name + '" ออกจาก stock?')) return
     await db.deleteMaterial(mat.id)
     await load()
+  }
+
+  async function handleRecordPurchase(mat, forGroups) {
+    setPurchaseSaving(true)
+    try {
+      await db.createExpense({
+        expense_date: new Date().toISOString().slice(0, 10),
+        category: 'material',
+        amount: mat.purchase_price,
+        note: `${mat.name} ${mat.purchase_size}g`,
+        for_groups: forGroups,
+      })
+      setPurchaseModal(null)
+      setPurchaseGroups(['material'])
+    } catch (e) {
+      alert('บันทึกไม่สำเร็จ: ' + e.message)
+    }
+    setPurchaseSaving(false)
   }
 
   const families   = ['All', ...FAMILIES]
@@ -864,6 +885,14 @@ export default function PageMaterials() {
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:8 }}>
+                {m.purchase_price && m.purchase_size && (
+                  <button onClick={() => setPurchaseModal(m)}
+                    style={{ background:'#f0f5ee', border:'1px solid #c8ddc0', color:'#3b6d11',
+                      borderRadius:8, padding:'6px 12px', cursor:'pointer',
+                      fontSize:12, fontFamily:'Inter,sans-serif', fontWeight:600 }}>
+                    💰 ซื้อ
+                  </button>
+                )}
                 <button onClick={() => setOpenTraits(openTraits===m.id ? null : m.id)}
                   style={{ background: openTraits===m.id ? S.goldLt : 'none',
                     border:'1px solid ' + (openTraits===m.id ? S.gold : S.border),
@@ -888,6 +917,64 @@ export default function PageMaterials() {
           </Card>
         )
       })}
+
+      {/* Modal บันทึกการซื้อ — ดึงราคา+ขนาดที่ตั้งไว้แล้วมาเติมอัตโนมัติ ไม่ต้องพิมพ์ใหม่ */}
+      {purchaseModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}
+          onClick={() => !purchaseSaving && setPurchaseModal(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:S.white, borderRadius:14, padding:20, width:'100%', maxWidth:360 }}>
+            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:18,
+              fontStyle:'italic', color:S.ink, marginBottom:4 }}>
+              บันทึกการซื้อ
+            </div>
+            <div style={{ fontSize:13, color:S.textMid, marginBottom:16 }}>
+              {purchaseModal.name} · {purchaseModal.purchase_size}g · ฿{purchaseModal.purchase_price}
+            </div>
+            <div style={{ fontSize:11, color:S.textMid, marginBottom:6 }}>
+              สำหรับกลุ่ม (เลือกได้หลายกลุ่ม)
+            </div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:18 }}>
+              {[
+                { v:'production', label:'Production', icon:'⚗️' },
+                { v:'myblends',   label:'My Blends',   icon:'🧪' },
+                { v:'retail',     label:'Retail',      icon:'🛍️' },
+                { v:'material',   label:'Material',    icon:'🧴' },
+              ].map(g => {
+                const active = purchaseGroups.includes(g.v)
+                return (
+                  <button key={g.v}
+                    onClick={() => setPurchaseGroups(prev =>
+                      prev.includes(g.v) ? prev.filter(x => x !== g.v) : [...prev, g.v])}
+                    disabled={purchaseSaving}
+                    style={{ padding:'6px 14px', borderRadius:20, cursor: purchaseSaving ? 'default' : 'pointer',
+                      fontSize:12, border:`1.5px solid ${active ? S.gold : S.border}`,
+                      background: active ? S.goldLt : 'transparent',
+                      color: active ? S.gold : S.textMid,
+                      fontWeight: active ? 600 : 400,
+                      opacity: purchaseSaving ? 0.6 : 1 }}>
+                    {g.icon} {g.label}
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={() => handleRecordPurchase(purchaseModal, purchaseGroups)} disabled={purchaseSaving}
+              style={{ width:'100%', padding:'10px 0', borderRadius:10, cursor: purchaseSaving ? 'default' : 'pointer',
+                border:'none', background: purchaseSaving ? S.border : S.gold, color:'#fff',
+                fontSize:13, fontWeight:600, fontFamily:'Inter,sans-serif', marginBottom:8,
+                opacity: purchaseSaving ? 0.6 : 1 }}>
+              {purchaseSaving ? 'กำลังบันทึก...' : '✓ บันทึก'}
+            </button>
+            <button onClick={() => setPurchaseModal(null)} disabled={purchaseSaving}
+              style={{ width:'100%', padding:'8px 0', borderRadius:10, cursor:'pointer',
+                border:'none', background:'transparent', color:S.textLt,
+                fontSize:12, fontFamily:'Inter,sans-serif' }}>
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

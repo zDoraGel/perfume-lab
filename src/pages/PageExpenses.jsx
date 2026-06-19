@@ -14,14 +14,16 @@ const GROUPS = [
   { v:'production', label:'Production',  icon:'⚗️' },
   { v:'myblends',   label:'My Blends',   icon:'🧪' },
   { v:'retail',     label:'Retail',      icon:'🛍️' },
+  { v:'material',   label:'Material',    icon:'🧴' },
 ]
 
 function categoryLabel(v) {
   return CATEGORIES.find(c => c.v === v)?.label || v
 }
 
-function groupLabel(v) {
-  return GROUPS.find(g => g.v === v)?.label || 'ไม่ระบุ'
+function groupLabels(groups) {
+  if (!groups || !groups.length) return 'ไม่ระบุกลุ่ม'
+  return groups.map(g => GROUPS.find(x => x.v === g)?.label || g).join(' + ')
 }
 
 async function fetchExpenses(monthStart) {
@@ -34,10 +36,10 @@ async function fetchExpenses(monthStart) {
   return data || []
 }
 
-async function insertExpense({ expense_date, category, amount, note, for_group }) {
+async function insertExpense({ expense_date, category, amount, note, for_groups }) {
   const { error } = await supabase
     .from('expenses')
-    .insert({ expense_date, category, amount, note, for_group: for_group || null, source: 'app' })
+    .insert({ expense_date, category, amount, note, for_groups: (for_groups && for_groups.length) ? for_groups : null, source: 'app' })
   if (error) throw error
 }
 
@@ -46,8 +48,8 @@ async function deleteExpense(id) {
   if (error) throw error
 }
 
-async function updateExpenseGroup(id, for_group) {
-  const { error } = await supabase.from('expenses').update({ for_group: for_group || null }).eq('id', id)
+async function updateExpenseGroups(id, for_groups) {
+  const { error } = await supabase.from('expenses').update({ for_groups: (for_groups && for_groups.length) ? for_groups : null }).eq('id', id)
   if (error) throw error
 }
 
@@ -61,8 +63,8 @@ export default function PageExpenses({ onBack }) {
   const [category, setCategory] = useState('card')
   const [amount,   setAmount]   = useState('')
   const [note,     setNote]     = useState('')
-  const [forGroup, setForGroup] = useState('')
-  const [groupFilter, setGroupFilter] = useState('all') // all | production | myblends | retail | none
+  const [forGroups, setForGroups] = useState([])
+  const [groupFilter, setGroupFilter] = useState('all') // all | production | myblends | retail | material | none
   const [editingGroupId, setEditingGroupId] = useState(null) // id ของรายการที่กำลังแก้กลุ่มอยู่
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -84,10 +86,10 @@ export default function PageExpenses({ onBack }) {
     if (!amt || amt <= 0) { alert('กรุณากรอกจำนวนเงิน'); return }
     setSaving(true)
     try {
-      await insertExpense({ expense_date: date, category, amount: amt, note: note.trim() || null, for_group: forGroup })
+      await insertExpense({ expense_date: date, category, amount: amt, note: note.trim() || null, for_groups: forGroups })
       setAmount('')
       setNote('')
-      setForGroup('')
+      setForGroups([])
       load()
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
@@ -105,10 +107,13 @@ export default function PageExpenses({ onBack }) {
     }
   }
 
-  async function handleUpdateGroup(id, group) {
+  async function handleToggleGroup(expense, group) {
+    const current = expense.for_groups || []
+    const next = current.includes(group)
+      ? current.filter(g => g !== group)
+      : [...current, group]
     try {
-      await updateExpenseGroup(id, group)
-      setEditingGroupId(null)
+      await updateExpenseGroups(expense.id, next)
       load()
     } catch (e) {
       alert('อัปเดตกลุ่มไม่สำเร็จ: ' + e.message)
@@ -116,8 +121,8 @@ export default function PageExpenses({ onBack }) {
   }
 
   const filteredExpenses = groupFilter === 'all' ? expenses
-    : groupFilter === 'none' ? expenses.filter(e => !e.for_group)
-    : expenses.filter(e => e.for_group === groupFilter)
+    : groupFilter === 'none' ? expenses.filter(e => !e.for_groups || e.for_groups.length === 0)
+    : expenses.filter(e => (e.for_groups || []).includes(groupFilter))
 
   const monthTotal = filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0)
   const byCategory = CATEGORIES.map(c => ({
@@ -126,13 +131,14 @@ export default function PageExpenses({ onBack }) {
   })).filter(c => c.total > 0)
 
   // ยอดรวมแยกตามกลุ่ม (ไม่ขึ้นกับ groupFilter — โชว์ภาพรวมเสมอ)
+  // รายการที่ผูกหลายกลุ่ม จะนับเต็มจำนวนในทุกกลุ่มที่ผูกไว้ (ไม่หารเฉลี่ย)
   const byGroup = [
     ...GROUPS.map(g => ({
       ...g,
-      total: expenses.filter(e => e.for_group === g.v).reduce((s, e) => s + (e.amount || 0), 0),
+      total: expenses.filter(e => (e.for_groups || []).includes(g.v)).reduce((s, e) => s + (e.amount || 0), 0),
     })),
     { v:'none', label:'ไม่ระบุกลุ่ม', icon:'◌',
-      total: expenses.filter(e => !e.for_group).reduce((s, e) => s + (e.amount || 0), 0) },
+      total: expenses.filter(e => !e.for_groups || e.for_groups.length === 0).reduce((s, e) => s + (e.amount || 0), 0) },
   ].filter(g => g.total > 0)
 
   return (
@@ -192,22 +198,23 @@ export default function PageExpenses({ onBack }) {
 
         <div style={{ marginBottom:10 }}>
           <div style={{ fontSize:11, color:S.textMid, marginBottom:5 }}>
-            สำหรับกลุ่ม (ไม่บังคับ)
+            สำหรับกลุ่ม (เลือกได้หลายกลุ่ม — ไม่บังคับ)
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             {GROUPS.map(g => (
-              <button key={g.v} onClick={() => setForGroup(prev => prev === g.v ? '' : g.v)}
+              <button key={g.v}
+                onClick={() => setForGroups(prev => prev.includes(g.v) ? prev.filter(x => x !== g.v) : [...prev, g.v])}
                 style={{ padding:'6px 14px', borderRadius:20, cursor:'pointer', fontSize:12,
-                  border:`1.5px solid ${forGroup === g.v ? S.gold : S.border}`,
-                  background: forGroup === g.v ? S.goldLt : 'transparent',
-                  color: forGroup === g.v ? S.gold : S.textMid,
-                  fontWeight: forGroup === g.v ? 600 : 400 }}>
+                  border:`1.5px solid ${forGroups.includes(g.v) ? S.gold : S.border}`,
+                  background: forGroups.includes(g.v) ? S.goldLt : 'transparent',
+                  color: forGroups.includes(g.v) ? S.gold : S.textMid,
+                  fontWeight: forGroups.includes(g.v) ? 600 : 400 }}>
                 {g.icon} {g.label}
               </button>
             ))}
           </div>
           <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
-            * ไม่เลือก = ใช้ร่วมกันทุกกลุ่ม เช่น ค่าไฟ ค่าเช่า
+            * ไม่เลือกเลย = ใช้ร่วมกันทุกกลุ่ม เช่น ค่าไฟ ค่าเช่า · เลือกได้มากกว่า 1 กลุ่ม เช่น วัตถุดิบที่ใช้ทั้ง Production และ My Blends
           </div>
         </div>
 
@@ -321,11 +328,9 @@ export default function PageExpenses({ onBack }) {
                   <button onClick={() => setEditingGroupId(prev => prev === e.id ? null : e.id)}
                     style={{ fontSize:10, padding:'2px 8px', borderRadius:12, cursor:'pointer',
                       border:'none',
-                      background: e.for_group ? '#eef0f5' : S.bg,
-                      color: e.for_group ? '#4a6aa8' : S.textLt, fontWeight:600 }}>
-                    {e.for_group
-                      ? `${GROUPS.find(g=>g.v===e.for_group)?.icon} ${groupLabel(e.for_group)}`
-                      : '◌ ไม่ระบุกลุ่ม'} ✎
+                      background: (e.for_groups?.length) ? '#eef0f5' : S.bg,
+                      color: (e.for_groups?.length) ? '#4a6aa8' : S.textLt, fontWeight:600 }}>
+                    {(e.for_groups || []).map(g => GROUPS.find(x=>x.v===g)?.icon).join('')} {groupLabels(e.for_groups)} ✎
                   </button>
                   <span style={{ fontSize:11, color:S.textLt }}>
                     {new Date(e.expense_date).toLocaleDateString('th-TH', { day:'numeric', month:'short' })}
@@ -333,22 +338,18 @@ export default function PageExpenses({ onBack }) {
                 </div>
                 {editingGroupId === e.id && (
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
-                    <button onClick={() => handleUpdateGroup(e.id, '')}
-                      style={{ padding:'4px 10px', borderRadius:14, cursor:'pointer', fontSize:11,
-                        border:`1.5px solid ${!e.for_group ? S.gold : S.border}`,
-                        background: !e.for_group ? S.goldLt : 'transparent',
-                        color: !e.for_group ? S.gold : S.textMid, fontWeight:600 }}>
-                      ◌ ไม่ระบุกลุ่ม
-                    </button>
-                    {GROUPS.map(g => (
-                      <button key={g.v} onClick={() => handleUpdateGroup(e.id, g.v)}
-                        style={{ padding:'4px 10px', borderRadius:14, cursor:'pointer', fontSize:11,
-                          border:`1.5px solid ${e.for_group === g.v ? S.gold : S.border}`,
-                          background: e.for_group === g.v ? S.goldLt : 'transparent',
-                          color: e.for_group === g.v ? S.gold : S.textMid, fontWeight:600 }}>
-                        {g.icon} {g.label}
-                      </button>
-                    ))}
+                    {GROUPS.map(g => {
+                      const active = (e.for_groups || []).includes(g.v)
+                      return (
+                        <button key={g.v} onClick={() => handleToggleGroup(e, g.v)}
+                          style={{ padding:'4px 10px', borderRadius:14, cursor:'pointer', fontSize:11,
+                            border:`1.5px solid ${active ? S.gold : S.border}`,
+                            background: active ? S.goldLt : 'transparent',
+                            color: active ? S.gold : S.textMid, fontWeight:600 }}>
+                          {g.icon} {g.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
                 {e.note && (

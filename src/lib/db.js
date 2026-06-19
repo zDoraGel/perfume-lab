@@ -486,18 +486,42 @@ export const db = {
     return { total, items: data || [] }
   },
 
-  // ── ค่าใช้จ่ายแยกตามกลุ่ม (production / myblends / retail / ไม่ระบุ) ────────────
+  // ── ค่าใช้จ่ายแยกตามกลุ่ม (production / myblends / retail) ──────────────────────
+  // รายการหนึ่งอาจผูกกับหลายกลุ่มพร้อมกัน (เช่น กล่องที่ใช้ทั้ง Production และ My Blends)
+  // นับเต็มจำนวนในทุกกลุ่มที่ผูกไว้ — ไม่หารเฉลี่ย เพราะแต่ละกลุ่มต้องเห็นค่าใช้จ่ายที่เกี่ยวข้องครบ
   // allTime=true ใช้สำหรับเทียบกับ My Blends ที่เป็นยอดสะสม (ไม่มีข้อมูลแยกเดือน)
   async getExpensesByGroupThisMonth(group, allTime = false) {
-    let query = supabase.from('expenses').select('amount, for_group')
+    let query = supabase.from('expenses').select('amount, for_groups')
     if (!allTime) {
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
         .toISOString().slice(0, 10)
       query = query.gte('expense_date', monthStart)
     }
     const { data } = await query
-    const filtered = (data || []).filter(e => e.for_group === group)
+    const filtered = (data || []).filter(e => (e.for_groups || []).includes(group))
     return filtered.reduce((s, e) => s + (e.amount ?? 0), 0)
+  },
+
+  // ── สรุปค่าใช้จ่ายทั้งหมด นับแต่ละรายการครั้งเดียว (ไม่ซ้ำ) แม้ผูกหลายกลุ่ม ──────
+  // ใช้สำหรับยอดรวมที่ต้อง "ไม่นับซ้ำ" เช่น total expenses ของทั้งระบบ
+  async getExpensesTotalDeduped(allTime = false) {
+    let query = supabase.from('expenses').select('amount')
+    if (!allTime) {
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+        .toISOString().slice(0, 10)
+      query = query.gte('expense_date', monthStart)
+    }
+    const { data } = await query
+    return (data || []).reduce((s, e) => s + (e.amount ?? 0), 0)
+  },
+
+  // ── สร้างรายการค่าใช้จ่ายใหม่ — ใช้ร่วมกันได้ทุกหน้า (PageExpenses, PageMaterials ฯลฯ) ──
+  async createExpense({ expense_date, category, amount, note, for_groups }) {
+    const { error } = await supabase.from('expenses').insert({
+      expense_date, category, amount, note: note || null,
+      for_groups: (for_groups && for_groups.length) ? for_groups : null, source: 'app',
+    })
+    if (error) throw error
   },
 
   // ── Revenue เดือนนี้ (ช่วงเวลาเดียวกับ getExpensesThisMonth เพื่อเทียบกำไรสุทธิได้ถูกต้อง) ──
