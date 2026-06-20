@@ -12,6 +12,9 @@ function WeightedPicker({ opts, value = '', onChange, max = 3, showEmoji = false
   const pcts     = WEIGHT_PCTS[selected.length] || []
   const isFull   = selected.length >= max
 
+  // selected ที่เก็บไว้อาจเป็น o.value (snake_case ของใหม่) หรือ o.label (ไทย ของเก่าจาก
+  // PageNewFormula.jsx ที่ใช้ inline buttons) — เช็คทั้งสองแบบตอนหา idx ด้านล่าง
+
   function toggle(val) {
     if (selected.includes(val)) {
       // deselect
@@ -33,14 +36,18 @@ function WeightedPicker({ opts, value = '', onChange, max = 3, showEmoji = false
       )}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
         {opts.map(o => {
-          const idx      = selected.indexOf(o.value)
+          const idx      = selected.findIndex(v => v === o.value || v === o.label)
+          if (o.label === 'สดใส' || o.label === 'นุ่มละมุน') {
+            console.log('[DEBUG]', { optLabel: o.label, optValue: o.value, selected, idx,
+              labelMatch: selected.includes(o.label), valueMatch: selected.includes(o.value) })
+          }
           const isActive = idx !== -1
           const label    = isActive && showWeight ? WEIGHT_LABELS[idx] : null
           const pct      = isActive && showWeight && pcts[idx] ? pcts[idx] : null
           const atMax    = !isActive && selected.length >= max
 
           return (
-            <button key={o.value} onClick={() => toggle(o.value)}
+            <button key={o.value} onClick={() => toggle(isActive ? selected[idx] : o.value)}
               disabled={atMax}
               style={{ padding:'7px 12px', borderRadius:20, cursor: atMax ? 'not-allowed' : 'pointer',
                 fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
@@ -105,10 +112,11 @@ function SimplePicker({ opts, value = '', onChange, max = 2, showEmoji = false }
       )}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
         {opts.map(o => {
-          const isActive = selected.includes(o.value)
+          const isActive = selected.some(v => v === o.value || v === o.label)
+          const matchedVal = selected.find(v => v === o.value || v === o.label)
           const atMax    = !isActive && selected.length >= max
           return (
-            <button key={o.value} onClick={() => toggle(o.value)}
+            <button key={o.value} onClick={() => toggle(isActive ? matchedVal : o.value)}
               disabled={atMax}
               style={{ padding:'7px 14px', borderRadius:20, cursor: atMax ? 'not-allowed' : 'pointer',
                 fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
