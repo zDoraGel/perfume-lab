@@ -10,6 +10,7 @@ import {
 function WeightedPicker({ opts, value = '', onChange, max = 3, showEmoji = false, showWeight = true }) {
   const selected = value ? value.split(',').filter(Boolean) : []
   const pcts     = WEIGHT_PCTS[selected.length] || []
+  const isFull   = selected.length >= max
 
   function toggle(val) {
     if (selected.includes(val)) {
@@ -24,6 +25,12 @@ function WeightedPicker({ opts, value = '', onChange, max = 3, showEmoji = false
 
   return (
     <div>
+      {isFull && (
+        <div style={{ fontSize:10.5, color:S.gold, marginBottom:6,
+          fontFamily:'Inter,sans-serif' }}>
+          ✓ เลือกครบ {max} แล้ว — กดตัวที่เลือกไว้เพื่อเอาออก ถ้าอยากเปลี่ยน
+        </div>
+      )}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
         {opts.map(o => {
           const idx      = selected.indexOf(o.value)
@@ -78,6 +85,7 @@ function WeightedPicker({ opts, value = '', onChange, max = 3, showEmoji = false
 // ── Simple Multi-Select (no weight) ───────────────────────────────────────────
 function SimplePicker({ opts, value = '', onChange, max = 2, showEmoji = false }) {
   const selected = value ? value.split(',').filter(Boolean) : []
+  const isFull   = selected.length >= max
 
   function toggle(val) {
     if (selected.includes(val)) {
@@ -88,25 +96,33 @@ function SimplePicker({ opts, value = '', onChange, max = 2, showEmoji = false }
   }
 
   return (
-    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-      {opts.map(o => {
-        const isActive = selected.includes(o.value)
-        const atMax    = !isActive && selected.length >= max
-        return (
-          <button key={o.value} onClick={() => toggle(o.value)}
-            disabled={atMax}
-            style={{ padding:'7px 14px', borderRadius:20, cursor: atMax ? 'not-allowed' : 'pointer',
-              fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
-              border:`1.5px solid ${isActive ? S.gold : S.border}`,
-              background: isActive ? S.goldLt : 'transparent',
-              color: isActive ? S.gold : atMax ? S.textLt : S.textMid,
-              opacity: atMax ? 0.5 : 1 }}>
-            {showEmoji && o.emoji} {o.label}
-            {o.desc && <span style={{ fontSize:10, color: isActive ? S.gold+'88' : S.textLt,
-              display:'block', marginTop:1 }}>{o.desc}</span>}
-          </button>
-        )
-      })}
+    <div>
+      {isFull && (
+        <div style={{ fontSize:10.5, color:S.gold, marginBottom:6,
+          fontFamily:'Inter,sans-serif' }}>
+          ✓ เลือกครบ {max} แล้ว — กดตัวที่เลือกไว้เพื่อเอาออก ถ้าอยากเปลี่ยน
+        </div>
+      )}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+        {opts.map(o => {
+          const isActive = selected.includes(o.value)
+          const atMax    = !isActive && selected.length >= max
+          return (
+            <button key={o.value} onClick={() => toggle(o.value)}
+              disabled={atMax}
+              style={{ padding:'7px 14px', borderRadius:20, cursor: atMax ? 'not-allowed' : 'pointer',
+                fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:500,
+                border:`1.5px solid ${isActive ? S.gold : S.border}`,
+                background: isActive ? S.goldLt : 'transparent',
+                color: isActive ? S.gold : atMax ? S.textLt : S.textMid,
+                opacity: atMax ? 0.5 : 1 }}>
+              {showEmoji && o.emoji} {o.label}
+              {o.desc && <span style={{ fontSize:10, color: isActive ? S.gold+'88' : S.textLt,
+                display:'block', marginTop:1 }}>{o.desc}</span>}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

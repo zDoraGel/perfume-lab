@@ -68,7 +68,9 @@ export default function FormulaRadarChart({ formula, items = [] }) {
   }
 
   const SIZE   = 220
-  const CX     = SIZE / 2
+  const PAD_X  = 26 // กันป้ายชื่อ family ยาวๆ (เช่น Musk, Ambery) ไม่ให้ถูก clip ที่ขอบซ้าย-ขวา
+  const VB_W   = SIZE + PAD_X * 2
+  const CX     = VB_W / 2
   const CY     = SIZE / 2
   const R_MAX  = SIZE / 2 - 36 // เว้นที่ไว้สำหรับ label
   const N      = data.length
@@ -90,7 +92,7 @@ export default function FormulaRadarChart({ formula, items = [] }) {
       </div>
 
       <div style={{ display:'flex', alignItems:'center', gap:18, flexWrap:'wrap' }}>
-        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        <svg width={VB_W} height={SIZE} viewBox={`0 0 ${VB_W} ${SIZE}`}>
           {/* Background rings */}
           {RINGS.map((r, ri) => {
             const ringPts = Array.from({ length: N }, (_, i) =>

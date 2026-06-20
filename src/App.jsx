@@ -65,6 +65,7 @@ export default function App() {
   const [moreSub,         setMoreSub]         = useState('accords')
   const [formulaPage,     setFormulaPage]     = useState('list')
   const [selectedFormula, setSelectedFormula] = useState(null)
+  const [formulaSeed,     setFormulaSeed]     = useState(null) // ข้อมูลตั้งต้นจาก Trend สำหรับ New Formula
 
   const inSubPage = tab === 'formula' && formulaPage !== 'list'
 
@@ -102,14 +103,17 @@ export default function App() {
 
         {/* ── Dashboard ────────────────────────────────────── */}
         {tab === 'dashboard' && (
-          <PageDashboard onNavigate={t => {
+          <PageDashboard onNavigate={(t, payload) => {
             // map dashboard quick-action targets to new tab structure
             if (t === 'expenses') { setTab('finance'); setFinanceSub('expenses') }
             else if (t === 'export') { setTab('finance'); setFinanceSub('export') }
             else if (t === 'report') { setTab('finance'); setFinanceSub('report') }
             else if (t === 'lot') { setTab('orders'); setOrdersSub('lot') }
             else if (t === 'formulas') { setTab('formula'); setFormulaPage('list') }
-            else if (t === 'new-formula') { setTab('formula'); setFormulaPage('newFormula') }
+            else if (t === 'new-formula') {
+              setFormulaSeed(payload || null)
+              setTab('formula'); setFormulaPage('newFormula')
+            }
             else setTab(t)
           }}/>
         )}
@@ -123,8 +127,9 @@ export default function App() {
         )}
         {tab === 'formula' && formulaPage === 'newFormula' && (
           <PageNewFormula
-            onBack={() => setFormulaPage('list')}
-            onCreate={f => { setSelectedFormula(f); setFormulaPage('detail') }}
+            initialVibe={formulaSeed?.vibe}
+            onBack={() => { setFormulaPage('list'); setFormulaSeed(null) }}
+            onCreate={f => { setSelectedFormula(f); setFormulaPage('detail'); setFormulaSeed(null) }}
           />
         )}
         {tab === 'formula' && formulaPage === 'detail' && selectedFormula && (

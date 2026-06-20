@@ -70,7 +70,7 @@ function TagPicker({ options, selected, onToggle, max = 99 }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function PageNewFormula({ onBack, onCreate }) {
+export default function PageNewFormula({ onBack, onCreate, initialVibe }) {
   const [step,          setStep]          = useState(1)
   const [materials,     setMaterials]     = useState([])
 
@@ -79,7 +79,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
 
   // Step 2 — Vibe
   const [vibeWords,     setVibeWords]     = useState([])
-  const [vibeCustom,    setVibeCustom]    = useState('')
+  const [vibeCustom,    setVibeCustom]    = useState(initialVibe || '')
 
   // Step 3 — DNA Details
   const [dnaProjection, setDnaProjection] = useState('')
@@ -760,10 +760,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
       complexity,
       avoid: JSON.stringify({ presets: notWords, custom: notCustom }),
       projection: dnaProjection,
-      texture: dnaTexture,
-      temperature: dnaTemp,
-      feeling: dnaFeeling,
-      opening_style: dnaOpening,
+      texture: dnaTexture.join(','),
+      temperature: dnaTemp.join(','),
+      feeling: dnaFeeling.join(','),
+      opening_style: dnaOpening.join(','),
       best_for: dnaBestFor,
     }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
@@ -810,10 +810,10 @@ export default function PageNewFormula({ onBack, onCreate }) {
       complexity,
       avoid: JSON.stringify({ presets: notWords, custom: notCustom }),
       projection: dnaProjection,
-      texture: dnaTexture,
-      temperature: dnaTemp,
-      feeling: dnaFeeling,
-      opening_style: dnaOpening,
+      texture: dnaTexture.join(','),
+      temperature: dnaTemp.join(','),
+      feeling: dnaFeeling.join(','),
+      opening_style: dnaOpening.join(','),
       best_for: dnaBestFor,
     }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
@@ -828,7 +828,7 @@ export default function PageNewFormula({ onBack, onCreate }) {
 
   return (
     <div>
-      <BackBtn onClick={() => step > 1 ? setStep(step - 1) : onBack}/>
+      <BackBtn onClick={() => step > 1 ? setStep(step - 1) : onBack()}/>
       <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:28, color:S.ink,
         fontStyle:'italic', marginBottom:24 }}>New Formula</div>
 

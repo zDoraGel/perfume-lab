@@ -584,7 +584,29 @@ export default function PageDetail({ formula, onBack }) {
       setVersions(v)
       setMaterials(m)
       const fresh = all.find(f => f.id === formula.id)
-      if (fresh) { setFormulaData(fresh); setDnaValues(fresh) }
+      if (fresh) {
+        // normalize: field พวกนี้อาจถูกบันทึกมาเป็น array ดิบ (จาก PageNewFormula)
+        // แทนที่จะเป็น comma-separated string ที่ FormulaDNASelector คาดหวัง
+        // ถ้าไม่ normalize ตรงนี้ ตัวเลือกทั้งหมดจะกลายเป็น "เต็มโควต้า" และกดไม่ได้เลย
+        const toCommaStr = v => {
+          if (Array.isArray(v)) return v.join(',')
+          if (typeof v === 'string' && v.startsWith('[')) {
+            try {
+              const arr = JSON.parse(v)
+              return Array.isArray(arr) ? arr.join(',') : v
+            } catch { return v }
+          }
+          return v
+        }
+        const normalized = {
+          ...fresh,
+          texture:       toCommaStr(fresh.texture),
+          temperature:   toCommaStr(fresh.temperature),
+          feeling:       toCommaStr(fresh.feeling),
+          opening_style: toCommaStr(fresh.opening_style),
+        }
+        setFormulaData(fresh); setDnaValues(normalized)
+      }
       // load latest version items for radar chart
       if (v.length > 0) {
         const latest = v[v.length - 1]

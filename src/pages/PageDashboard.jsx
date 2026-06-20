@@ -252,7 +252,7 @@ function TopRow({ rank, name, sold, produced, isRetail }) {
 }
 
 // ── Trend Card ────────────────────────────────────────────────────────────────
-function TrendCard({ trend, onToggleSaved, onToggleDone, onNote }) {
+function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula }) {
   const [editNote, setEditNote] = useState(false)
   const [noteVal,  setNoteVal]  = useState(trend.saved_note || '')
 
@@ -305,6 +305,15 @@ function TrendCard({ trend, onToggleSaved, onToggleDone, onNote }) {
 
         {/* Actions */}
         <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
+          {onCreateFormula && trend.keywords?.length > 0 && (
+            <button onClick={onCreateFormula}
+              title="สร้างสูตรจาก Trend นี้"
+              style={{ padding:'5px 8px', borderRadius:8, border:'none',
+                background:S.goldLt, color:S.gold,
+                cursor:'pointer', fontSize:14 }}>
+              ✦
+            </button>
+          )}
           <button onClick={onToggleSaved}
             title={trend.is_saved ? 'ยกเลิก bookmark' : 'บันทึกไว้'}
             style={{ padding:'5px 8px', borderRadius:8, border:'none',
@@ -768,7 +777,8 @@ export default function PageDashboard({ onNavigate }) {
               <TrendCard key={t.id} trend={t}
                 onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
                 onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
-                onNote={note => handleNote(t.id, note)}/>
+                onNote={note => handleNote(t.id, note)}
+                onCreateFormula={() => onNavigate && onNavigate('new-formula', { vibe: t.keywords.join(', ') })}/>
             ))}
           </div>
         )}
@@ -780,7 +790,8 @@ export default function PageDashboard({ onNavigate }) {
               <TrendCard key={t.id} trend={t}
                 onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
                 onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
-                onNote={note => handleNote(t.id, note)}/>
+                onNote={note => handleNote(t.id, note)}
+                onCreateFormula={() => onNavigate && onNavigate('new-formula', { vibe: t.keywords.join(', ') })}/>
             ))}
           </div>
         )}
