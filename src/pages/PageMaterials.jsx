@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '../lib/db'
 import { S, FC, FAMILIES, EVAP, inputStyle } from '../constants/theme'
 import { Card, Btn, Field, TextInput } from '../components/ui'
@@ -718,6 +718,7 @@ export default function PageMaterials() {
   const [openTraits,  setOpenTraits]  = useState(null) // materialId ที่ expand อยู่
   const [purchaseModal, setPurchaseModal] = useState(null) // material ที่กำลังบันทึกการซื้อ
   const [purchaseSaving, setPurchaseSaving] = useState(false)
+  const purchaseSavingRef = useRef(false) // กันกดซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
   const [purchaseGroups, setPurchaseGroups] = useState(['material']) // default ติ๊ก material ไว้ก่อน เพิ่มกลุ่มอื่นได้
 
   async function load() {
@@ -740,6 +741,8 @@ export default function PageMaterials() {
   }
 
   async function handleRecordPurchase(mat, forGroups) {
+    if (purchaseSavingRef.current) return // กันกดซ้ำ — เช็คทันทีไม่รอ React re-render
+    purchaseSavingRef.current = true
     setPurchaseSaving(true)
     try {
       await db.createExpense({
@@ -754,6 +757,7 @@ export default function PageMaterials() {
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
+    purchaseSavingRef.current = false
     setPurchaseSaving(false)
   }
 

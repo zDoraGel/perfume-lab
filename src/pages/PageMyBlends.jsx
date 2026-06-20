@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { S } from '../constants/theme'
@@ -835,6 +835,7 @@ export default function PageMyBlends() {
   const [purchaseSize, setPurchaseSize] = useState('')
   const [purchaseGroups, setPurchaseGroups] = useState(['myblends']) // default ติ๊ก myblends ไว้ก่อน
   const [purchaseSaving, setPurchaseSaving] = useState(false)
+  const purchaseSavingRef = useRef(false) // กันกดซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
 
   useEffect(() => {
     db.getExpensesByGroupThisMonth('myblends', true).then(setMyBlendsExpenses).catch(() => {})
@@ -896,9 +897,11 @@ export default function PageMyBlends() {
   }
 
   async function handleRecordSourcePurchase(blend, sizeG, groups) {
+    if (purchaseSavingRef.current) return // กันกดซ้ำ — เช็คทันทีไม่รอ React re-render
     const size = parseFloat(sizeG)
     if (!size || size <= 0) { alert('กรอกจำนวนกรัมที่ซื้อ'); return }
     const total = size * (blend.source_cost || 0)
+    purchaseSavingRef.current = true
     setPurchaseSaving(true)
     try {
       await db.createExpense({
@@ -917,6 +920,7 @@ export default function PageMyBlends() {
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
+    purchaseSavingRef.current = false
     setPurchaseSaving(false)
   }
 
