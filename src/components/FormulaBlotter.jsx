@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 // ── Physical size @ 300dpi — blotter strip มาตรฐาน ~1.5×12cm ───────────────────
 const DPI       = 300
 const PX_PER_CM = DPI / 2.54
-const STRIP_W_CM = 1.6
+const STRIP_W_CM = 2.5
 const STRIP_H_CM = 12
 
 const STRIP_W = Math.round(STRIP_W_CM * PX_PER_CM)
@@ -83,44 +83,41 @@ export default function FormulaBlotter({ formula, onClose }) {
 
       const cx = STRIP_W / 2
 
-      // โลโก้ร้าน (แนวตั้ง วนอ่านบนลงล่าง)
-      ctx.save()
-      ctx.translate(cx, STRIP_H * 0.28)
-      ctx.rotate(Math.PI/2)
+      // ── โลโก้ร้าน — เด่น ใหญ่ อยู่บนสุด ──────────────────────────────────────
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.font = `500 ${STRIP_W*0.16}px "Inter", sans-serif`
-      ctx.fillStyle = GOLD
-      drawTracked(ctx, 'LINEN THEORY', 0, 0, STRIP_W*0.03)
-      ctx.restore()
+      ctx.font = `700 ${STRIP_W*0.105}px "Inter", sans-serif`
+      ctx.fillStyle = INK
+      drawTracked(ctx, 'LINEN THEORY', cx, STRIP_H*0.085, STRIP_W*0.012)
 
-      // ชื่อสูตร (แนวตั้ง)
-      ctx.save()
-      ctx.translate(cx, STRIP_H * 0.55)
-      ctx.rotate(Math.PI/2)
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      const fontSize = formula.name.length > 12 ? STRIP_W*0.32 : STRIP_W*0.38
+      ctx.font = `500 ${STRIP_W*0.04}px "Inter", sans-serif`
+      ctx.fillStyle = GOLD
+      drawTracked(ctx, 'EAU DE PARFUM', cx, STRIP_H*0.115, STRIP_W*0.018)
+
+      // เส้นแบ่ง
+      ctx.beginPath()
+      ctx.moveTo(cx - STRIP_W*0.12, STRIP_H*0.15)
+      ctx.lineTo(cx + STRIP_W*0.12, STRIP_H*0.15)
+      ctx.strokeStyle = GOLD
+      ctx.lineWidth = Math.max(1, STRIP_W*0.006)
+      ctx.stroke()
+
+      // ── ชื่อสูตร ──────────────────────────────────────────────────────────
+      const fontSize = formula.name.length > 12 ? STRIP_W*0.13 : STRIP_W*0.155
       ctx.font = `italic 400 ${fontSize}px "Cormorant Garamond", serif`
       ctx.fillStyle = INK
-      ctx.fillText(formula.name, 0, 0)
-      ctx.restore()
+      ctx.fillText(formula.name, cx, STRIP_H*0.24)
 
-      // QR code ด้านล่าง
+      // ── QR code กลางแท่ง ─────────────────────────────────────────────────
       if (qrImg) {
-        const qrSize = STRIP_W * 0.78
-        ctx.drawImage(qrImg, cx - qrSize/2, STRIP_H - qrSize - STRIP_W*0.35, qrSize, qrSize)
+        const qrSize = STRIP_W * 0.62
+        ctx.drawImage(qrImg, cx - qrSize/2, STRIP_H*0.34, qrSize, qrSize)
       }
 
-      // คำโปรย
-      ctx.save()
-      ctx.translate(cx, STRIP_H - STRIP_W*0.18)
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.font = `400 ${STRIP_W*0.13}px "Inter", sans-serif`
-      ctx.fillStyle = '#9a8f80'
-      ctx.fillText('สแกนดูกลิ่นนี้', 0, 0)
-      ctx.restore()
+      // ── คำโปรย ───────────────────────────────────────────────────────────
+      ctx.font = `italic 400 ${STRIP_W*0.058}px "Cormorant Garamond", serif`
+      ctx.fillStyle = '#7a6f60'
+      ctx.fillText('Discover the scent', cx, STRIP_H*0.34 + STRIP_W*0.62 + STRIP_W*0.07)
 
       setReady(true)
     }
@@ -145,8 +142,8 @@ export default function FormulaBlotter({ formula, onClose }) {
       const { default: jsPDF } = await import('jspdf')
       const dataUrl = canvasRef.current.toDataURL('image/png')
       const pdf = new jsPDF({ orientation:'portrait', unit:'cm', format:'a4' })
-      const cols = 10, rows = 2
-      const gapCm = 0.3, marginCm = 1
+      const cols = 6, rows = 2
+      const gapCm = 0.4, marginCm = 1
       for (let col=0; col<cols; col++) {
         for (let row=0; row<rows; row++) {
           pdf.addImage(dataUrl, 'PNG',
@@ -178,7 +175,7 @@ export default function FormulaBlotter({ formula, onClose }) {
 
       <div style={{ fontSize:10.5, color:'rgba(255,255,255,0.5)', fontFamily:'Inter,sans-serif',
         textAlign:'center', maxWidth:280 }}>
-        {STRIP_W_CM}×{STRIP_H_CM} cm · QR ลิงก์ไปหน้า public ของกลิ่นนี้ · PDF ใส่ได้ 20 แท่ง/แผ่น A4
+        {STRIP_W_CM}×{STRIP_H_CM} cm · QR ลิงก์ไปหน้า public ของกลิ่นนี้ · PDF ใส่ได้ 12 แท่ง/แผ่น A4
         <div style={{ marginTop:4, wordBreak:'break-all' }}>{publicUrl}</div>
       </div>
 
@@ -193,7 +190,7 @@ export default function FormulaBlotter({ formula, onClose }) {
           style={{ padding:'9px 20px', borderRadius:20, cursor:'pointer',
             fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600,
             background:'#5a4a3a', border:'none', color:'#fff', opacity:(saving||!ready)?0.6:1 }}>
-          {saving?'⏳...':'📄 PDF (20 แท่ง/A4)'}
+          {saving?'⏳...':'📄 PDF (12 แท่ง/A4)'}
         </button>
         <button onClick={onClose}
           style={{ padding:'9px 14px', borderRadius:20, cursor:'pointer',
