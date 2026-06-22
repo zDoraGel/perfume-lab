@@ -14,6 +14,7 @@ import PageRetailStock from './pages/PageRetailStock'
 import PageReport     from './pages/PageReport'
 import PageLotPlanning from './pages/PageLotPlanning'
 import PageExpenses    from './pages/PageExpenses'
+import PageMaterialToFormula from './pages/PageMaterialToFormula'
 
 const NAV = [
   { id:'dashboard', label:'Dashboard', icon:'◉' },
@@ -38,6 +39,7 @@ const FINANCE_SUBTABS = [
 
 const MORE_SUBTABS = [
   { id:'accords', label:'Accords' },
+  { id:'materialIdea', label:'จาก Material' },
 ]
 
 function SubTabBar({ items, active, onChange }) {
@@ -128,6 +130,7 @@ export default function App() {
         {tab === 'formula' && formulaPage === 'newFormula' && (
           <PageNewFormula
             initialVibe={formulaSeed?.vibe}
+            initialPreferMats={formulaSeed?.preferMats}
             onBack={() => { setFormulaPage('list'); setFormulaSeed(null) }}
             onCreate={f => { setSelectedFormula(f); setFormulaPage('detail'); setFormulaSeed(null) }}
           />
@@ -168,6 +171,16 @@ export default function App() {
             <SubTabBar items={[...MORE_SUBTABS, { id:'materials', label:'Materials' }]}
               active={moreSub} onChange={setMoreSub}/>
             {moreSub === 'accords'   && <PageAccords/>}
+            {moreSub === 'materialIdea' && (
+              <PageMaterialToFormula
+                onBack={() => setMoreSub('accords')}
+                onSaved={(newFormula) => {
+                  setSelectedFormula(newFormula)
+                  setTab('formula')
+                  setFormulaPage('detail')
+                }}
+              />
+            )}
             {moreSub === 'materials' && <PageMaterials/>}
           </>
         )}

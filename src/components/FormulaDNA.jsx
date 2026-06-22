@@ -228,7 +228,12 @@ function AvoidPicker({ value = '', onChange }) {
   // value = comma-separated preset values + custom text
   // store as JSON: {presets: [], custom: ""}
   let parsed = { presets: [], custom: '' }
-  try { parsed = JSON.parse(value) } catch { parsed = { presets: [], custom: value || '' } }
+  try {
+    const p = value ? JSON.parse(value) : null
+    // JSON.parse(null) ไม่ throw error แต่ return null เงียบๆ — ต้องเช็คเองว่าได้ object จริง
+    if (p && typeof p === 'object') parsed = { presets: p.presets || [], custom: p.custom || '' }
+    else parsed = { presets: [], custom: value || '' }
+  } catch { parsed = { presets: [], custom: value || '' } }
 
   function togglePreset(val) {
     const next = parsed.presets.includes(val)

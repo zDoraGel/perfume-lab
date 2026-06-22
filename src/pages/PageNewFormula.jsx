@@ -70,7 +70,7 @@ function TagPicker({ options, selected, onToggle, max = 99 }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function PageNewFormula({ onBack, onCreate, initialVibe }) {
+export default function PageNewFormula({ onBack, onCreate, initialVibe, initialPreferMats }) {
   const [step,          setStep]          = useState(1)
   const [materials,     setMaterials]     = useState([])
 
@@ -94,7 +94,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe }) {
   const [notCustom,     setNotCustom]     = useState('')
 
   // Step 5 — Materials
-  const [preferMats,    setPreferMats]    = useState([])
+  const [preferMats,    setPreferMats]    = useState(initialPreferMats || [])
   const [avoidMats,     setAvoidMats]     = useState([])
   const [matCustom,     setMatCustom]     = useState('')
 
@@ -662,7 +662,10 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe }) {
   // ── Generate formula ────────────────────────────────────────────────────────
   async function genFormula() {
     setFormulaLoading(true); setFormulaSugg(null); setSelectedChoice({}); setExpandedIng(null); setExtraIngs([{matId:'',grams:'',ml:''}]); setOverrideGrams({}); setOverrideMl({})
-    const matList = materials.map(m => m.name + ' (' + m.family + ', stock: ' + m.stock + 'g, evap: ' + (m.evaporation||'?') + ')').join(', ')
+    const inStockMats  = materials.filter(m => (m.stock || 0) > 0.1)
+    const outStockMats = materials.filter(m => !((m.stock || 0) > 0.1))
+    const inStockList  = inStockMats.map(m => m.name + ' (' + m.family + ', stock: ' + m.stock + 'g, evap: ' + (m.evaporation||'?') + ')').join(', ') || '(ไม่มี)'
+    const outStockList = outStockMats.map(m => m.name + ' (' + m.family + ', evap: ' + (m.evaporation||'?') + ')').join(', ') || '(ไม่มี)'
     const compiledPrompt = buildPrompt()
     const cxPrompt = {
       simple:   'Formula complexity: simple — keep it minimal, 4-6 ingredients max, clean pyramid',
@@ -676,12 +679,18 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe }) {
       compiledPrompt,
       cxPrompt,
       'Batch size: ' + batchMl + 'ml',
-      'Materials in stock: ' + matList,
+      '',
+      '✅ MATERIALS ALREADY IN STOCK (use these FIRST — strongly preferred, no need to buy):',
+      inStockList,
+      '',
+      '🛒 MATERIALS NOT IN STOCK (would require new purchase — use ONLY if no suitable in-stock material exists for that role):',
+      outStockList,
       '',
       'Create a formula that EXACTLY matches the person and vibe description above.',
       'STRICTLY follow the Target pyramid ratio from VIBE INTELLIGENCE section.',
-      'Primary: use stock materials first.',
-      '5 alternatives per ingredient, ranked best to worst.',
+      'PRIORITY RULE: Build the formula primarily from "MATERIALS ALREADY IN STOCK". Only pick from "NOT IN STOCK" list when truly necessary for the vibe (e.g. a defining note that nothing in-stock can substitute) — and when you do, say so briefly in the Thai reason ("ต้องซื้อใหม่เพราะ...").',
+      'For "alternatives" of each ingredient: list in-stock options BEFORE out-of-stock options whenever quality/relevance is comparable.',
+      '5 alternatives per ingredient, ranked best to worst (in-stock first when comparable).',
       'Include grams AND ml for every option.',
       'Correct top/heart/base by evaporation rate.',
       '- ต้องมี Top note อย่างน้อย 1 ตัว',

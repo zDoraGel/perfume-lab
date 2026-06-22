@@ -755,6 +755,16 @@ export default function PageDetail({ formula, onBack }) {
           </div>
         )}
         <div style={{ fontSize:13, color:S.textMid, marginTop:4 }}>{formula.vibe}</div>
+        {formula.description && (
+          <div style={{ fontSize:12.5, color:S.textMid, marginTop:10, lineHeight:1.7,
+            padding:'10px 14px', background:S.goldLt, borderRadius:10,
+            borderLeft:`3px solid ${S.gold}` }}>
+            <span style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:.6,
+              textTransform:'uppercase', display:'block', marginBottom:3,
+              fontFamily:'Inter,sans-serif' }}>เหมาะกับใคร</span>
+            {formula.description}
+          </div>
+        )}
       </div>
 
       {/* Mood Image + Prompt */}
