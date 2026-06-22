@@ -4,6 +4,17 @@ import { S, FC, FAMILIES, EVAP, inputStyle } from '../constants/theme'
 import { Card, Btn, Field, TextInput } from '../components/ui'
 
 // ── NumInput — numbers only ──────────────────────────────────────────────────
+function fmtShortDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+  return `${d.getDate()} ${months[d.getMonth()]}`
+}
+function isToday(dateStr) {
+  if (!dateStr) return false
+  return dateStr === new Date().toISOString().slice(0, 10)
+}
+
 function NumInput({ label, value, onChange, placeholder, decimal = false }) {
   function handleChange(e) {
     let v = e.target.value
@@ -745,15 +756,18 @@ export default function PageMaterials() {
     purchaseSavingRef.current = true
     setPurchaseSaving(true)
     try {
+      const today = new Date().toISOString().slice(0, 10)
       await db.createExpense({
-        expense_date: new Date().toISOString().slice(0, 10),
+        expense_date: today,
         category: 'material',
         amount: mat.purchase_price,
         note: `${mat.name} ${mat.purchase_size}g`,
         for_groups: forGroups,
       })
+      await db.updateMaterial(mat.id, { last_purchased_at: today })
       setPurchaseModal(null)
       setPurchaseGroups(['material'])
+      await load() // refresh เพื่อให้ badge "ซื้อล่าสุด" อัปเดตทันที
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
@@ -890,12 +904,22 @@ export default function PageMaterials() {
               </div>
               <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:8 }}>
                 {m.purchase_price && m.purchase_size && (
-                  <button onClick={() => setPurchaseModal(m)}
-                    style={{ background:'#f0f5ee', border:'1px solid #c8ddc0', color:'#3b6d11',
-                      borderRadius:8, padding:'6px 12px', cursor:'pointer',
-                      fontSize:12, fontFamily:'Inter,sans-serif', fontWeight:600 }}>
-                    💰 ซื้อ
-                  </button>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                    <button onClick={() => setPurchaseModal(m)}
+                      style={{ background: isToday(m.last_purchased_at) ? '#fdf5e6' : '#f0f5ee',
+                        border:`1px solid ${isToday(m.last_purchased_at) ? '#e0c896' : '#c8ddc0'}`,
+                        color: isToday(m.last_purchased_at) ? '#9a7520' : '#3b6d11',
+                        borderRadius:8, padding:'6px 12px', cursor:'pointer',
+                        fontSize:12, fontFamily:'Inter,sans-serif', fontWeight:600 }}>
+                      💰 ซื้อ
+                    </button>
+                    {m.last_purchased_at && (
+                      <span style={{ fontSize:9, color: isToday(m.last_purchased_at) ? '#9a7520' : S.textLt,
+                        fontFamily:'Inter,sans-serif', whiteSpace:'nowrap' }}>
+                        {isToday(m.last_purchased_at) ? '✓ ซื้อวันนี้แล้ว' : `ซื้อล่าสุด ${fmtShortDate(m.last_purchased_at)}`}
+                      </span>
+                    )}
+                  </div>
                 )}
                 <button onClick={() => setOpenTraits(openTraits===m.id ? null : m.id)}
                   style={{ background: openTraits===m.id ? S.goldLt : 'none',
@@ -936,6 +960,12 @@ export default function PageMaterials() {
             <div style={{ fontSize:13, color:S.textMid, marginBottom:16 }}>
               {purchaseModal.name} · {purchaseModal.purchase_size}g · ฿{purchaseModal.purchase_price}
             </div>
+            {isToday(purchaseModal.last_purchased_at) && (
+              <div style={{ background:'#fdf5e6', border:'1px solid #e0c896', borderRadius:8,
+                padding:'8px 12px', marginBottom:14, fontSize:11.5, color:'#9a7520' }}>
+                ⚠ ซื้อ "{purchaseModal.name}" ไปแล้ววันนี้ — กดบันทึกซ้ำจะสร้างรายการเพิ่มอีก 1 รายการ
+              </div>
+            )}
             <div style={{ fontSize:11, color:S.textMid, marginBottom:6 }}>
               สำหรับกลุ่ม (เลือกได้หลายกลุ่ม)
             </div>

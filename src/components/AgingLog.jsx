@@ -109,7 +109,7 @@ function AddLogModal({ batchId, formulaId, producedAt, onSave, onClose }) {
             placeholder={'เช่น: แอลกอฮอลลดลง กลิ่นชาเริ่มชัดขึ้น มัสก์ยังเบา...'}
             style={{ width:'100%', padding:'10px 12px', borderRadius:10, fontSize:13,
               border:`1px solid ${S.border}`, fontFamily:'Inter,sans-serif',
-              color:S.ink, outline:'none', resize:'none', boxSizing:'border-box' }}/>
+              color:S.ink, background:S.white, outline:'none', resize:'none', boxSizing:'border-box' }}/>
         </div>
 
         <div style={{ display:'flex', gap:8 }}>

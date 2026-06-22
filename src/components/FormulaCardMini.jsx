@@ -54,7 +54,11 @@ function getFeelingLabels(formula) {
 }
 
 function matchAlias(aliases, materialId) {
-  const ma = aliases.filter(a => a.material_id === materialId)
+  // ใช้ parseInt เทียบทั้งสองฝั่ง — material_id เป็น int8 ใน Supabase
+  // บางครั้งถูก return เป็น string ทำให้ === เทียบไม่ตรง (alias หาไม่เจอเลย)
+  const mid = parseInt(materialId, 10)
+  if (isNaN(mid)) return null
+  const ma = aliases.filter(a => parseInt(a.material_id, 10) === mid)
   if (!ma.length) return null
   const preferred = ma.find(a => ['poetic','customer','market'].includes(a.context))
   return (preferred || ma[0])?.market_name || null
@@ -68,8 +72,11 @@ function MiniCard({ formula, items, aliases, concentration }) {
 
   // all notes deduped
   const notes = []
+  console.log('[DEBUG MiniCard] aliases loaded:', aliases)
   items.forEach(item => {
     const alias = matchAlias(aliases, item.material_id) || item.material?.name
+    console.log('[DEBUG MiniCard] material_id:', item.material_id, typeof item.material_id,
+      '→ matched alias:', alias, '| fallback name:', item.material?.name)
     if (alias && !notes.includes(alias)) notes.push(alias)
   })
 
