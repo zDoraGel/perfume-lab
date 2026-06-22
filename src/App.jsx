@@ -15,6 +15,7 @@ import PageReport     from './pages/PageReport'
 import PageLotPlanning from './pages/PageLotPlanning'
 import PageExpenses    from './pages/PageExpenses'
 import PageMaterialToFormula from './pages/PageMaterialToFormula'
+import PagePublicScent from './pages/PagePublicScent'
 
 const NAV = [
   { id:'dashboard', label:'Dashboard', icon:'◉' },
@@ -61,6 +62,15 @@ function SubTabBar({ items, active, onChange }) {
 }
 
 export default function App() {
+  // ── Public scent page — /scent/:id — ไม่ต้อง login เข้าดูได้ทันที ───────────────
+  const publicMatch = window.location.pathname.match(/^\/scent\/(\d+)/)
+  if (publicMatch) {
+    return <PagePublicScent formulaId={publicMatch[1]}/>
+  }
+  return <Dashboard/>
+}
+
+function Dashboard() {
   const [tab,             setTab]             = useState('formula')
   const [ordersSub,       setOrdersSub]       = useState('production')
   const [financeSub,      setFinanceSub]      = useState('report')

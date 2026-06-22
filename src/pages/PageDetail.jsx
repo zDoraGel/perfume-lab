@@ -13,6 +13,8 @@ import FormulaDNASummary from '../components/FormulaDNASummary'
 import { FormulaDNASelector } from '../components/FormulaDNA'
 import FormulaCard from '../components/FormulaCard'
 import FormulaCardMini from '../components/FormulaCardMini'
+import FormulaSwingTag from '../components/FormulaSwingTag'
+import FormulaBlotter from '../components/FormulaBlotter'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
@@ -641,6 +643,8 @@ export default function PageDetail({ formula, onBack }) {
   const [showCard,    setShowCard]    = useState(false)
   const [showMini,    setShowMini]    = useState(false)
   const [showLabel,   setShowLabel]   = useState(false)
+  const [showSwingTag,setShowSwingTag]= useState(false)
+  const [showBlotter, setShowBlotter] = useState(false)
   const [cardItems,   setCardItems]   = useState([])
 
   async function handleExportPDF() {
@@ -687,6 +691,18 @@ export default function PageDetail({ formula, onBack }) {
         <FormulaCardMini
           formula={formulaData}
           onClose={() => setShowMini(false)}/>
+      )}
+      {/* Swing Tag Modal */}
+      {showSwingTag && (
+        <FormulaSwingTag
+          formula={formulaData}
+          onClose={() => setShowSwingTag(false)}/>
+      )}
+      {/* Blotter + QR Modal */}
+      {showBlotter && (
+        <FormulaBlotter
+          formula={formulaData}
+          onClose={() => setShowBlotter(false)}/>
       )}
 
       {/* Confirmation Modal — พิมพ์ชื่อสูตรยืนยัน */}
@@ -875,6 +891,22 @@ export default function PageDetail({ formula, onBack }) {
               border:`1px solid ${S.gold}`, background:S.goldLt,
               color:S.gold }}>
             ▭ Mini Card
+          </button>
+          <button
+            onClick={() => setShowSwingTag(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            🏷️ Swing Tag
+          </button>
+          <button
+            onClick={() => setShowBlotter(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            🧪 Blotter+QR
           </button>
           <button
             onClick={() => setShowLabel(true)}
