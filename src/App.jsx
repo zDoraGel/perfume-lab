@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { S } from './constants/theme'
 import { TokenCounter } from './components/ui'
 import PageList       from './pages/PageList'
@@ -16,6 +16,8 @@ import PageLotPlanning from './pages/PageLotPlanning'
 import PageExpenses    from './pages/PageExpenses'
 import PageMaterialToFormula from './pages/PageMaterialToFormula'
 import PagePublicScent from './pages/PagePublicScent'
+import PageLogin from './pages/PageLogin'
+import { supabase } from './lib/supabase'
 
 const NAV = [
   { id:'dashboard', label:'Dashboard', icon:'◉' },
@@ -67,10 +69,29 @@ export default function App() {
   if (publicMatch) {
     return <PagePublicScent formulaId={publicMatch[1]}/>
   }
-  return <Dashboard/>
+  return <AuthGate/>
 }
 
-function Dashboard() {
+function AuthGate() {
+  const [session, setSession] = useState(undefined) // undefined = กำลังเช็ค, null = ยังไม่ login
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  if (session === undefined) {
+    return <div style={{ minHeight:'100vh', display:'flex', alignItems:'center',
+      justifyContent:'center', color:S.textLt, fontSize:13 }}>กำลังโหลด...</div>
+  }
+  if (!session) {
+    return <PageLogin onLoggedIn={setSession}/>
+  }
+  return <Dashboard onLogout={() => supabase.auth.signOut()}/>
+}
+
+function Dashboard({ onLogout }) {
   const [tab,             setTab]             = useState('formula')
   const [ordersSub,       setOrdersSub]       = useState('production')
   const [financeSub,      setFinanceSub]      = useState('report')
@@ -104,7 +125,14 @@ function Dashboard() {
         display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20, color:S.gold,
           fontStyle:'italic' }}>Perfume Lab</div>
-        <div style={{ fontSize:11, color:S.textLt }}>by Supabase + Claude AI</div>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ fontSize:11, color:S.textLt }}>by Supabase + Claude AI</div>
+          <button onClick={onLogout}
+            style={{ fontSize:11, color:S.textLt, background:'none', border:'none',
+              cursor:'pointer', textDecoration:'underline' }}>
+            ออกจากระบบ
+          </button>
+        </div>
       </div>
 
       {/* Token tracker (top-right float) */}
