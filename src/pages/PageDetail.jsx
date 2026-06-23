@@ -15,6 +15,7 @@ import FormulaCard from '../components/FormulaCard'
 import FormulaCardMini from '../components/FormulaCardMini'
 import FormulaSwingTag from '../components/FormulaSwingTag'
 import FormulaBlotter from '../components/FormulaBlotter'
+import FormulaImageUploader from '../components/FormulaImageUploader'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
@@ -645,6 +646,7 @@ export default function PageDetail({ formula, onBack }) {
   const [showLabel,   setShowLabel]   = useState(false)
   const [showSwingTag,setShowSwingTag]= useState(false)
   const [showBlotter, setShowBlotter] = useState(false)
+  const [showImageUpload, setShowImageUpload] = useState(false)
   const [cardItems,   setCardItems]   = useState([])
 
   async function handleExportPDF() {
@@ -703,6 +705,13 @@ export default function PageDetail({ formula, onBack }) {
         <FormulaBlotter
           formula={formulaData}
           onClose={() => setShowBlotter(false)}/>
+      )}
+      {/* Image Upload Modal */}
+      {showImageUpload && (
+        <FormulaImageUploader
+          formula={formulaData}
+          onClose={() => setShowImageUpload(false)}
+          onUpdated={() => window.location.reload()}/>
       )}
 
       {/* Confirmation Modal — พิมพ์ชื่อสูตรยืนยัน */}
@@ -907,6 +916,14 @@ export default function PageDetail({ formula, onBack }) {
               border:`1px solid ${S.gold}`, background:S.goldLt,
               color:S.gold }}>
             🧪 Blotter+QR
+          </button>
+          <button
+            onClick={() => setShowImageUpload(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            📷 รูปขวด
           </button>
           <button
             onClick={() => setShowLabel(true)}
