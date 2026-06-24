@@ -44,6 +44,7 @@ function BatchForm({ formulaId, onSave }) {
   const [bottle_ml,     setBottleMl]      = useState(15)
   const [qty,           setQty]           = useState('')
   const [date,          setDate]          = useState(new Date().toISOString().split('T')[0])
+  const [concentrateDate, setConcentrateDate] = useState('')
   const [notes,         setNotes]         = useState('')
   const [saving,        setSaving]        = useState(false)
   const [deductResult,  setDeductResult]  = useState(null)
@@ -89,6 +90,7 @@ function BatchForm({ formulaId, onSave }) {
     setSaving(true)
     const { data: batch, deduction, error } = await db.createBatch(formulaId, {
       concentration, bottle_ml, qty_produced: qty, produced_at: date, notes,
+      concentrate_made_at: concentrateDate || null,
       alcohol_mix: alcoholMix.filter(r => r.brand && r.ml).map(r => ({ brand: r.brand, ml: r.ml })),
       concentrate_ml: concentrateMl ? parseFloat(concentrateMl) : null,
       alcohol_ml_per_bottle: alcoholMixTotalMl ? alcoholMixTotalMl : null,
@@ -246,6 +248,19 @@ function BatchForm({ formulaId, onSave }) {
           onChange={e => { setConcentrateMl(e.target.value); setOverridden(true) }}
           placeholder="0.00"
           style={{ ...inputStyle }}/>
+      </div>
+
+      {/* วันทำหัวเชื้อ — แยกจากวันผลิต/ผสมแอลกอฮอล์ */}
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>
+          วันทำหัวเชื้อ
+        </div>
+        <input type="date" value={concentrateDate} onChange={e => setConcentrateDate(e.target.value)}
+          style={{ ...inputStyle }}/>
+        <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
+          ไม่ใส่ก็ได้ ถ้าทำหัวเชื้อ+ผสมแอลกอฮอล์วันเดียวกัน
+        </div>
       </div>
       {overridden && (
         <div style={{ fontSize:10, color:S.textLt, marginTop:-6, marginBottom:10 }}>
@@ -535,7 +550,10 @@ export default function PageProduction() {
                             </span>
                           </div>
                           <div style={{ fontSize:11, color:S.textLt }}>
-                            {b.produced_at}
+                            {b.concentrate_made_at && (
+                              <span>หัวเชื้อ {b.concentrate_made_at} → </span>
+                            )}
+                            ผลิต {b.produced_at}
                             {b.notes && ` · ${b.notes}`}
                           </div>
                           {(b.alcohol_mix?.length > 0 || b.alcohol_brand || b.concentrate_ml != null) && (

@@ -31,8 +31,13 @@ const BG   = '#fdfbf7'
 const INK  = '#2a1f14'
 const GOLD = '#8a6f4e'
 
+// ล็อกเป็น production URL เสมอ — ไม่ใช้ window.location.origin เพราะถ้า Gel เปิดแอป
+// จาก Vercel preview/branch URL (เช่น perfume-lab-git-main-....vercel.app) QR จะฝัง
+// URL ที่ถูก Vercel Deployment Protection ปิดกั้นด้วย Login ไปโดยไม่ตั้งใจ
+const PRODUCTION_URL = 'https://perfume-lab-brown.vercel.app'
+
 function getPublicUrl(formulaId) {
-  return `${window.location.origin}/scent/${formulaId}`
+  return `${PRODUCTION_URL}/scent/${formulaId}`
 }
 
 function loadImage(src) {
