@@ -20,12 +20,15 @@ const inputStyle = {
 function NewOrderForm({ formulas, customers, onSaved }) {
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
+  const [customerAddress, setCustomerAddress] = useState('')
   const [existingId,      setExistingId]      = useState(null)
   const [items,           setItems]           = useState([
     { formula_id:'', bottle_ml:15, qty:1, unit_price:'' }
   ])
   const [promptpay,       setPromptpay]       = useState(DEFAULT_PROMPTPAY)
   const [notes,           setNotes]           = useState('')
+  const [hasShipping,     setHasShipping]     = useState(false)
+  const [shippingFee,     setShippingFee]     = useState('40')
   const [saving,          setSaving]          = useState(false)
   const [savedOrder,      setSavedOrder]      = useState(null)
   const [showCustList,    setShowCustList]    = useState(false)
@@ -40,12 +43,15 @@ function NewOrderForm({ formulas, customers, onSaved }) {
     setItems(p => p.map((it, idx) => idx === i ? { ...it, [field]: value } : it))
   }
 
-  const total = items.reduce((s, it) =>
+  const itemsTotal = items.reduce((s, it) =>
     s + (parseFloat(it.unit_price) || 0) * (parseInt(it.qty) || 0), 0)
+  const shippingAmount = hasShipping ? (parseFloat(shippingFee) || 0) : 0
+  const total = itemsTotal + shippingAmount
 
   function pickCustomer(c) {
     setCustomerName(c.name)
     setCustomerContact(c.contact || '')
+    setCustomerAddress(c.address || '')
     setExistingId(c.id)
     setShowCustList(false)
   }
@@ -59,16 +65,21 @@ function NewOrderForm({ formulas, customers, onSaved }) {
       if (!customerId) {
         const { data: newCust, error: custErr } = await supabase
           .from('customers')
-          .insert({ name: customerName.trim(), contact: customerContact.trim() || null })
+          .insert({ name: customerName.trim(), contact: customerContact.trim() || null,
+            address: customerAddress.trim() || null })
           .select().single()
         if (custErr) throw custErr
         customerId = newCust.id
+      } else {
+        // ถ้าลูกค้าเดิมแก้ที่อยู่ใหม่ ให้อัปเดตด้วย
+        await supabase.from('customers').update({ address: customerAddress.trim() || null })
+          .eq('id', customerId)
       }
 
       const { data: order, error: orderErr } = await supabase
         .from('orders')
         .insert({ customer_id: customerId, total_amount: total, notes: notes || null,
-          status:'pending', promptpay_number: promptpay.trim() })
+          status:'pending', promptpay_number: promptpay.trim(), shipping_fee: shippingAmount })
         .select().single()
       if (orderErr) throw orderErr
 
@@ -126,6 +137,9 @@ function NewOrderForm({ formulas, customers, onSaved }) {
         )}
         <input value={customerContact} onChange={e => setCustomerContact(e.target.value)}
           placeholder="เบอร์โทร / LINE" style={{ ...inputStyle, marginTop:8 }}/>
+        <textarea value={customerAddress} onChange={e => setCustomerAddress(e.target.value)}
+          placeholder="ที่อยู่จัดส่ง (ถ้ามี)" rows={2}
+          style={{ ...inputStyle, marginTop:8, resize:'vertical', fontFamily:'Inter,sans-serif' }}/>
       </div>
 
       {/* รายการสินค้า */}
@@ -160,6 +174,23 @@ function NewOrderForm({ formulas, customers, onSaved }) {
       <input value={notes} onChange={e => setNotes(e.target.value)}
         placeholder="หมายเหตุ (ถ้ามี)" style={{ ...inputStyle, marginBottom:14 }}/>
 
+      {/* ค่าจัดส่ง */}
+      <div style={{ marginBottom:14, padding:'10px 12px', background:S.bg, borderRadius:8 }}>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+          fontSize:13, color:S.ink }}>
+          <input type="checkbox" checked={hasShipping}
+            onChange={e => setHasShipping(e.target.checked)}/>
+          ลูกค้าต้องเสียค่าส่ง
+        </label>
+        {hasShipping && (
+          <input type="number" value={shippingFee} onChange={e => setShippingFee(e.target.value)}
+            placeholder="ค่าส่ง (บาท)" style={{ ...inputStyle, marginTop:8 }}/>
+        )}
+        {!hasShipping && (
+          <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>ลูกค้าคนนี้ไม่เสียค่าส่ง</div>
+        )}
+      </div>
+
       <div style={{ marginBottom:14 }}>
         <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
           textTransform:'uppercase', letterSpacing:.5 }}>เบอร์พร้อมเพย์ร้าน</div>
@@ -167,11 +198,23 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           placeholder="เช่น 0812345678" style={inputStyle}/>
       </div>
 
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-        padding:'12px 0', borderTop:`1px solid ${S.border}`, marginBottom:14 }}>
-        <span style={{ fontSize:13, color:S.textMid }}>ยอดรวม</span>
-        <span style={{ fontSize:20, fontWeight:700, color:S.gold,
-          fontFamily:'Cormorant Garamond,serif' }}>฿{total.toLocaleString()}</span>
+      <div style={{ padding:'10px 0', borderTop:`1px solid ${S.border}`, marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+          color:S.textMid, marginBottom:4 }}>
+          <span>ค่าสินค้า</span><span>฿{itemsTotal.toLocaleString()}</span>
+        </div>
+        {hasShipping && (
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+            color:S.textMid, marginBottom:4 }}>
+            <span>ค่าจัดส่ง</span><span>฿{shippingAmount.toLocaleString()}</span>
+          </div>
+        )}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+          paddingTop:8, marginTop:4, borderTop:`1px solid ${S.border}` }}>
+          <span style={{ fontSize:13, color:S.textMid }}>ยอดรวม</span>
+          <span style={{ fontSize:20, fontWeight:700, color:S.gold,
+            fontFamily:'Cormorant Garamond,serif' }}>฿{total.toLocaleString()}</span>
+        </div>
       </div>
 
       <Btn onClick={saveOrder} disabled={saving || !promptpay.trim()} style={{ width:'100%' }}>
@@ -284,6 +327,13 @@ function OrderQrResult({ order, formulas, promptpay, onNewOrder }) {
             </div>
           )
         })}
+        {order.shipping_fee > 0 && (
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0',
+            borderTop:`1px dashed ${BRAND.taupe}`, marginTop:4, color:BRAND.mocha }}>
+            <span>ค่าจัดส่ง</span>
+            <span>฿{order.shipping_fee.toLocaleString()}</span>
+          </div>
+        )}
       </div>
 
       {/* divider */}

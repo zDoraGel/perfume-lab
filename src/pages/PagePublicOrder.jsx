@@ -178,6 +178,10 @@ function ReceiptView({ order, customer, items, formulas }) {
             {customer?.contact && (
               <div style={{ fontSize:11, color:BRAND.mocha, marginTop:2 }}>{customer.contact}</div>
             )}
+            {customer?.address && (
+              <div style={{ fontSize:11, color:BRAND.mocha, marginTop:4, maxWidth:200,
+                lineHeight:1.5 }}>{customer.address}</div>
+            )}
           </div>
           <div style={{ textAlign:'right' }}>
             <div style={{ fontSize:9, letterSpacing:1, color:BRAND.mocha,
@@ -215,8 +219,15 @@ function ReceiptView({ order, customer, items, formulas }) {
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12,
             color:BRAND.mocha, padding:'4px 0' }}>
             <span>รวมค่าสินค้า</span>
-            <span>฿{order.total_amount.toLocaleString()}</span>
+            <span>฿{(order.total_amount - (order.shipping_fee || 0)).toLocaleString()}</span>
           </div>
+          {order.shipping_fee > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:12,
+              color:BRAND.mocha, padding:'4px 0' }}>
+              <span>ค่าจัดส่ง</span>
+              <span>฿{order.shipping_fee.toLocaleString()}</span>
+            </div>
+          )}
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:16,
             fontWeight:800, color:BRAND.brown, paddingTop:8, marginTop:6,
             borderTop:`1.5px solid ${BRAND.brown}` }}>
