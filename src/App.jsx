@@ -14,9 +14,11 @@ import PageRetailStock from './pages/PageRetailStock'
 import PageReport     from './pages/PageReport'
 import PageLotPlanning from './pages/PageLotPlanning'
 import PageExpenses    from './pages/PageExpenses'
+import PageOrderBilling from './pages/PageOrderBilling'
 import PageMaterialToFormula from './pages/PageMaterialToFormula'
 import PagePublicScent from './pages/PagePublicScent'
 import PageLogin from './pages/PageLogin'
+import PagePublicOrder from './pages/PagePublicOrder'
 import { supabase } from './lib/supabase'
 
 const NAV = [
@@ -32,6 +34,7 @@ const ORDERS_SUBTABS = [
   { id:'retail',      label:'Retail' },
   { id:'myblends',    label:'My Blends' },
   { id:'lot',         label:'Lot' },
+  { id:'billing',     label:'บิล/QR' },
 ]
 
 const FINANCE_SUBTABS = [
@@ -68,6 +71,10 @@ export default function App() {
   const publicMatch = window.location.pathname.match(/^\/scent\/(\d+)/)
   if (publicMatch) {
     return <PagePublicScent formulaId={publicMatch[1]}/>
+  }
+  const payMatch = window.location.pathname.match(/^\/pay\/(\d+)/)
+  if (payMatch) {
+    return <PagePublicOrder orderId={payMatch[1]}/>
   }
   return <AuthGate/>
 }
@@ -190,6 +197,7 @@ function Dashboard({ onLogout }) {
             {ordersSub === 'lot' && (
               <PageLotPlanning onSelectFormula={goFormulaDetail}/>
             )}
+            {ordersSub === 'billing' && <PageOrderBilling/>}
           </>
         )}
 

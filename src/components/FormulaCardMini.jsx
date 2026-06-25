@@ -72,11 +72,8 @@ function MiniCard({ formula, items, aliases, concentration }) {
 
   // all notes deduped
   const notes = []
-  console.log('[DEBUG MiniCard] aliases loaded:', aliases)
   items.forEach(item => {
     const alias = matchAlias(aliases, item.material_id) || item.material?.name
-    console.log('[DEBUG MiniCard] material_id:', item.material_id, typeof item.material_id,
-      '→ matched alias:', alias, '| fallback name:', item.material?.name)
     if (alias && !notes.includes(alias)) notes.push(alias)
   })
 
@@ -208,7 +205,8 @@ export default function FormulaCardMini({ formula, onClose }) {
   async function savePNG() {
     setSaving(true)
     try {
-      const { default: html2canvas } = await import('html2canvas')
+      const html2canvasMod = await import('html2canvas')
+      const html2canvas = html2canvasMod.default || html2canvasMod
       const canvas = await html2canvas(cardRef.current, {
         scale:4, useCORS:true, backgroundColor:BG, width:W, height:H,
       })
@@ -223,8 +221,10 @@ export default function FormulaCardMini({ formula, onClose }) {
   async function savePDF() {
     setSaving(true)
     try {
-      const { default: html2canvas } = await import('html2canvas')
-      const { default: jsPDF }       = await import('jspdf')
+      const html2canvasMod = await import('html2canvas')
+      const html2canvas = html2canvasMod.default || html2canvasMod
+      const jsPDFMod = await import('jspdf')
+      const jsPDF = jsPDFMod.jsPDF || jsPDFMod.default || jsPDFMod
       const canvas = await html2canvas(cardRef.current, {
         scale:4, useCORS:true, backgroundColor:BG, width:W, height:H,
       })

@@ -170,7 +170,8 @@ export default function FormulaSwingTag({ formula, onClose }) {
   async function savePDF() {
     setSaving(true)
     try {
-      const { default: jsPDF } = await import('jspdf')
+      const jsPDFMod = await import('jspdf')
+      const jsPDF = jsPDFMod.jsPDF || jsPDFMod.default || jsPDFMod
       const dataUrl = canvasRef.current.toDataURL('image/png')
       const pdf = new jsPDF({ orientation:'portrait', unit:'cm', format:'a4' })
       const colGapCm = 0.6, rowGapCm = 0.6
