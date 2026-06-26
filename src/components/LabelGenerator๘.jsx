@@ -2,15 +2,13 @@ import { useState } from 'react'
 import { S } from '../constants/theme'
 
 const DPI  = 300
-const W_PX_2  = Math.round(19 / 25.4 * DPI)
-const H_PX_2  = Math.round(30 / 25.4 * DPI)
 const W_PX_15 = Math.round(50 / 25.4 * DPI)
 const H_PX_15 = Math.round(80 / 25.4 * DPI)
 const W_PX_30 = Math.round(55 / 25.4 * DPI)
 const H_PX_30 = Math.round(80 / 25.4 * DPI)
 
 const CONC_OPTIONS = ['EAU DE PARFUM','EAU DE TOILETTE','PARFUM','BODY MIST']
-const ML_OPTIONS   = [2,5,10,15,20,30,50,100]
+const ML_OPTIONS   = [5,10,15,20,30,50,100]
 const TIER_OPTIONS = ['SIGNATURE','SOFT','DEEP','LIMITED','RESERVE']
 
 function flOz(ml) { return (ml * 0.033814).toFixed(1) }
@@ -112,45 +110,12 @@ function draw30(canvas, { name, tier, concentration, bottleMl, tagline }) {
   ctx.letterSpacing = '0px'
 }
 
-function draw2(canvas, { name, tier, concentration, bottleMl, tagline }) {
-  const { ctx, w, h } = baseSetup(canvas)
-  const pad = w * 0.1
-  // LINEN THEORY — ขนาดเล็ก
-  ctx.font = `${Math.round(w*0.060)}px "Inter","Helvetica Neue",Arial,sans-serif`
-  ctx.letterSpacing = `${Math.round(w*0.014)}px`
-  ctx.fillText('LINEN THEORY', w/2, h*0.08)
-  ctx.letterSpacing = '0px'
-  // ชื่อน้ำหอม — compact
-  const nameSize = Math.round(w * 0.085)
-  ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
-  const nameLines = wrapText(ctx, name, w - pad*2)
-  const lineH = nameSize * 1.2
-  const nameCenterY = h * 0.35
-  nameLines.forEach((l, i) => {
-    ctx.fillText(l, w/2, nameCenterY + (i - (nameLines.length-1)/2) * lineH)
-  })
-  // concentration + volume
-  ctx.font = `${Math.round(w*0.050)}px "Inter","Helvetica Neue",Arial,sans-serif`
-  ctx.letterSpacing = `${Math.round(w*0.006)}px`
-  ctx.fillText(concentration, w/2, h*0.65)
-  ctx.letterSpacing = '0px'
-  ctx.font = `${Math.round(w*0.048)}px "Inter","Helvetica Neue",Arial,sans-serif`
-  ctx.fillText(`${bottleMl} ml / ${flOz(bottleMl)} fl.oz`, w/2, h*0.65 + Math.round(w*0.048)*1.6)
-  // tagline — ถ้ามี
-  if (tagline) {
-    ctx.font = `300 ${Math.round(w*0.044)}px "Courier New",Courier,monospace`
-    ctx.fillText(tagline, w/2, h*0.86)
-  }
-}
-
 function drawLabel(canvas, params) {
-  if (params.bottleMl === 2) draw2(canvas, params)
-  else if (params.bottleMl <= 20) draw15(canvas, params)
+  if (params.bottleMl <= 20) draw15(canvas, params)
   else draw30(canvas, params)
 }
 
 function getSize(bottleMl) {
-  if (bottleMl === 2) return { w: W_PX_2, h: H_PX_2 }
   return bottleMl <= 20
     ? { w: W_PX_15, h: H_PX_15 }
     : { w: W_PX_30, h: H_PX_30 }
@@ -219,7 +184,7 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
 
         <div style={{ fontSize:11, color:S.textMid, textAlign:'center',
           marginBottom:10, letterSpacing:.4 }}>
-          {bottleMl === 2 ? '19×30mm' : bottleMl <= 20 ? '50×80mm' : '55×80mm'} · <strong>{bottleMl === 2 ? '2ml layout' : bottleMl <= 20 ? '15ml layout' : '30ml layout'}</strong>
+          {bottleMl <= 20 ? '50×80mm' : '55×80mm'} · <strong>{bottleMl <= 20 ? '15ml layout' : '30ml layout'}</strong>
         </div>
 
         {/* Preview */}
@@ -315,7 +280,7 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
         </button>
 
         <div style={{ fontSize:11, color:S.textLt, textAlign:'center', marginTop:6 }}>
-          {bottleMl === 2 ? '19×30mm' : bottleMl <= 20 ? '50×80mm' : '55×80mm'} · 300dpi · Niimbot
+          {bottleMl <= 20 ? '50×80mm' : '55×80mm'} · 300dpi · Niimbot
         </div>
       </div>
     </div>
