@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
 import { S } from '../constants/theme'
 import { Btn } from '../components/ui'
 import { getPromptPayQrUrl } from '../lib/promptpay'
@@ -480,8 +481,17 @@ export default function PageOrderBilling() {
   useEffect(() => { loadAll() }, [])
 
   async function markPaid(orderId) {
-    await supabase.from('orders').update({ status:'paid' }).eq('id', orderId)
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid' } : o))
+    try {
+      const result = await db.deductStockForOrder(orderId)
+      if (result.success) {
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid' } : o))
+        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch`)
+      } else {
+        alert(`✗ ตัด stock ล้มเหลว:\n${result.error}`)
+      }
+    } catch (e) {
+      alert('Error: ' + e.message)
+    }
   }
 
   if (loading) return <div style={{ textAlign:'center', padding:40, color:S.textLt }}>Loading...</div>

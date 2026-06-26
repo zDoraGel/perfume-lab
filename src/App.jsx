@@ -19,6 +19,7 @@ import PageMaterialToFormula from './pages/PageMaterialToFormula'
 import PagePublicScent from './pages/PagePublicScent'
 import PageLogin from './pages/PageLogin'
 import PagePublicOrder from './pages/PagePublicOrder'
+import PageBackup from './pages/PageBackup'
 import { supabase } from './lib/supabase'
 
 const NAV = [
@@ -46,6 +47,7 @@ const FINANCE_SUBTABS = [
 const MORE_SUBTABS = [
   { id:'accords', label:'Accords' },
   { id:'materialIdea', label:'จาก Material' },
+  { id:'backup', label:'Backup DB' },
 ]
 
 function SubTabBar({ items, active, onChange }) {
@@ -211,7 +213,7 @@ function Dashboard({ onLogout }) {
           </>
         )}
 
-        {/* ── More (Accords / Materials) ─────────────────────── */}
+        {/* ── More (Accords / Materials / Backup) ─────────────────────── */}
         {tab === 'more' && (
           <>
             <SubTabBar items={[...MORE_SUBTABS, { id:'materials', label:'Materials' }]}
@@ -228,6 +230,7 @@ function Dashboard({ onLogout }) {
               />
             )}
             {moreSub === 'materials' && <PageMaterials/>}
+            {moreSub === 'backup' && <PageBackup/>}
           </>
         )}
       </div>
