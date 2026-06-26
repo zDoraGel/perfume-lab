@@ -13,6 +13,9 @@ import FormulaDNASummary from '../components/FormulaDNASummary'
 import { FormulaDNASelector } from '../components/FormulaDNA'
 import FormulaCard from '../components/FormulaCard'
 import FormulaCardMini from '../components/FormulaCardMini'
+import FormulaSwingTag from '../components/FormulaSwingTag'
+import FormulaBlotter from '../components/FormulaBlotter'
+import FormulaImageUploader from '../components/FormulaImageUploader'
 import PageNewVersion from './PageNewVersion'
 import PageAI from './PageAI'
 import PackageSelector from '../components/PackageSelector'
@@ -58,7 +61,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
   const total    = items.reduce((s,i) => s + parseFloat(i.grams||0), 0) * scale
   const rc       = { Top:S.green, Heart:'#8a3a68', Base:'#7a5c2e' }
   const pyramid  = { Top:[], Heart:[], Base:[] }
-  items.forEach(x => {
+  items.filter(x => x.material?.name).forEach(x => {
     const fam  = x.material?.family
     const role = (fam==='Citrus'||fam==='Fresh') ? 'Top'
                : (fam==='Floral'||fam==='Spicy') ? 'Heart' : 'Base'
@@ -468,17 +471,29 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
               scaleMl={scaleMl}
               batchMl={batchMl}
               onSaveNewVersion={async (draft, extraIngs) => {
+                function getDensity(family) {
+                  const d = { Citrus:.87, Fresh:.88, Floral:.95, Woody:1.0, Musk:1.0, Ambery:1.05, Spicy:1.02, Gourmand:1.0 }
+                  return d[family] || 0.95
+                }
                 // สร้าง items ใหม่จาก draft
                 const removeIds = draft.filter(d=>d.action==='remove').map(d=>d.originalId)
                 const newItems = items
-                  .filter(i => !removeIds.includes(i.material_id))
+                  .filter(i => !removeIds.includes(i.material_id) && i.material_id && i.material?.name)
                   .map(i => {
-                    const sw = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
+                    const sw     = draft.find(d => d.originalId === i.material_id && (d.action === 'swap' || d.action === 'rebalance'))
+                    const mat    = sw?.action === 'swap' ? sw.newMaterial : i.material
+                    const family = mat?.family || i.material?.family
+                    // ถ้ามี draft ใช้ค่าจาก draft (scaledG แล้ว)
+                    // ถ้าไม่มี ต้อง scale ด้วย scale factor ปัจจุบัน
+                    const grams  = sw?.newGrams != null
+                      ? sw.newGrams
+                      : parseFloat((parseFloat(i.grams) * scale).toFixed(4))
+                    const ml     = sw?.newMl != null
+                      ? sw.newMl
+                      : parseFloat((grams / getDensity(family)).toFixed(3))
                     return {
                       materialId: sw?.action === 'swap' ? sw.newMaterial.id : i.material_id,
-                      grams:      sw && sw.newGrams != null ? sw.newGrams : i.grams,
-                      ml:         sw?.newMl != null ? sw.newMl : i.ml,
-                      family:     sw?.action === 'swap' ? sw.newMaterial?.family : i.material?.family,
+                      grams, ml, family,
                     }
                   })
                 // เพิ่ม extra ingredients
@@ -487,6 +502,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
                   return { materialId: parseInt(e.matId), grams: parseFloat(e.grams), ml: null, family: mat?.family }
                 })
                 const allNewItems = [...newItems, ...extras]
+                console.log('🔍 saving items:', JSON.stringify(allNewItems, null, 2))
 
                 // สร้าง note อธิบาย changes
                 const swaps   = draft.filter(d=>d.action==='swap').map(d=>`${d.originalName}→${d.newMaterial?.name}`)
@@ -571,7 +587,29 @@ export default function PageDetail({ formula, onBack }) {
       setVersions(v)
       setMaterials(m)
       const fresh = all.find(f => f.id === formula.id)
-      if (fresh) { setFormulaData(fresh); setDnaValues(fresh) }
+      if (fresh) {
+        // normalize: field พวกนี้อาจถูกบันทึกมาเป็น array ดิบ (จาก PageNewFormula)
+        // แทนที่จะเป็น comma-separated string ที่ FormulaDNASelector คาดหวัง
+        // ถ้าไม่ normalize ตรงนี้ ตัวเลือกทั้งหมดจะกลายเป็น "เต็มโควต้า" และกดไม่ได้เลย
+        const toCommaStr = v => {
+          if (Array.isArray(v)) return v.join(',')
+          if (typeof v === 'string' && v.startsWith('[')) {
+            try {
+              const arr = JSON.parse(v)
+              return Array.isArray(arr) ? arr.join(',') : v
+            } catch { return v }
+          }
+          return v
+        }
+        const normalized = {
+          ...fresh,
+          texture:       toCommaStr(fresh.texture),
+          temperature:   toCommaStr(fresh.temperature),
+          feeling:       toCommaStr(fresh.feeling),
+          opening_style: toCommaStr(fresh.opening_style),
+        }
+        setFormulaData(fresh); setDnaValues(normalized)
+      }
       // load latest version items for radar chart
       if (v.length > 0) {
         const latest = v[v.length - 1]
@@ -606,6 +644,9 @@ export default function PageDetail({ formula, onBack }) {
   const [showCard,    setShowCard]    = useState(false)
   const [showMini,    setShowMini]    = useState(false)
   const [showLabel,   setShowLabel]   = useState(false)
+  const [showSwingTag,setShowSwingTag]= useState(false)
+  const [showBlotter, setShowBlotter] = useState(false)
+  const [showImageUpload, setShowImageUpload] = useState(false)
   const [cardItems,   setCardItems]   = useState([])
 
   async function handleExportPDF() {
@@ -642,7 +683,7 @@ export default function PageDetail({ formula, onBack }) {
       {/* Formula Card Modal */}
       {showCard && (
         <FormulaCard
-          formula={formulaData}
+          formula={{ ...formulaData, image_url: imageUrl }}
           latestVersion={versions[versions.length - 1]}
           items={cardItems}
           onClose={() => setShowCard(false)}/>
@@ -652,6 +693,25 @@ export default function PageDetail({ formula, onBack }) {
         <FormulaCardMini
           formula={formulaData}
           onClose={() => setShowMini(false)}/>
+      )}
+      {/* Swing Tag Modal */}
+      {showSwingTag && (
+        <FormulaSwingTag
+          formula={formulaData}
+          onClose={() => setShowSwingTag(false)}/>
+      )}
+      {/* Blotter + QR Modal */}
+      {showBlotter && (
+        <FormulaBlotter
+          formula={formulaData}
+          onClose={() => setShowBlotter(false)}/>
+      )}
+      {/* Image Upload Modal */}
+      {showImageUpload && (
+        <FormulaImageUploader
+          formula={formulaData}
+          onClose={() => setShowImageUpload(false)}
+          onUpdated={() => window.location.reload()}/>
       )}
 
       {/* Confirmation Modal — พิมพ์ชื่อสูตรยืนยัน */}
@@ -720,6 +780,16 @@ export default function PageDetail({ formula, onBack }) {
           </div>
         )}
         <div style={{ fontSize:13, color:S.textMid, marginTop:4 }}>{formula.vibe}</div>
+        {formula.description && (
+          <div style={{ fontSize:12.5, color:S.textMid, marginTop:10, lineHeight:1.7,
+            padding:'10px 14px', background:S.goldLt, borderRadius:10,
+            borderLeft:`3px solid ${S.gold}` }}>
+            <span style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:.6,
+              textTransform:'uppercase', display:'block', marginBottom:3,
+              fontFamily:'Inter,sans-serif' }}>เหมาะกับใคร</span>
+            {formula.description}
+          </div>
+        )}
       </div>
 
       {/* Mood Image + Prompt */}
@@ -830,6 +900,30 @@ export default function PageDetail({ formula, onBack }) {
               border:`1px solid ${S.gold}`, background:S.goldLt,
               color:S.gold }}>
             ▭ Mini Card
+          </button>
+          <button
+            onClick={() => setShowSwingTag(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            🏷️ Swing Tag
+          </button>
+          <button
+            onClick={() => setShowBlotter(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            🧪 Blotter+QR
+          </button>
+          <button
+            onClick={() => setShowImageUpload(true)}
+            style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontSize:11, fontWeight:500,
+              border:`1px solid ${S.gold}`, background:S.goldLt,
+              color:S.gold }}>
+            📷 รูปขวด
           </button>
           <button
             onClick={() => setShowLabel(true)}

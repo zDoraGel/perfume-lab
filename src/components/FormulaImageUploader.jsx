@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { S } from '../constants/theme'
 
 export default function FormulaImageUploader({ formula, onClose, onUpdated }) {
-  const [preview, setPreview] = useState(formula.image_url || null)
+  const [preview, setPreview] = useState(formula.bottle_image_url || null)
   const [file,     setFile]   = useState(null)
   const [uploading,setUploading] = useState(false)
   const [error,    setError]  = useState('')
@@ -31,7 +31,7 @@ export default function FormulaImageUploader({ formula, onClose, onUpdated }) {
       const imageUrl = pub.publicUrl
 
       const { error: updErr } = await supabase.from('formulas')
-        .update({ image_url: imageUrl }).eq('id', formula.id)
+        .update({ bottle_image_url: imageUrl }).eq('id', formula.id)
       if (updErr) throw updErr
 
       onUpdated?.(imageUrl)

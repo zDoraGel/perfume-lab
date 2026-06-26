@@ -71,7 +71,7 @@ function BatchForm({ formulaId, onSave }) {
   }, [concentration, bottle_ml, overridden])
 
 
-  const ALCOHOL_PRESETS = ['DEB', 'BLISS', 'Ethanol 95%']
+  const ALCOHOL_PRESETS = ['DEB', 'BLISS', 'Ethanol 95%', 'Thailai']
 
   function addAlcoholRow() {
     setAlcoholMix(prev => [...prev, { brand:'', ml:'', isCustom:false }])

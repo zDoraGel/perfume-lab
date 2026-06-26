@@ -83,7 +83,7 @@ export default function PagePublicScent({ formulaId }) {
       }
 
       const { data: othersData } = await supabase.from('formulas')
-        .select('id, name, image_url').eq('lot_status', 'active')
+        .select('id, name, bottle_image_url').eq('lot_status', 'active')
         .neq('id', formulaId).limit(4)
       setOthers(othersData || [])
 
@@ -120,10 +120,10 @@ export default function PagePublicScent({ formulaId }) {
         display:'flex', flexWrap:'wrap', gap:28, alignItems:'center', justifyContent:'center' }}>
 
         <div style={{ width:260, aspectRatio:'4/5', borderRadius:14, overflow:'hidden',
-          background: formula.image_url ? '#fff' : `linear-gradient(150deg, #ece3d3, #f8f3ea)`,
+          background: formula.bottle_image_url ? '#fff' : `linear-gradient(150deg, #ece3d3, #f8f3ea)`,
           flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          {formula.image_url ? (
-            <img src={formula.image_url} alt={formula.name}
+          {formula.bottle_image_url ? (
+            <img src={formula.bottle_image_url} alt={formula.name}
               style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
           ) : (
             <span style={{ fontSize:11, color:LT, fontStyle:'italic' }}>Linen Theory</span>
@@ -217,9 +217,9 @@ export default function PagePublicScent({ formulaId }) {
               <a key={o.id} href={`/scent/${o.id}`}
                 style={{ width:110, textDecoration:'none', color:INK }}>
                 <div style={{ width:'100%', aspectRatio:'4/5', borderRadius:10, overflow:'hidden',
-                  background: o.image_url ? '#fff' : '#ece3d3', marginBottom:8 }}>
-                  {o.image_url && (
-                    <img src={o.image_url} alt={o.name}
+                  background: o.bottle_image_url ? '#fff' : '#ece3d3', marginBottom:8 }}>
+                  {o.bottle_image_url && (
+                    <img src={o.bottle_image_url} alt={o.name}
                       style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
                   )}
                 </div>

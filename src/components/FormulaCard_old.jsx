@@ -283,10 +283,10 @@ function getFeelingLabel(raw) {
 // ── Dot row ──────────────────────────────────────────────────────────────────────
 function DotRow({ label, value, max=5 }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', marginBottom:1 }}>
-      <div style={{ width:80, fontSize:12.5, color:MID, letterSpacing:.3,
+    <div style={{ display:'flex', alignItems:'center', marginBottom:4 }}>
+      <div style={{ width:54, fontSize:7.5, color:MID, letterSpacing:.3,
         textAlign:'right', paddingRight:8, flexShrink:0 }}>{label}</div>
-      <div style={{ display:'flex', gap:4 }}>
+      <div style={{ display:'flex', gap:3.5 }}>
         {Array.from({length:max}).map((_,i) => (
           <div key={i} style={{
             width:6, height:6, borderRadius:'50%',
@@ -303,7 +303,7 @@ function DotRow({ label, value, max=5 }) {
 const Div = ({my=6}) => (
   <div style={{ display:'flex', alignItems:'center', gap:6, margin:`${my}px 0` }}>
     <div style={{ height:1, flex:1, background:LIGHT }}/>
-    <span style={{ color:LIGHT, fontSize:10 }}>✦</span>
+    <span style={{ color:LIGHT, fontSize:8 }}>✦</span>
     <div style={{ height:1, flex:1, background:LIGHT }}/>
   </div>
 )
@@ -314,6 +314,7 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
 
   const feelingVals = toArray(formula.feeling)
   const feelingEn   = feelingVals.slice(0,3).map(v => getFeelingLabel(v))
+  const feelingTh   = feelingVals.slice(0,3).map(v => FEELING_OPTS.find(o => o.value===v.trim())?.label || '')
 
   const grouped = { Top:[], Heart:[], Base:[] }
   items.forEach(item => {
@@ -333,48 +334,51 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
       fontFamily:'Inter,sans-serif', overflow:'hidden', flexShrink:0 }}>
 
       {formula.image_url && (
-        <div style={{ width:'100%', height:232, overflow:'hidden', position:'relative',
-          backgroundImage:`url(${formula.image_url})`,
-          backgroundSize:'cover', backgroundPosition:'center', backgroundRepeat:'no-repeat' }}>
+        <div style={{ width:'100%', height:213, overflow:'hidden', position:'relative' }}>
+          <img src={formula.image_url} alt={formula.name} crossOrigin="anonymous"
+            style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
           <div style={{ position:'absolute', bottom:0, left:0, right:0, height:30,
             background:`linear-gradient(transparent, ${BG})` }}/>
         </div>
       )}
 
-      <div style={{ padding: formula.image_url ? '2px 16px 36px' : '14px 16px 44px' }}>
+      <div style={{ padding: formula.image_url ? '4px 16px 44px' : '14px 16px 44px' }}>
 
-        <div style={{ fontSize:9, letterSpacing:3, textTransform:'uppercase',
-          color:MID, textAlign:'center', marginBottom:4 }}>
+        <div style={{ fontSize:7, letterSpacing:3, textTransform:'uppercase',
+          color:MID, textAlign:'center', marginBottom:6 }}>
           LINEN THEORY · EAU DE PARFUM
         </div>
 
-        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:26,
-          color:INK, textAlign:'center', lineHeight:1.1, marginBottom:2 }}>
+        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
+          color:INK, textAlign:'center', lineHeight:1.1, marginBottom:3 }}>
           {formula.name}
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:8, margin:'0px 0' }}>
           <div style={{ height:1, flex:1, background:LIGHT }}/>
-          <span style={{ color:LIGHT, fontSize:12 }}>♡</span>
+          <span style={{ color:LIGHT, fontSize:10 }}>♡</span>
           <div style={{ height:1, flex:1, background:LIGHT }}/>
         </div>
 
         {feelingEn.length > 0 && (
-          <div style={{ textAlign:'center', marginBottom:4, paddingTop:0 }}>
-            <div style={{ fontSize:8.5, letterSpacing:2, textTransform:'uppercase',
-              color:MID, marginBottom:2 }}>THE FEELING</div>
-            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:13,
-              color:INK, marginBottom:1, paddingBottom:4, lineHeight:1.3 }}>
+          <div style={{ textAlign:'center', marginBottom:7, paddingTop:0 }}>
+            <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
+              color:MID, marginBottom:3 }}>THE FEELING</div>
+            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:12,
+              color:INK, marginBottom:2 }}>
               {feelingEn.join('  ·  ')}
+            </div>
+            <div style={{ fontSize:9, color:GOLD, lineHeight:1.5, paddingBottom:8 }}>
+              {feelingTh.join('  ·  ')}
             </div>
           </div>
         )}
 
-        <div style={{ height:1, background:LIGHT, margin:'4px 0' }}/>
+        <div style={{ height:1, background:LIGHT, margin:'6px 0' }}/>
 
-        <div style={{ marginBottom:10 }}>
-          <div style={{ fontSize:8.5, letterSpacing:2, textTransform:'uppercase',
-            color:MID, textAlign:'center', marginBottom:4 }}>KEY NOTES</div>
+        <div style={{ marginBottom:6 }}>
+          <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
+            color:MID, textAlign:'center', marginBottom:6 }}>KEY NOTES</div>
           {(() => {
             const cols = [
               { role:'Top',   label:'TOP'   },
@@ -382,7 +386,7 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
               { role:'Base',  label:'BASE'  },
             ].filter(r => (grouped[r.role]||[]).length > 0)
             if (!cols.length) return (
-              <div style={{ fontSize:11, color:LIGHT, textAlign:'center', fontStyle:'italic' }}>
+              <div style={{ fontSize:9, color:LIGHT, textAlign:'center', fontStyle:'italic' }}>
                 add aliases to show notes
               </div>
             )
@@ -390,16 +394,16 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
               <div style={{ display:'grid',
                 gridTemplateColumns:`repeat(${cols.length},1fr)`, gap:0 }}>
                 {cols.map((r, idx) => (
-                  <div key={r.role} style={{ textAlign:'center', padding:'0 6px 6px',
+                  <div key={r.role} style={{ textAlign:'center', padding:'0 6px',
                     borderRight: idx < cols.length-1 ? `1px solid ${LIGHT}` : 'none' }}>
                     <div style={{ display:'flex', justifyContent:'center', marginBottom:4 }}>
                       {NoteIcons[r.role]}
                     </div>
-                    <div style={{ fontSize:8, letterSpacing:1.5, textTransform:'uppercase',
+                    <div style={{ fontSize:6, letterSpacing:1.5, textTransform:'uppercase',
                       color:MID, marginBottom:4 }}>{r.label}</div>
                     {(grouped[r.role]||[]).slice(0,3).map((n,i) => (
                       <div key={i} style={{ fontFamily:'Cormorant Garamond,serif',
-                        fontSize:14, color:INK, lineHeight:1.6, fontStyle:'italic' }}>{n}</div>
+                        fontSize:11, color:INK, lineHeight:1.7, fontStyle:'italic' }}>{n}</div>
                     ))}
                   </div>
                 ))}
@@ -417,12 +421,12 @@ function CardFront({ formula, latestVersion, items, aliases, concentration }) {
         display:'flex', justifyContent:'space-between', alignItems:'flex-end',
         background:BG }}>
         <div>
-          <div style={{ fontSize:8.5, letterSpacing:2, textTransform:'uppercase',
+          <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
             color:GOLD, fontWeight:600 }}>LINEN THEORY</div>
-          <div style={{ fontSize:10, color:MID, marginTop:1, letterSpacing:1 }}>the art of scent</div>
+          <div style={{ fontSize:8, color:MID, marginTop:1, letterSpacing:1 }}>the art of scent</div>
         </div>
         {concentration && (
-          <div style={{ fontSize:9, fontWeight:700, letterSpacing:1.5,
+          <div style={{ fontSize:7, fontWeight:700, letterSpacing:1.5,
             color: concentration==='SOFT' ? '#5a8a6a' : concentration==='DEEP' ? '#8a4a4a' : GOLD
           }}>{concentration}</div>
         )}
@@ -458,27 +462,27 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
       display:'flex', flexDirection:'column', padding:'12px 16px 10px' }}>
 
       {/* Brand + Name */}
-      <div style={{ textAlign:'center', marginBottom:5 }}>
-        <div style={{ fontSize:10.5, letterSpacing:3, textTransform:'uppercase',
-          color:MID, marginBottom:5 }}>LINEN THEORY</div>
-        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:19,
-          color:INK, lineHeight:1.05, marginBottom:3 }}>
+      <div style={{ textAlign:'center', marginBottom:8 }}>
+        <div style={{ fontSize:7, letterSpacing:3, textTransform:'uppercase',
+          color:MID, marginBottom:6 }}>LINEN THEORY</div>
+        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:12,
+          color:INK, lineHeight:1.1, marginBottom:2 }}>
           {formula.name}
         </div>
         {formula.name_meaning && (
-          <div style={{ fontSize:13, color:GOLD, fontStyle:'italic',
-            lineHeight:1.3, padding:'0 6px', marginTop:2 }}>
+          <div style={{ fontSize:8.5, color:GOLD, fontStyle:'italic',
+            lineHeight:1.5, padding:'0 6px' }}>
             ✦ {formula.name_meaning}
           </div>
         )}
       </div>
 
-      <Div my={1}/>
+      <Div my={2}/>
 
       {/* Vibe */}
       {formula.vibe && (
-        <div style={{ fontSize:13, color:'#6a5a4a', lineHeight:1.35,
-          textAlign:'center', padding:'0 4px', marginBottom:1, fontStyle:'italic' }}>
+        <div style={{ fontSize:8.5, color:'#6a5a4a', lineHeight:1.65,
+          textAlign:'center', padding:'0 4px', marginBottom:2, fontStyle:'italic' }}>
           {(() => {
             const v = formula.vibe
             if (v.length <= 70) return v
@@ -489,18 +493,18 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
         </div>
       )}
 
-      <Div my={1}/>
+      <Div my={2}/>
 
       {/* Scent Profile — Dots only */}
       <div style={{ margin:'1px 0', flexShrink:0 }}>
-        <div style={{ fontSize:10.5, letterSpacing:2, textTransform:'uppercase',
-          color:MID, textAlign:'center', marginBottom:4 }}>SCENT PROFILE</div>
+        <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
+          color:MID, textAlign:'center', marginBottom:3 }}>SCENT PROFILE</div>
         {hasTraits ? (
           <div style={{ paddingLeft:8 }}>
             {PROFILE_AXES.map((axis, i) => <DotRow key={axis} label={axis} value={dots[i]}/>)}
           </div>
         ) : (
-          <div style={{ fontSize:10, color:LIGHT, textAlign:'center', fontStyle:'italic' }}>
+          <div style={{ fontSize:8, color:LIGHT, textAlign:'center', fontStyle:'italic' }}>
             add traits to materials
           </div>
         )}
@@ -511,17 +515,17 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
       {/* Mood — icon เล็ก + text keyword */}
       {moodFeelings.length > 0 && (
         <div style={{ marginBottom:3 }}>
-          <div style={{ fontSize:10.5, letterSpacing:2, textTransform:'uppercase',
+          <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
             color:MID, textAlign:'center', marginBottom:3 }}>MOOD</div>
 
           {moodFeelings.length > 0 && (
-            <div style={{ display:'flex', justifyContent:'center', gap:6, marginBottom:2 }}>
+            <div style={{ display:'flex', justifyContent:'center', gap:10, marginBottom:2 }}>
               {moodFeelings.map((m, i) => (
-                <div key={i} style={{ textAlign:'center', width:62 }}>
+                <div key={i} style={{ textAlign:'center' }}>
                   <div style={{ display:'flex', justifyContent:'center', marginBottom:2 }}>
-                    <m.I size={15}/>
+                    <m.I size={16}/>
                   </div>
-                  <div style={{ fontSize:9.5, color:MID, letterSpacing:0, lineHeight:1.3 }}>{m.label}</div>
+                  <div style={{ fontSize:7, color:MID, letterSpacing:.5 }}>{m.label}</div>
                 </div>
               ))}
             </div>
@@ -541,19 +545,19 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
         return (
           <>
             <Div my={1}/>
-            <div style={{ paddingBottom:6, paddingTop:0 }}>
-              <div style={{ fontSize:10.5, letterSpacing:2, textTransform:'uppercase',
+            <div style={{ paddingBottom:14, paddingTop:0 }}>
+              <div style={{ fontSize:6.5, letterSpacing:2, textTransform:'uppercase',
                 color:MID, textAlign:'center', marginBottom:8 }}>BEST FOR</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 8px',
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 8px',
                 padding:'0 8px' }}>
                 {bestFor.slice(0,4).map((item, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink:0 }}>
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:5 }}>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{ flexShrink:0 }}>
                       <path d="M6 17a4 4 0 010-8 4.5 4.5 0 018.9-1A3.5 3.5 0 0119 11.5 3.5 3.5 0 0118 17Z"
                         stroke="#8a6f4e" strokeWidth="1.2" fill="none"/>
                     </svg>
-                    <span style={{ fontSize:13, color:INK, fontFamily:'Cormorant Garamond,serif',
-                      fontStyle:'italic', lineHeight:1.3 }}>{item}</span>
+                    <span style={{ fontSize:8, color:INK, fontFamily:'Cormorant Garamond,serif',
+                      fontStyle:'italic', lineHeight:1.4 }}>{item}</span>
                   </div>
                 ))}
               </div>
@@ -567,12 +571,12 @@ function CardBack({ formula, latestVersion, items, aliases, traits, concentratio
         <div style={{ height:1, background:LIGHT, marginBottom:6 }}/>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end' }}>
           <div>
-            <div style={{ fontSize:10, letterSpacing:2, textTransform:'uppercase',
+            <div style={{ fontSize:7, letterSpacing:2, textTransform:'uppercase',
               color:GOLD, fontWeight:600 }}>LINEN THEORY</div>
-            <div style={{ fontSize:11, color:MID, marginTop:2, letterSpacing:1 }}>the art of scent</div>
+            <div style={{ fontSize:8, color:MID, marginTop:1, letterSpacing:1 }}>the art of scent</div>
           </div>
           {concentration && (
-            <div style={{ fontSize:9, fontWeight:700, letterSpacing:1.5,
+            <div style={{ fontSize:7, fontWeight:700, letterSpacing:1.5,
               color: concentration==='SOFT' ? '#5a8a6a' : concentration==='DEEP' ? '#8a4a4a' : GOLD
             }}>{concentration}</div>
           )}
