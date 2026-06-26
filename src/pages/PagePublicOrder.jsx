@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getPromptPayQrUrl } from '../lib/promptpay'
 
@@ -141,10 +141,37 @@ function ReceiptView({ order, customer, items, formulas }) {
   const orderDate = order.order_date
     ? new Date(order.order_date).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
     : '-'
+  const receiptRef = useRef()
+  const [saving, setSaving] = useState(false)
+
+  async function saveAsImage() {
+    setSaving(true)
+    try {
+      const html2canvasMod = await import('html2canvas')
+      const html2canvas = html2canvasMod.default || html2canvasMod
+      const canvas = await html2canvas(receiptRef.current, { scale:3, useCORS:true, backgroundColor:'#fff' })
+      const a = document.createElement('a')
+      a.download = `receipt-order-${order.id}.png`
+      a.href = canvas.toDataURL('image/png')
+      a.click()
+    } catch (e) {
+      alert('บันทึกรูปไม่สำเร็จ: ' + e.message)
+    }
+    setSaving(false)
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:'#f8f5f0', padding:'24px 16px' }}>
-      <div style={{ maxWidth:480, margin:'0 auto', background:'#fff', borderRadius:4,
+      <div style={{ maxWidth:480, margin:'0 auto' }}>
+
+        <button onClick={saveAsImage} disabled={saving}
+          style={{ width:'100%', padding:'12px 0', borderRadius:10, cursor:'pointer',
+            fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600, marginBottom:12,
+            background:BRAND.brown, border:'none', color:'#fff', opacity:saving?0.6:1 }}>
+          {saving ? '⏳ กำลังบันทึก...' : '📷 บันทึกใบเสร็จเป็นรูป'}
+        </button>
+
+      <div ref={receiptRef} style={{ background:'#fff', borderRadius:4,
         padding:'32px 24px 28px', fontFamily:'Inter,sans-serif', color:BRAND.brown,
         border:`1px solid ${BRAND.taupe}` }}>
 
@@ -256,6 +283,7 @@ function ReceiptView({ order, customer, items, formulas }) {
           letterSpacing:1 }}>
           LINEN THEORY · the art of scent
         </div>
+      </div>
       </div>
     </div>
   )
