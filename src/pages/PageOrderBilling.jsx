@@ -181,11 +181,21 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
       }
 
       // แลกแต้ม: หัก 20 แต้ม + บันทึกประวัติการแลก (ทำทันทีไม่ต้องรอจ่าย)
-      const pointsDelta = (isExternal ? pointsEarned : 0) - (redeemType ? REDEEM_POINTS_COST : 0)
+      // ดึงแต้มปัจจุบันสดใหม่ตรงนี้ — ห้ามใช้ customerRow เก่าเพราะอาจไม่ sync
+      const pointsEarnedDelta = isExternal ? pointsEarned : 0
+      const pointsSpentDelta  = redeemType ? REDEEM_POINTS_COST : 0
+      const pointsDelta = pointsEarnedDelta - pointsSpentDelta
       if (pointsDelta !== 0) {
-        await supabase.from('customers')
-          .update({ loyalty_points: (customerRow?.loyalty_points || 0) + pointsDelta })
+        const { data: freshCust, error: fetchErr } = await supabase
+          .from('customers').select('loyalty_points').eq('id', customerId).single()
+        if (fetchErr) throw fetchErr
+        const newPoints = Math.max(0, (freshCust?.loyalty_points || 0) + pointsDelta)
+        const { error: ptsErr } = await supabase.from('customers')
+          .update({ loyalty_points: newPoints })
           .eq('id', customerId)
+        if (ptsErr) {
+          alert(`บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ: ${ptsErr.message}\nกรุณาแก้แต้มลูกค้าเองในหน้า Customers`)
+        }
       }
       if (redeemType) {
         const redeemedFormulaName = redeemType === 'perfume_2ml'
