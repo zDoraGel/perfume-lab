@@ -9,7 +9,7 @@ import { getPromptPayQrUrl } from '../lib/promptpay'
 const PRODUCTION_URL = 'https://perfume-lab-brown.vercel.app'
 
 // TODO: เปลี่ยนเป็นเบอร์พร้อมเพย์จริงของร้าน (Gel จะส่งมาทีหลัง)
-const DEFAULT_PROMPTPAY = ''
+const DEFAULT_PROMPTPAY = '0963691593'
 
 const inputStyle = {
   width:'100%', padding:'10px 12px', borderRadius:8,
@@ -17,14 +17,37 @@ const inputStyle = {
   fontFamily:'Inter,sans-serif',
 }
 
+// แต้มสะสม: ทุก 100 บาท = 1 แต้ม — ให้เฉพาะช่องทาง แอป / Facebook / Instagram
+const POINTS_PER_BAHT = 100
+const POINTS_ELIGIBLE_CHANNELS = ['app', 'facebook', 'instagram', 'line']
+// ช่องทางที่ยังต้องสร้าง QR ให้ลูกค้าจ่าย (FB/IG/LINE = คุยขาย แต่ยังไม่จ่าย)
+// ส่วน TikTok/Shopee มีระบบจ่ายเงินในตัวแพลตฟอร์มแล้ว ไม่ต้องมี QR
+const QR_CHANNELS = ['app', 'facebook', 'instagram', 'line']
+function calcPoints(amount, channel) {
+  if (!POINTS_ELIGIBLE_CHANNELS.includes(channel)) return 0
+  return Math.floor((amount || 0) / POINTS_PER_BAHT)
+}
+
+const BOTTLE_SIZES = [5, 15, 30, 50, 100]
+
+const CHANNELS = [
+  { value:'app',       label:'แอป (QR PromptPay)' },
+  { value:'facebook',  label:'Facebook' },
+  { value:'instagram', label:'Instagram' },
+  { value:'line',      label:'LINE' },
+  { value:'tiktok',    label:'TikTok' },
+  { value:'shopee',    label:'Shopee' },
+]
+
 // ── ฟอร์มสร้างออเดอร์ใหม่ ────────────────────────────────────────────────────────
 function NewOrderForm({ formulas, customers, onSaved }) {
+  const [channel,         setChannel]         = useState('app')
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
   const [existingId,      setExistingId]      = useState(null)
   const [items,           setItems]           = useState([
-    { formula_id:'', bottle_ml:15, qty:1, unit_price:'' }
+    { formula_id:'', bottle_ml:15, qty:1, unit_price:'', original_price:'', discount_type:null, discount_value:'', discount_reason:'' }
   ])
   const [promptpay,       setPromptpay]       = useState(DEFAULT_PROMPTPAY)
   const [notes,           setNotes]           = useState('')
@@ -35,7 +58,7 @@ function NewOrderForm({ formulas, customers, onSaved }) {
   const [showCustList,    setShowCustList]    = useState(false)
 
   function addItem() {
-    setItems(p => [...p, { formula_id:'', bottle_ml:15, qty:1, unit_price:'' }])
+    setItems(p => [...p, { formula_id:'', bottle_ml:15, qty:1, unit_price:'', original_price:'', discount_type:null, discount_value:'', discount_reason:'' }])
   }
   function removeItem(i) {
     setItems(p => p.filter((_, idx) => idx !== i))
@@ -44,8 +67,16 @@ function NewOrderForm({ formulas, customers, onSaved }) {
     setItems(p => p.map((it, idx) => idx === i ? { ...it, [field]: value } : it))
   }
 
+  function itemFinalPrice(it) {
+    const baseOriginal = parseFloat(it.original_price) || parseFloat(it.unit_price) || 0
+    const discountVal  = parseFloat(it.discount_value) || 0
+    if (it.discount_type === 'fixed') return baseOriginal - discountVal
+    if (it.discount_type === 'percent') return baseOriginal * (1 - discountVal / 100)
+    return baseOriginal
+  }
+
   const itemsTotal = items.reduce((s, it) =>
-    s + (parseFloat(it.unit_price) || 0) * (parseInt(it.qty) || 0), 0)
+    s + itemFinalPrice(it) * (parseInt(it.qty) || 0), 0)
   const shippingAmount = hasShipping ? (parseFloat(shippingFee) || 0) : 0
   const total = itemsTotal + shippingAmount
 
@@ -60,9 +91,11 @@ function NewOrderForm({ formulas, customers, onSaved }) {
   async function saveOrder() {
     if (!customerName.trim()) return alert('กรอกชื่อลูกค้าก่อนค่ะ')
     if (items.every(it => !it.formula_id)) return alert('เลือกสินค้าอย่างน้อย 1 รายการ')
+    const isExternal = !QR_CHANNELS.includes(channel)
     setSaving(true)
     try {
       let customerId = existingId
+      let customerRow = null
       if (!customerId) {
         const { data: newCust, error: custErr } = await supabase
           .from('customers')
@@ -71,32 +104,61 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           .select().single()
         if (custErr) throw custErr
         customerId = newCust.id
+        customerRow = newCust
       } else {
         // ถ้าลูกค้าเดิมแก้ที่อยู่ใหม่ ให้อัปเดตด้วย
-        await supabase.from('customers').update({ address: customerAddress.trim() || null })
-          .eq('id', customerId)
+        const { data: updated } = await supabase.from('customers')
+          .update({ address: customerAddress.trim() || null })
+          .eq('id', customerId).select().single()
+        customerRow = updated
       }
+
+      const status = isExternal ? 'paid' : 'pending'
+      const pointsEarned = isExternal ? calcPoints(total, channel) : 0
 
       const { data: order, error: orderErr } = await supabase
         .from('orders')
         .insert({ customer_id: customerId, total_amount: total, notes: notes || null,
-          status:'pending', promptpay_number: promptpay.trim(), shipping_fee: shippingAmount })
+          status, channel, points_earned: pointsEarned,
+          promptpay_number: isExternal ? null : promptpay.trim(), shipping_fee: shippingAmount })
         .select().single()
       if (orderErr) throw orderErr
 
       const validItems = items.filter(it => it.formula_id)
-      const itemRows = validItems.map(it => ({
-        order_id: order.id,
-        formula_id: parseInt(it.formula_id),
-        bottle_ml: it.bottle_ml || null,
-        qty: parseInt(it.qty) || 1,
-        unit_price: parseFloat(it.unit_price) || 0,
-        subtotal: (parseFloat(it.unit_price) || 0) * (parseInt(it.qty) || 1),
-      }))
+      const itemRows = validItems.map(it => {
+        const originalPrice = parseFloat(it.original_price) || parseFloat(it.unit_price) || 0
+        const qty = parseInt(it.qty) || 1
+        const finalPrice = itemFinalPrice(it)
+        return {
+          order_id: order.id,
+          formula_id: parseInt(it.formula_id),
+          bottle_ml: it.bottle_ml || null,
+          qty: qty,
+          original_price: originalPrice,
+          discount_type: it.discount_type || null,
+          discount_value: it.discount_value ? parseFloat(it.discount_value) : 0,
+          discount_reason: it.discount_reason || null,
+          unit_price: finalPrice,
+          subtotal: finalPrice * qty,
+        }
+      })
       const { error: itemsErr } = await supabase.from('order_items').insert(itemRows)
       if (itemsErr) throw itemsErr
 
-      setSavedOrder({ ...order, customer_name: customerName, items: itemRows })
+      // ช่องทางนอกแอป = จ่ายแล้วจริง → ตัดสต็อก + ให้แต้มทันที
+      if (isExternal) {
+        const stockResult = await db.deductStockForOrder(order.id)
+        if (!stockResult.success) {
+          alert(`บันทึกออเดอร์แล้ว แต่ตัดสต็อกไม่สำเร็จ: ${stockResult.error}\nกรุณาตัดสต็อกเองในหน้า Production`)
+        }
+        if (pointsEarned > 0) {
+          await supabase.from('customers')
+            .update({ loyalty_points: (customerRow?.loyalty_points || 0) + pointsEarned })
+            .eq('id', customerId)
+        }
+      }
+
+      setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal, pointsEarned })
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
@@ -104,6 +166,11 @@ function NewOrderForm({ formulas, customers, onSaved }) {
   }
 
   if (savedOrder) {
+    if (savedOrder.isExternal) {
+      return (
+        <ExternalSaleResult order={savedOrder} formulas={formulas} onNewOrder={() => onSaved()}/>
+      )
+    }
     return (
       <OrderQrResult order={savedOrder} formulas={formulas} promptpay={promptpay}
         onNewOrder={() => onSaved()}/>
@@ -114,6 +181,27 @@ function NewOrderForm({ formulas, customers, onSaved }) {
     <div style={{ background:S.white, borderRadius:14, border:`1px solid ${S.border}`,
       padding:16, marginBottom:20 }}>
 
+      {/* ช่องทางขาย */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
+          textTransform:'uppercase', letterSpacing:.5 }}>ช่องทางขาย</div>
+        <select value={channel} onChange={e => setChannel(e.target.value)} style={inputStyle}>
+          {CHANNELS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+        {QR_CHANNELS.includes(channel) && channel !== 'app' && (
+          <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>
+            💡 ทักแชทขายผ่าน {CHANNELS.find(c=>c.value===channel)?.label} — ยังต้องสร้าง QR ให้ลูกค้าสแกนจ่ายเหมือนเดิม
+            {POINTS_ELIGIBLE_CHANNELS.includes(channel) ? ' (ให้แต้มสะสมด้วย)' : ''}
+          </div>
+        )}
+        {!QR_CHANNELS.includes(channel) && (
+          <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>
+            💡 ลูกค้าจ่ายผ่าน {CHANNELS.find(c=>c.value===channel)?.label} แล้ว (มีระบบจ่ายเงินในแพลตฟอร์ม) — ระบบจะ mark ว่าจ่ายแล้วและตัดสต็อกทันที ไม่ต้องสร้าง QR
+            {POINTS_ELIGIBLE_CHANNELS.includes(channel) ? ' พร้อมให้แต้มสะสม' : ' (ช่องทางนี้ไม่ให้แต้มสะสม)'}
+          </div>
+        )}
+      </div>
+
       {/* ลูกค้า */}
       <div style={{ marginBottom:14, position:'relative' }}>
         <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
@@ -121,22 +209,47 @@ function NewOrderForm({ formulas, customers, onSaved }) {
         <input value={customerName}
           onChange={e => { setCustomerName(e.target.value); setExistingId(null); setShowCustList(true) }}
           onFocus={() => setShowCustList(true)}
-          placeholder="ชื่อลูกค้า" style={inputStyle}/>
-        {showCustList && customerName.trim() && (
+          placeholder="ชื่อลูกค้า (หรือพิมพ์เบอร์โทรค้นหาได้)" style={inputStyle}/>
+        {existingId && (
+          <div style={{ fontSize:11, color:S.green, fontWeight:600, marginTop:5 }}>
+            ✓ ลูกค้าเดิม — ใช้ข้อมูล/แต้มสะสมที่มีอยู่แล้ว
+          </div>
+        )}
+        {showCustList && (customerName.trim() || customerContact.trim()) && !existingId && (
           <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:20,
             background:S.white, border:`1px solid ${S.gold}`, borderRadius:10,
             maxHeight:160, overflowY:'auto', boxShadow:'0 6px 18px rgba(0,0,0,0.08)' }}>
-            {customers.filter(c => c.name.toLowerCase().includes(customerName.toLowerCase())).slice(0,5)
-              .map(c => (
+            {customers.filter(c => {
+              const qName = customerName.toLowerCase()
+              const qContact = customerContact.toLowerCase()
+              return (qName && (c.name.toLowerCase().includes(qName) || (c.contact || '').toLowerCase().includes(qName)))
+                || (qContact && (c.contact || '').toLowerCase().includes(qContact))
+            }).slice(0,5).map(c => (
                 <div key={c.id} onClick={() => pickCustomer(c)}
                   style={{ padding:'8px 12px', cursor:'pointer', fontSize:13,
-                    borderBottom:`1px solid ${S.border}` }}>
-                  {c.name} {c.contact && <span style={{ color:S.textLt }}>· {c.contact}</span>}
+                    borderBottom:`1px solid ${S.border}`, display:'flex',
+                    justifyContent:'space-between', alignItems:'center' }}>
+                  <span>{c.name} {c.contact && <span style={{ color:S.textLt }}>· {c.contact}</span>}</span>
+                  {c.loyalty_points > 0 && (
+                    <span style={{ fontSize:11, color:S.gold, fontWeight:600 }}>🏆 {c.loyalty_points}</span>
+                  )}
                 </div>
               ))}
+            {customers.filter(c => {
+              const qName = customerName.toLowerCase()
+              const qContact = customerContact.toLowerCase()
+              return (qName && (c.name.toLowerCase().includes(qName) || (c.contact || '').toLowerCase().includes(qName)))
+                || (qContact && (c.contact || '').toLowerCase().includes(qContact))
+            }).length === 0 && (
+              <div style={{ padding:'8px 12px', fontSize:12, color:S.textLt }}>
+                ไม่เจอลูกค้าเดิม — จะสร้างใหม่ให้
+              </div>
+            )}
           </div>
         )}
-        <input value={customerContact} onChange={e => setCustomerContact(e.target.value)}
+        <input value={customerContact}
+          onChange={e => { setCustomerContact(e.target.value); setExistingId(null); setShowCustList(true) }}
+          onFocus={() => setShowCustList(true)}
           placeholder="เบอร์โทร / LINE" style={{ ...inputStyle, marginTop:8 }}/>
         <textarea value={customerAddress} onChange={e => setCustomerAddress(e.target.value)}
           placeholder="ที่อยู่จัดส่ง (ถ้ามี)" rows={2}
@@ -147,23 +260,128 @@ function NewOrderForm({ formulas, customers, onSaved }) {
       <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
         textTransform:'uppercase', letterSpacing:.5 }}>รายการสินค้า</div>
       {items.map((it, i) => (
-        <div key={i} style={{ display:'flex', gap:6, marginBottom:8, alignItems:'center' }}>
-          <select value={it.formula_id} onChange={e => updateItem(i, 'formula_id', e.target.value)}
-            style={{ ...inputStyle, flex:2.2 }}>
-            <option value="">-- เลือกกลิ่น --</option>
-            {formulas.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-          <input type="number" value={it.bottle_ml} onChange={e => updateItem(i, 'bottle_ml', e.target.value)}
-            placeholder="ml" style={{ ...inputStyle, flex:0.7 }}/>
-          <input type="number" value={it.qty} onChange={e => updateItem(i, 'qty', e.target.value)}
-            placeholder="qty" style={{ ...inputStyle, flex:0.7 }}/>
-          <input type="number" value={it.unit_price} onChange={e => updateItem(i, 'unit_price', e.target.value)}
-            placeholder="ราคา/ขวด" style={{ ...inputStyle, flex:1 }}/>
-          {items.length > 1 && (
-            <button onClick={() => removeItem(i)}
-              style={{ background:'none', border:'none', color:S.textLt, cursor:'pointer',
-                fontSize:16, flexShrink:0 }}>×</button>
-          )}
+        <div key={i} style={{ marginBottom:12, border:`1px solid ${S.border}`, borderRadius:8, padding:10, background:S.bg }}>
+          {/* แถว 1: เลือกกลิ่น (เต็มแถว) */}
+          <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:8 }}>
+            <select value={it.formula_id} onChange={e => updateItem(i, 'formula_id', e.target.value)}
+              style={{ ...inputStyle, flex:1, minWidth:0 }}>
+              <option value="">-- เลือกกลิ่น --</option>
+              <optgroup label="Original">
+                {formulas.filter(f => (f.formula_type || 'original') === 'original')
+                  .map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </optgroup>
+              <optgroup label="Inspired">
+                {formulas.filter(f => f.formula_type === 'inspired')
+                  .map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </optgroup>
+            </select>
+            {items.length > 1 && (
+              <button onClick={() => removeItem(i)}
+                style={{ background:'none', border:'none', color:S.textLt, cursor:'pointer',
+                  fontSize:18, flexShrink:0, padding:'0 4px' }}>×</button>
+            )}
+          </div>
+
+          {/* แถว 2: ml / จำนวน / ราคาเต็ม */}
+          <div style={{ display:'flex', gap:6, marginBottom:4 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:9.5, color:S.textLt, textTransform:'uppercase',
+                letterSpacing:.3, marginBottom:3 }}>ขนาด (ml)</div>
+              <select value={it.bottle_ml} onChange={e => updateItem(i, 'bottle_ml', e.target.value)}
+                style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }}>
+                {BOTTLE_SIZES.map(ml => <option key={ml} value={ml}>{ml} ml</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:9.5, color:S.textLt, textTransform:'uppercase',
+                letterSpacing:.3, marginBottom:3 }}>จำนวน</div>
+              <input type="number" value={it.qty} onChange={e => updateItem(i, 'qty', e.target.value)}
+                placeholder="จำนวน" style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }}/>
+            </div>
+            <div style={{ flex:1.2, minWidth:0 }}>
+              <div style={{ fontSize:9.5, color:S.textLt, textTransform:'uppercase',
+                letterSpacing:.3, marginBottom:3 }}>ราคาเต็ม</div>
+              <input type="number" value={it.unit_price} onChange={e => updateItem(i, 'unit_price', e.target.value)}
+                placeholder="ราคาเต็ม" style={{ ...inputStyle, width:'100%', boxSizing:'border-box' }}/>
+            </div>
+          </div>
+
+          {/* Discount Section */}
+          <div style={{ padding:'10px 12px', background:'#fff', borderRadius:6,
+            border:`1px solid ${S.border}` }}>
+            <div style={{ fontSize:10, fontWeight:600, color:S.textMid,
+              textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
+              ส่วนลด (optional)
+            </div>
+            
+            <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+              {/* Original Price */}
+              <div style={{ flex:1 }}>
+                <label style={{ fontSize:10, color:S.textLt }}>ราคาปกติ</label>
+                <input
+                  type="number"
+                  value={it.original_price || it.unit_price || ''}
+                  onChange={e => updateItem(i, 'original_price', e.target.value)}
+                  placeholder={it.unit_price}
+                  style={{ ...inputStyle, fontSize:12 }}
+                />
+              </div>
+              
+              {/* Discount Type */}
+              <div style={{ flex:0.8 }}>
+                <label style={{ fontSize:10, color:S.textLt }}>ชนิด</label>
+                <select
+                  value={it.discount_type || ''}
+                  onChange={e => updateItem(i, 'discount_type', e.target.value || null)}
+                  style={{ ...inputStyle, fontSize:12 }}>
+                  <option value="">ไม่มี</option>
+                  <option value="fixed">บาท</option>
+                  <option value="percent">%</option>
+                </select>
+              </div>
+              
+              {/* Discount Value */}
+              <div style={{ flex:0.8 }}>
+                <label style={{ fontSize:10, color:S.textLt }}>จำนวน</label>
+                <input
+                  type="number"
+                  value={it.discount_value || ''}
+                  onChange={e => updateItem(i, 'discount_value', e.target.value)}
+                  placeholder="0"
+                  disabled={!it.discount_type}
+                  style={{ ...inputStyle, fontSize:12, opacity: it.discount_type ? 1 : 0.5 }}
+                />
+              </div>
+            </div>
+            
+            {/* Discount Reason */}
+            <input
+              type="text"
+              value={it.discount_reason || ''}
+              onChange={e => updateItem(i, 'discount_reason', e.target.value)}
+              placeholder="เหตุผล (summer sale, loyal customer, etc)"
+              style={{ ...inputStyle, fontSize:12, marginBottom:8 }}
+            />
+            
+            {/* Display calculated price */}
+            {it.discount_type && (() => {
+              const baseOriginal = parseFloat(it.original_price) || parseFloat(it.unit_price) || 0
+              const discountVal  = parseFloat(it.discount_value) || 0
+              const finalPrice   = it.discount_type === 'fixed'
+                ? baseOriginal - discountVal
+                : baseOriginal * (1 - discountVal / 100)
+              return (
+                <div style={{ padding:'8px', background:S.goldLt, borderRadius:6,
+                  fontSize:11, color:S.ink }}>
+                  {it.discount_type === 'fixed' ? (
+                    <>ราคาเก่า {baseOriginal} - {discountVal} = <strong>{finalPrice.toFixed(2)}</strong> บาท</>
+                  ) : (
+                    <>ราคาเก่า {baseOriginal} × (1 - {discountVal}%) = <strong>{finalPrice.toFixed(2)}</strong> บาท</>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
         </div>
       ))}
       <button onClick={addItem}
@@ -192,12 +410,14 @@ function NewOrderForm({ formulas, customers, onSaved }) {
         )}
       </div>
 
-      <div style={{ marginBottom:14 }}>
-        <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
-          textTransform:'uppercase', letterSpacing:.5 }}>เบอร์พร้อมเพย์ร้าน</div>
-        <input value={promptpay} onChange={e => setPromptpay(e.target.value)}
-          placeholder="เช่น 0812345678" style={inputStyle}/>
-      </div>
+      {QR_CHANNELS.includes(channel) && (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
+            textTransform:'uppercase', letterSpacing:.5 }}>เบอร์พร้อมเพย์ร้าน</div>
+          <input value={promptpay} onChange={e => setPromptpay(e.target.value)}
+            placeholder="เช่น 0812345678" style={inputStyle}/>
+        </div>
+      )}
 
       <div style={{ padding:'10px 0', borderTop:`1px solid ${S.border}`, marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
@@ -216,11 +436,67 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           <span style={{ fontSize:20, fontWeight:700, color:S.gold,
             fontFamily:'Cormorant Garamond,serif' }}>฿{total.toLocaleString()}</span>
         </div>
+        {total > 0 && calcPoints(total, channel) > 0 && (
+          <div style={{ fontSize:11, color:S.gold, textAlign:'right', marginTop:4 }}>
+            🏆 ลูกค้าจะได้ {calcPoints(total, channel)} แต้ม
+          </div>
+        )}
+        {total > 0 && calcPoints(total, channel) === 0 && (
+          <div style={{ fontSize:11, color:S.textLt, textAlign:'right', marginTop:4 }}>
+            ช่องทางนี้ไม่ให้แต้มสะสม (บันทึกยอดขายเฉยๆ)
+          </div>
+        )}
       </div>
 
-      <Btn onClick={saveOrder} disabled={saving || !promptpay.trim()} style={{ width:'100%' }}>
-        {saving ? '⏳ กำลังบันทึก...' : !promptpay.trim() ? 'กรอกเบอร์พร้อมเพย์ก่อน' : '✓ บันทึกออเดอร์ + สร้าง QR'}
+      <Btn onClick={saveOrder}
+        disabled={saving || (QR_CHANNELS.includes(channel) && !promptpay.trim())}
+        style={{ width:'100%' }}>
+        {saving ? '⏳ กำลังบันทึก...'
+          : (QR_CHANNELS.includes(channel) && !promptpay.trim()) ? 'กรอกเบอร์พร้อมเพย์ก่อน'
+          : QR_CHANNELS.includes(channel) ? '✓ บันทึกออเดอร์ + สร้าง QR'
+          : '✓ บันทึกยอดขาย (จ่ายแล้ว)'}
       </Btn>
+    </div>
+  )
+}
+
+// ── ผลลัพธ์เมื่อบันทึกยอดขายจากช่องทางนอกแอป (ไม่มี QR เพราะจ่ายแล้ว) ──────────────
+function ExternalSaleResult({ order, formulas, onNewOrder }) {
+  const channelLabel = CHANNELS.find(c => c.value === order.channel)?.label || order.channel
+  return (
+    <div style={{ background:S.white, borderRadius:14, border:`1px solid ${S.border}`,
+      padding:20, marginBottom:20, textAlign:'center' }}>
+      <div style={{ fontSize:32, marginBottom:8 }}>✓</div>
+      <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20, fontStyle:'italic',
+        color:S.ink, marginBottom:4 }}>บันทึกยอดขายแล้ว</div>
+      <div style={{ fontSize:12, color:S.textLt, marginBottom:16 }}>
+        ช่องทาง: {channelLabel} · ลูกค้า: {order.customer_name}
+      </div>
+
+      <div style={{ textAlign:'left', background:S.bg, borderRadius:10, padding:'10px 14px',
+        marginBottom:14 }}>
+        {order.items.map((it, i) => {
+          const f = formulas.find(x => x.id === it.formula_id)
+          return (
+            <div key={i} style={{ display:'flex', justifyContent:'space-between',
+              fontSize:12.5, color:S.ink, padding:'4px 0' }}>
+              <span>{f?.name || '-'} × {it.qty}</span>
+              <span>฿{it.subtotal.toLocaleString()}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ fontSize:20, fontWeight:700, color:S.gold,
+        fontFamily:'Cormorant Garamond,serif' }}>฿{order.total_amount.toLocaleString()}</div>
+
+      {order.pointsEarned > 0 && (
+        <div style={{ fontSize:12.5, color:S.gold, marginTop:8, fontWeight:600 }}>
+          🏆 ลูกค้าได้รับ {order.pointsEarned} แต้ม
+        </div>
+      )}
+
+      <Btn onClick={onNewOrder} style={{ width:'100%', marginTop:18 }}>+ บันทึกรายการต่อไป</Btn>
     </div>
   )
 }
@@ -391,6 +667,7 @@ function OrderQrResult({ order, formulas, promptpay, onNewOrder }) {
 // ── ประวัติออเดอร์ ───────────────────────────────────────────────────────────────
 function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
   const [copiedId, setCopiedId] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
 
   function copyOrderLink(orderId) {
     const url = `${PRODUCTION_URL}/pay/${orderId}`
@@ -398,6 +675,10 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
       setCopiedId(orderId)
       setTimeout(() => setCopiedId(null), 2000)
     })
+  }
+
+  function formulaName(id) {
+    return formulas.find(f => f.id === id)?.name || '-'
   }
 
   if (orders.length === 0) {
@@ -411,14 +692,19 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
         const cust = customers.find(c => c.id === o.customer_id)
         const statusColor = o.status === 'paid' ? S.green : o.status === 'cancelled' ? S.red : S.gold
         const statusBg    = o.status === 'paid' ? '#eef4f0' : o.status === 'cancelled' ? '#fdf0ee' : S.goldLt
+        const isOpen = expandedId === o.id
         return (
           <div key={o.id} style={{ background:S.white, border:`1px solid ${S.border}`,
             borderRadius:10, padding:'12px 14px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div onClick={() => setExpandedId(isOpen ? null : o.id)}
+              style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start',
+                cursor:'pointer' }}>
               <div>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                   <span style={{ fontSize:10, color:S.textLt, fontFamily:'monospace' }}>#{o.id}</span>
                   <span style={{ fontSize:13, fontWeight:600, color:S.ink }}>{cust?.name || '-'}</span>
+                  <span style={{ fontSize:10, color:S.textLt, transform: isOpen ? 'rotate(90deg)' : 'none',
+                    display:'inline-block', transition:'transform 0.15s' }}>›</span>
                 </div>
                 <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
                   {o.order_date} {cust?.contact && `· ${cust.contact}`}
@@ -433,6 +719,48 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
                 </span>
               </div>
             </div>
+
+            {isOpen && (
+              <div style={{ marginTop:10, padding:'10px 12px', background:S.bg,
+                borderRadius:8, border:`1px solid ${S.border}` }}>
+                <div style={{ fontSize:10, color:S.textLt, fontWeight:600,
+                  textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>รายการสินค้า</div>
+                {(o.items || []).map((it, idx) => (
+                  <div key={idx} style={{ display:'flex', justifyContent:'space-between',
+                    fontSize:12, color:S.ink, padding:'3px 0' }}>
+                    <span>{formulaName(it.formula_id)} {it.bottle_ml ? `${it.bottle_ml}ml` : ''} × {it.qty}</span>
+                    <span style={{ color:S.textMid }}>฿{(it.subtotal || 0).toLocaleString()}</span>
+                  </div>
+                ))}
+                {o.shipping_fee > 0 && (
+                  <div style={{ display:'flex', justifyContent:'space-between',
+                    fontSize:12, color:S.textMid, padding:'3px 0' }}>
+                    <span>ค่าจัดส่ง</span>
+                    <span>฿{o.shipping_fee.toLocaleString()}</span>
+                  </div>
+                )}
+                <div style={{ display:'flex', justifyContent:'space-between',
+                  fontSize:11, color:S.textLt, marginTop:6 }}>
+                  <span>ช่องทาง: {CHANNELS.find(c=>c.value===o.channel)?.label || o.channel || 'แอป'}</span>
+                  {o.points_earned > 0 && <span style={{ color:S.gold, fontWeight:600 }}>🏆 +{o.points_earned} แต้ม</span>}
+                </div>
+                {(cust?.address || o.notes) && (
+                  <div style={{ marginTop:8, paddingTop:8, borderTop:`1px dashed ${S.border}` }}>
+                    {cust?.address && (
+                      <div style={{ fontSize:11.5, color:S.textMid, lineHeight:1.5 }}>
+                        📍 {cust.address}
+                      </div>
+                    )}
+                    {o.notes && (
+                      <div style={{ fontSize:11.5, color:S.textLt, marginTop:4, fontStyle:'italic' }}>
+                        หมายเหตุ: {o.notes}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ display:'flex', gap:6, marginTop:8 }}>
               {o.status === 'pending' && (
                 <button onClick={() => onMarkPaid(o.id)}
@@ -484,8 +812,18 @@ export default function PageOrderBilling() {
     try {
       const result = await db.deductStockForOrder(orderId)
       if (result.success) {
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid' } : o))
-        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch`)
+        const order = orders.find(o => o.id === orderId)
+        const points = Math.floor((order?.total_amount || 0) / 100)
+        if (order?.customer_id && points > 0) {
+          const { data: cust } = await supabase.from('customers')
+            .select('loyalty_points').eq('id', order.customer_id).single()
+          await supabase.from('customers')
+            .update({ loyalty_points: (cust?.loyalty_points || 0) + points })
+            .eq('id', order.customer_id)
+        }
+        await supabase.from('orders').update({ points_earned: points }).eq('id', orderId)
+        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid', points_earned: points } : o))
+        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch${points > 0 ? ` · ให้ ${points} แต้ม` : ''}`)
       } else {
         alert(`✗ ตัด stock ล้มเหลว:\n${result.error}`)
       }

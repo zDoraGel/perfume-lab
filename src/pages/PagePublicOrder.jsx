@@ -272,6 +272,23 @@ function ReceiptView({ order, customer, items, formulas }) {
           </span>
         </div>
 
+        {/* Loyalty points */}
+        {order.points_earned > 0 && (
+          <div style={{ marginTop:10, padding:'10px 14px', background:'#fbf4e8',
+            borderRadius:8, display:'flex', alignItems:'center', justifyContent:'space-between',
+            flexWrap:'wrap', gap:6 }}>
+            <span style={{ fontSize:12.5, fontWeight:600, color:BRAND.brown }}>
+              🏆 คุณได้รับ {order.points_earned} แต้มจากออเดอร์นี้
+            </span>
+            {customer?.loyalty_points != null && (
+              <span style={{ fontSize:11.5, color:BRAND.mocha }}>
+                สะสมแล้ว {customer.loyalty_points}/20 แต้ม
+                {customer.loyalty_points >= 20 ? ' — แลกรางวัลได้แล้ว ✦' : ` (อีก ${20 - customer.loyalty_points} แต้มแลกรางวัล)`}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Safety note */}
         <div style={{ marginTop:24, fontSize:9, color:BRAND.mocha, lineHeight:1.7,
           letterSpacing:.3, textTransform:'uppercase' }}>

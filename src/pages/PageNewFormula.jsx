@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { callAI, parseAIJson } from '../lib/ai'
 import { S } from '../constants/theme'
@@ -111,6 +112,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
 
   // Step 6 — Name
   const [name,          setName]          = useState('')
+  const [formulaType,   setFormulaType]   = useState('original')
   const [nameMeaning,   setNameMeaning]   = useState('')
   const [nameSuggs,     setNameSuggs]     = useState([])
   const [nameLoading,   setNameLoading]   = useState(false)
@@ -776,6 +778,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       best_for: dnaBestFor,
     }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
+    if (f) await supabase.from('formulas').update({ formula_type: formulaType }).eq('id', f.id)
     if (f && formulaSugg?.ingredients) {
       const matchedIngs = await Promise.all([
         ...formulaSugg.ingredients.map(async ing => {
@@ -826,6 +829,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       best_for: dnaBestFor,
     }
     const f    = await db.createFormula(name, vibe, person, nameMeaning, dna)
+    if (f) await supabase.from('formulas').update({ formula_type: formulaType }).eq('id', f.id)
     setSaving(false)
     if (f) onCreate(f)
   }
@@ -1492,6 +1496,24 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
                 placeholder="ความหมายของชื่อ (ไม่บังคับ)"
                 style={{ ...iStyle, marginBottom:12, fontSize:13 }}/>
             )}
+
+            {/* ประเภทกลิ่น: Original / Inspired */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
+                textTransform:'uppercase', letterSpacing:.5 }}>ประเภทกลิ่น</div>
+              <div style={{ display:'flex', gap:8 }}>
+                {[{v:'original', label:'Original'}, {v:'inspired', label:'Inspired'}].map(opt => (
+                  <button key={opt.v} onClick={() => setFormulaType(opt.v)}
+                    style={{ flex:1, padding:'10px 0', borderRadius:10, cursor:'pointer',
+                      fontSize:13, fontWeight:600,
+                      border: `1.5px solid ${formulaType === opt.v ? S.gold : S.border}`,
+                      background: formulaType === opt.v ? S.goldLt : S.white,
+                      color: formulaType === opt.v ? S.gold : S.textMid }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {name.trim() ? (
               <Btn variant="outline" onClick={genMeaning} disabled={meaningLoading}

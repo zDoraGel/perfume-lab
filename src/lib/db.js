@@ -306,6 +306,66 @@ export const db = {
     await supabase.from('production_batches').delete().eq('id', batchId)
   },
 
+  // ── Stock Deduction for Orders (FIFO) ───────────────────────────────────────
+  async deductStockForOrder(orderId) {
+    try {
+      const { data: order } = await supabase
+        .from('orders').select('*').eq('id', orderId).single()
+      if (!order) throw new Error('Order not found')
+
+      const { data: orderItems } = await supabase
+        .from('order_items').select('*').eq('order_id', orderId)
+      if (!orderItems || orderItems.length === 0) {
+        return { success: true, orderId, deductions: [], message: 'No items to deduct' }
+      }
+
+      const deductions = []
+      for (const item of orderItems) {
+        const { formula_id, qty } = item
+        let remainingQty = qty
+
+        const { data: batches } = await supabase
+          .from('production_batches').select('*')
+          .eq('formula_id', formula_id)
+          .order('produced_at', { ascending: true })
+        if (!batches || batches.length === 0) {
+          throw new Error(`No batches found for formula ${formula_id}`)
+        }
+
+        for (const batch of batches) {
+          if (remainingQty <= 0) break
+          const currentRemaining = batch.qty_produced - batch.qty_sold
+          if (currentRemaining <= 0) continue
+          const deductAmount = Math.min(remainingQty, currentRemaining)
+          const newQtySold = batch.qty_sold + deductAmount
+
+          await supabase.from('production_batches')
+            .update({ qty_sold: newQtySold }).eq('id', batch.id)
+
+          deductions.push({
+            formula_id, batch_id: batch.id,
+            deduct_qty: deductAmount, batch_produced_at: batch.produced_at,
+          })
+          remainingQty -= deductAmount
+        }
+
+        if (remainingQty > 0) {
+          throw new Error(`Insufficient stock for formula ${formula_id}. Needed ${remainingQty} more.`)
+        }
+      }
+
+      if (order.status !== 'paid') {
+        await supabase.from('orders').update({ status:'paid' }).eq('id', orderId)
+      }
+
+      return { success: true, orderId, deductions,
+        message: `Stock deducted successfully for order ${orderId}` }
+    } catch (error) {
+      console.error('deductStockForOrder error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
   // ── Aging Logs ─────────────────────────────────────────────────────────────
   async getAgingLogs(batchId) {
     const { data } = await supabase.from('aging_logs')
