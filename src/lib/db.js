@@ -313,6 +313,12 @@ export const db = {
         .from('orders').select('*').eq('id', orderId).single()
       if (!order) throw new Error('Order not found')
 
+      // ✅ กันตัดสต็อกซ้ำ — ถ้า order นี้ถูกตัดไปแล้ว ไม่ทำซ้ำ
+      if (order.stock_deducted) {
+        return { success: true, orderId, deductions: [],
+          message: `Order ${orderId} already deducted, skipped` }
+      }
+
       const { data: orderItems } = await supabase
         .from('order_items').select('*').eq('order_id', orderId)
       if (!orderItems || orderItems.length === 0) {
@@ -354,9 +360,10 @@ export const db = {
         }
       }
 
-      if (order.status !== 'paid') {
-        await supabase.from('orders').update({ status:'paid' }).eq('id', orderId)
-      }
+      // ✅ mark ว่าตัดสต็อกของ order นี้แล้ว พร้อมอัปเดต status เป็น paid
+      await supabase.from('orders')
+        .update({ status: 'paid', stock_deducted: true })
+        .eq('id', orderId)
 
       return { success: true, orderId, deductions,
         message: `Stock deducted successfully for order ${orderId}` }

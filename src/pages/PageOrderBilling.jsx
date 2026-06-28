@@ -28,6 +28,7 @@ function calcPoints(amount, channel) {
   return Math.floor((amount || 0) / POINTS_PER_BAHT)
 }
 
+const REDEEM_POINTS_COST = 20
 const BOTTLE_SIZES = [5, 15, 30, 50, 100]
 
 const CHANNELS = [
@@ -40,7 +41,7 @@ const CHANNELS = [
 ]
 
 // ── ฟอร์มสร้างออเดอร์ใหม่ ────────────────────────────────────────────────────────
-function NewOrderForm({ formulas, customers, onSaved }) {
+function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
   const [channel,         setChannel]         = useState('app')
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
@@ -56,6 +57,8 @@ function NewOrderForm({ formulas, customers, onSaved }) {
   const [saving,          setSaving]          = useState(false)
   const [savedOrder,      setSavedOrder]      = useState(null)
   const [showCustList,    setShowCustList]    = useState(false)
+  const [redeemType,      setRedeemType]      = useState(null) // null | 'discount_100' | 'perfume_2ml' | 'free_shipping'
+  const [redeemFormulaId, setRedeemFormulaId] = useState('')
 
   function addItem() {
     setItems(p => [...p, { formula_id:'', bottle_ml:15, qty:1, unit_price:'', original_price:'', discount_type:null, discount_value:'', discount_reason:'' }])
@@ -77,8 +80,12 @@ function NewOrderForm({ formulas, customers, onSaved }) {
 
   const itemsTotal = items.reduce((s, it) =>
     s + itemFinalPrice(it) * (parseInt(it.qty) || 0), 0)
-  const shippingAmount = hasShipping ? (parseFloat(shippingFee) || 0) : 0
-  const total = itemsTotal + shippingAmount
+  const selectedCustomer = existingId ? customers.find(c => c.id === existingId) : null
+  const customerPoints   = selectedCustomer?.loyalty_points || 0
+  const canRedeem        = customerPoints >= REDEEM_POINTS_COST
+  const shippingAmount   = (hasShipping && redeemType !== 'free_shipping') ? (parseFloat(shippingFee) || 0) : 0
+  const redeemDiscount   = redeemType === 'discount_100' ? 100 : 0
+  const total = Math.max(0, itemsTotal + shippingAmount - redeemDiscount)
 
   function pickCustomer(c) {
     setCustomerName(c.name)
@@ -86,11 +93,14 @@ function NewOrderForm({ formulas, customers, onSaved }) {
     setCustomerAddress(c.address || '')
     setExistingId(c.id)
     setShowCustList(false)
+    setRedeemType(null)
+    setRedeemFormulaId('')
   }
 
   async function saveOrder() {
     if (!customerName.trim()) return alert('กรอกชื่อลูกค้าก่อนค่ะ')
     if (items.every(it => !it.formula_id)) return alert('เลือกสินค้าอย่างน้อย 1 รายการ')
+    if (redeemType === 'perfume_2ml' && !redeemFormulaId) return alert('เลือกกลิ่นที่จะแถม 2ml ก่อนค่ะ')
     const isExternal = !QR_CHANNELS.includes(channel)
     setSaving(true)
     try {
@@ -142,6 +152,23 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           subtotal: finalPrice * qty,
         }
       })
+
+      // ของแถมจากการแลกแต้ม (น้ำหอม 2ml ฟรี)
+      if (redeemType === 'perfume_2ml' && redeemFormulaId) {
+        itemRows.push({
+          order_id: order.id,
+          formula_id: parseInt(redeemFormulaId),
+          bottle_ml: 2,
+          qty: 1,
+          original_price: 0,
+          discount_type: null,
+          discount_value: 0,
+          discount_reason: 'แลกแต้มสะสม (ของแถม)',
+          unit_price: 0,
+          subtotal: 0,
+        })
+      }
+
       const { error: itemsErr } = await supabase.from('order_items').insert(itemRows)
       if (itemsErr) throw itemsErr
 
@@ -151,14 +178,30 @@ function NewOrderForm({ formulas, customers, onSaved }) {
         if (!stockResult.success) {
           alert(`บันทึกออเดอร์แล้ว แต่ตัดสต็อกไม่สำเร็จ: ${stockResult.error}\nกรุณาตัดสต็อกเองในหน้า Production`)
         }
-        if (pointsEarned > 0) {
-          await supabase.from('customers')
-            .update({ loyalty_points: (customerRow?.loyalty_points || 0) + pointsEarned })
-            .eq('id', customerId)
-        }
       }
 
-      setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal, pointsEarned })
+      // แลกแต้ม: หัก 20 แต้ม + บันทึกประวัติการแลก (ทำทันทีไม่ต้องรอจ่าย)
+      const pointsDelta = (isExternal ? pointsEarned : 0) - (redeemType ? REDEEM_POINTS_COST : 0)
+      if (pointsDelta !== 0) {
+        await supabase.from('customers')
+          .update({ loyalty_points: (customerRow?.loyalty_points || 0) + pointsDelta })
+          .eq('id', customerId)
+      }
+      if (redeemType) {
+        const redeemedFormulaName = redeemType === 'perfume_2ml'
+          ? formulas.find(f => f.id === parseInt(redeemFormulaId))?.name : null
+        await supabase.from('loyalty_redemptions').insert({
+          customer_id: customerId,
+          reward_type: redeemType,
+          reward_detail: redeemedFormulaName,
+          points_used: REDEEM_POINTS_COST,
+          order_id: order.id,
+        })
+      }
+
+      setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal, pointsEarned,
+        redeemType })
+      onOrderSaved?.()
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
@@ -207,7 +250,7 @@ function NewOrderForm({ formulas, customers, onSaved }) {
         <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
           textTransform:'uppercase', letterSpacing:.5 }}>ลูกค้า</div>
         <input value={customerName}
-          onChange={e => { setCustomerName(e.target.value); setExistingId(null); setShowCustList(true) }}
+          onChange={e => { setCustomerName(e.target.value); setExistingId(null); setShowCustList(true); setRedeemType(null) }}
           onFocus={() => setShowCustList(true)}
           placeholder="ชื่อลูกค้า (หรือพิมพ์เบอร์โทรค้นหาได้)" style={inputStyle}/>
         {existingId && (
@@ -255,6 +298,45 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           placeholder="ที่อยู่จัดส่ง (ถ้ามี)" rows={2}
           style={{ ...inputStyle, marginTop:8, resize:'vertical', fontFamily:'Inter,sans-serif' }}/>
       </div>
+
+      {/* แลกรางวัล — โผล่เมื่อลูกค้าเดิมมีแต้มครบ 20 */}
+      {canRedeem && (
+        <div style={{ marginBottom:14, padding:'10px 12px', background:S.goldLt,
+          borderRadius:8, border:`1px solid ${S.gold}` }}>
+          <div style={{ fontSize:12, fontWeight:700, color:S.gold, marginBottom:8 }}>
+            🎁 ลูกค้ามี {customerPoints} แต้ม — แลกรางวัลได้แล้ว!
+          </div>
+          <div style={{ display:'flex', gap:6, marginBottom: redeemType ? 8 : 0 }}>
+            {[
+              { v:'discount_100',  label:'ส่วนลด ฿100' },
+              { v:'perfume_2ml',   label:'น้ำหอม 2ml' },
+              { v:'free_shipping', label:'ส่งฟรี' },
+            ].map(opt => (
+              <button key={opt.v}
+                onClick={() => setRedeemType(redeemType === opt.v ? null : opt.v)}
+                style={{ flex:1, padding:'8px 0', borderRadius:8, cursor:'pointer',
+                  fontSize:11.5, fontWeight:600,
+                  border:`1.5px solid ${redeemType === opt.v ? S.gold : S.border}`,
+                  background: redeemType === opt.v ? S.gold : S.white,
+                  color: redeemType === opt.v ? '#fff' : S.textMid }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {redeemType === 'perfume_2ml' && (
+            <select value={redeemFormulaId} onChange={e => setRedeemFormulaId(e.target.value)}
+              style={{ ...inputStyle, fontSize:12 }}>
+              <option value="">-- เลือกกลิ่นที่จะแถม 2ml --</option>
+              {formulas.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          )}
+          {redeemType && (
+            <div style={{ fontSize:10.5, color:S.textMid, marginTop:6 }}>
+              จะหัก {REDEEM_POINTS_COST} แต้มตอนบันทึกออเดอร์ (เหลือ {customerPoints - REDEEM_POINTS_COST} แต้ม)
+            </div>
+          )}
+        </div>
+      )}
 
       {/* รายการสินค้า */}
       <div style={{ fontSize:11, color:S.textMid, marginBottom:6, fontWeight:500,
@@ -424,10 +506,28 @@ function NewOrderForm({ formulas, customers, onSaved }) {
           color:S.textMid, marginBottom:4 }}>
           <span>ค่าสินค้า</span><span>฿{itemsTotal.toLocaleString()}</span>
         </div>
-        {hasShipping && (
+        {hasShipping && redeemType !== 'free_shipping' && (
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
             color:S.textMid, marginBottom:4 }}>
             <span>ค่าจัดส่ง</span><span>฿{shippingAmount.toLocaleString()}</span>
+          </div>
+        )}
+        {hasShipping && redeemType === 'free_shipping' && (
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+            color:S.green, marginBottom:4 }}>
+            <span>ค่าจัดส่ง (แลกแต้มฟรี)</span><span>฿0</span>
+          </div>
+        )}
+        {redeemDiscount > 0 && (
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+            color:S.green, marginBottom:4 }}>
+            <span>ส่วนลดแลกแต้ม</span><span>-฿{redeemDiscount.toLocaleString()}</span>
+          </div>
+        )}
+        {redeemType === 'perfume_2ml' && redeemFormulaId && (
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+            color:S.green, marginBottom:4 }}>
+            <span>ของแถม: {formulas.find(f=>f.id===parseInt(redeemFormulaId))?.name} 2ml</span><span>ฟรี</span>
           </div>
         )}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
@@ -859,7 +959,8 @@ export default function PageOrderBilling() {
 
       {tab === 'new' && (
         <NewOrderForm key={formKey} formulas={formulas} customers={customers}
-          onSaved={() => { loadAll(); setFormKey(k => k+1) }}/>
+          onSaved={() => { loadAll(); setFormKey(k => k+1) }}
+          onOrderSaved={loadAll}/>
       )}
       {tab === 'history' && (
         <OrderHistory orders={orders} customers={customers} formulas={formulas}
