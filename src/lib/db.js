@@ -189,6 +189,82 @@ export const db = {
     await supabase.from('formula_items').delete().eq('version_id', versionId)
   },
 
+  // ── Cost per Gram/Drop (สำหรับ giveaway) ────────────────────────────────────
+  // คำนวณต้นทุนของ "น้ำหอมสำเร็จ" (concentrate + alcohol + ขวด) ต่อ ml/กรัม/หยด
+  // ใช้ rate เดียวกับ preview ใน PageProduction.jsx: alcohol ฿0.35/ml, bottle cost ตาม size
+  async getCostPerUnit(versionId, batch) {
+    const items = await this.getItems(versionId)
+    const concentrateGrams = items.reduce((s, i) => s + (i.grams || 0), 0)
+    const concentrateCostTotal = items.reduce(
+      (s, i) => s + (i.grams || 0) * (i.material?.cost || 0), 0
+    )
+    const costPerGramConcentrate = concentrateGrams > 0
+      ? concentrateCostTotal / concentrateGrams : 0
+
+    // ปริมาณ concentrate ที่ใช้จริงต่อขวด (ml) → แปลงเป็นกรัมด้วยความถ่วงจำเพาะเฉลี่ย
+    const CONCENTRATE_DENSITY = 0.95 // g/ml เฉลี่ยของน้ำหอมเข้มข้น
+    const concentrateMlPerBottle = batch?.concentrate_ml || 0
+    const concentrateGramsPerBottle = concentrateMlPerBottle * CONCENTRATE_DENSITY
+    const concentrateCostPerBottle = concentrateGramsPerBottle * costPerGramConcentrate
+
+    const ALCOHOL_RATE = 0.35 // ฿/ml — ตรงกับ PageProduction preview
+    const alcoholCostPerBottle = (batch?.alcohol_ml_per_bottle || 0) * ALCOHOL_RATE
+
+    const BOTTLE_COST = { 5:35, 10:55, 15:65, 30:90, 50:130, 100:200 }
+    const bottleCostEach = BOTTLE_COST[batch?.bottle_ml] || 90
+
+    const totalCostPerBottle = concentrateCostPerBottle + alcoholCostPerBottle + bottleCostEach
+    const bottleMl = batch?.bottle_ml || 1
+    const costPerMl = totalCostPerBottle / bottleMl
+
+    const FINISHED_DENSITY = 0.88 // g/ml ของน้ำหอมเจือจางแล้ว (ไม่ใช่ concentrate ดิบ)
+    const ML_PER_DROP = 0.05
+
+    return {
+      costPerGramConcentrate,
+      concentrateCostPerBottle,
+      alcoholCostPerBottle,
+      bottleCostEach,
+      totalCostPerBottle,
+      costPerMl,
+      costPerGram: costPerMl * FINISHED_DENSITY,
+      costPerDrop: costPerMl * ML_PER_DROP,
+    }
+  },
+
+  // บันทึกการแจก giveaway/sample — หักสต็อก batch (qty_sold เสมือนขายแล้ว ป้องกันนับ remaining ผิด)
+  // และคืนค่าต้นทุนที่ใช้ไป สำหรับบันทึกเป็น expense
+  async logGiveaway(batchId, versionId, mlGiven, note) {
+    const { data: batch } = await supabase
+      .from('production_batches').select('*').eq('id', batchId).single()
+    if (!batch) throw new Error('Batch not found')
+
+    const unitCost = await this.getCostPerUnit(versionId, batch)
+    const costOfGiveaway = unitCost.costPerMl * mlGiven
+
+    // หัก "เสมือนขาย" จาก batch (กันนับเป็น remaining stock จริงทั้งที่แจกไปแล้ว)
+    // ใช้สัดส่วน ml ต่อขวดแปลงเป็นจำนวนขวดเทียบเท่า
+    const bottlesEquivalent = mlGiven / (batch.bottle_ml || 1)
+
+    const { data, error } = await supabase
+      .from('giveaway_logs')
+      .insert({
+        batch_id: batchId,
+        formula_id: batch.formula_id,
+        ml_given: mlGiven,
+        bottles_equivalent: bottlesEquivalent,
+        cost: parseFloat(costOfGiveaway.toFixed(2)),
+        note: note || null,
+        given_at: new Date().toISOString().split('T')[0],
+      })
+      .select().single()
+    if (error) {
+      console.error('logGiveaway error:', error)
+      return { success: false, error: error.message }
+    }
+    return { success: true, log: data, cost: costOfGiveaway }
+  },
+
   // ── Accords ────────────────────────────────────────────────────────────────
   async getAccords() {
     const { data } = await supabase.from('accords').select('*')
