@@ -7,10 +7,20 @@ function computeFamilyPercents(items = []) {
   let totalG = 0
 
   items.forEach(it => {
-    const family = it.material?.family || it.family
-    const grams  = parseFloat(it.grams || 0)
-    if (!family || !grams) return
-    totals[family] = (totals[family] || 0) + grams
+    const mat = it.material
+    // ✅ ใช้ families array ถ้ามี (วัตถุดิบ tag ได้หลาย family) ไม่งั้น fallback ไปที่ family เดี่ยวแบบเดิม
+    const families = mat?.families?.length
+      ? mat.families
+      : (mat?.family ? [mat.family] : (it.family ? [it.family] : []))
+
+    const grams = parseFloat(it.grams || 0)
+    if (!families.length || !grams) return
+
+    // กระจาย grams เท่าๆกันให้ทุก family ที่ tag ไว้ กัน family แรกพองเกินจริง
+    const gramsPerFamily = grams / families.length
+    families.forEach(family => {
+      totals[family] = (totals[family] || 0) + gramsPerFamily
+    })
     totalG += grams
   })
 
