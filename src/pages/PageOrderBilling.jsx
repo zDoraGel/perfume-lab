@@ -764,10 +764,99 @@ function OrderQrResult({ order, formulas, promptpay, onNewOrder }) {
   )
 }
 
-// ── ประวัติออเดอร์ ───────────────────────────────────────────────────────────────
+// ── การ์ดออเดอร์เดี่ยว (ใช้ซ้ำในกลุ่มลูกค้า) ──────────────────────────────────────
+function OrderCard({ o, cust, formulaName, isOpen, onToggle, onMarkPaid, copiedId, onCopyLink }) {
+  const statusColor = o.status === 'paid' ? S.green : o.status === 'cancelled' ? S.red : S.gold
+  const statusBg    = o.status === 'paid' ? '#eef4f0' : o.status === 'cancelled' ? '#fdf0ee' : S.goldLt
+  return (
+    <div style={{ background:S.bg, border:`1px solid ${S.border}`, borderRadius:8, padding:'10px 12px' }}>
+      <div onClick={onToggle}
+        style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', cursor:'pointer' }}>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:10, color:S.textLt, fontFamily:'monospace' }}>#{o.id}</span>
+            <span style={{ fontSize:10, color:S.textLt, transform: isOpen ? 'rotate(90deg)' : 'none',
+              display:'inline-block', transition:'transform 0.15s' }}>›</span>
+          </div>
+          <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>{o.order_date}</div>
+        </div>
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:14, fontWeight:700, color:S.gold,
+            fontFamily:'Cormorant Garamond,serif' }}>฿{o.total_amount.toLocaleString()}</div>
+          <span style={{ fontSize:9, fontWeight:700, color:statusColor, background:statusBg,
+            padding:'2px 8px', borderRadius:10, textTransform:'uppercase' }}>
+            {o.status}
+          </span>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div style={{ marginTop:10, padding:'10px 12px', background:S.white,
+          borderRadius:8, border:`1px solid ${S.border}` }}>
+          <div style={{ fontSize:10, color:S.textLt, fontWeight:600,
+            textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>รายการสินค้า</div>
+          {(o.items || []).map((it, idx) => (
+            <div key={idx} style={{ display:'flex', justifyContent:'space-between',
+              fontSize:12, color:S.ink, padding:'3px 0' }}>
+              <span>{formulaName(it.formula_id)} {it.bottle_ml ? `${it.bottle_ml}ml` : ''} × {it.qty}</span>
+              <span style={{ color:S.textMid }}>฿{(it.subtotal || 0).toLocaleString()}</span>
+            </div>
+          ))}
+          {o.shipping_fee > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between',
+              fontSize:12, color:S.textMid, padding:'3px 0' }}>
+              <span>ค่าจัดส่ง</span>
+              <span>฿{o.shipping_fee.toLocaleString()}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'space-between',
+            fontSize:11, color:S.textLt, marginTop:6 }}>
+            <span>ช่องทาง: {CHANNELS.find(c=>c.value===o.channel)?.label || o.channel || 'แอป'}</span>
+            {o.points_earned > 0 && <span style={{ color:S.gold, fontWeight:600 }}>🏆 +{o.points_earned} แต้ม</span>}
+          </div>
+          {(cust?.address || o.notes) && (
+            <div style={{ marginTop:8, paddingTop:8, borderTop:`1px dashed ${S.border}` }}>
+              {cust?.address && (
+                <div style={{ fontSize:11.5, color:S.textMid, lineHeight:1.5 }}>
+                  📍 {cust.address}
+                </div>
+              )}
+              {o.notes && (
+                <div style={{ fontSize:11.5, color:S.textLt, marginTop:4, fontStyle:'italic' }}>
+                  หมายเหตุ: {o.notes}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:6, marginTop:8 }}>
+        {o.status === 'pending' && (
+          <button onClick={(e) => { e.stopPropagation(); onMarkPaid(o.id) }}
+            style={{ fontSize:11, color:S.green, background:'none',
+              border:`1px solid ${S.green}`, borderRadius:16, padding:'4px 10px',
+              cursor:'pointer', fontWeight:600 }}>
+            ✓ จ่ายแล้ว
+          </button>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); onCopyLink(o.id) }}
+          style={{ fontSize:11, color: copiedId === o.id ? '#fff' : S.textMid,
+            background: copiedId === o.id ? S.green : 'none',
+            border:`1px solid ${copiedId === o.id ? S.green : S.border}`,
+            borderRadius:16, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>
+          {copiedId === o.id ? '✓ คัดลอกแล้ว' : '📋 คัดลอกลิงก์'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── ประวัติออเดอร์ — group ตามลูกค้า ────────────────────────────────────────────
 function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
-  const [copiedId, setCopiedId] = useState(null)
-  const [expandedId, setExpandedId] = useState(null)
+  const [copiedId,      setCopiedId]      = useState(null)
+  const [expandedGroup, setExpandedGroup] = useState(null) // customer_id ที่เปิดอยู่
+  const [expandedOrder, setExpandedOrder] = useState(null) // order_id ที่เปิดอยู่
 
   function copyOrderLink(orderId) {
     const url = `${PRODUCTION_URL}/pay/${orderId}`
@@ -786,98 +875,68 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
       ยังไม่มีออเดอร์
     </div>
   }
+
+  // จัดกลุ่มออเดอร์ตามลูกค้า — เรียงกลุ่มตามวันที่ออเดอร์ล่าสุดของกลุ่มนั้น
+  const groupMap = new Map()
+  for (const o of orders) {
+    const key = o.customer_id ?? `none-${o.id}`
+    if (!groupMap.has(key)) groupMap.set(key, [])
+    groupMap.get(key).push(o)
+  }
+  const groups = Array.from(groupMap.entries()).map(([customerId, group]) => {
+    const cust = customers.find(c => c.id === group[0].customer_id)
+    const totalAmount = group.reduce((s, o) => s + (o.total_amount || 0), 0)
+    const totalPoints = group.reduce((s, o) => s + (o.points_earned || 0), 0)
+    const latestDate = group[0].order_date // orders มาเรียง desc แล้วจาก loadAll
+    const hasPending = group.some(o => o.status === 'pending')
+    return { customerId, cust, group, totalAmount, totalPoints, latestDate, hasPending }
+  })
+
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-      {orders.map(o => {
-        const cust = customers.find(c => c.id === o.customer_id)
-        const statusColor = o.status === 'paid' ? S.green : o.status === 'cancelled' ? S.red : S.gold
-        const statusBg    = o.status === 'paid' ? '#eef4f0' : o.status === 'cancelled' ? '#fdf0ee' : S.goldLt
-        const isOpen = expandedId === o.id
+      {groups.map(({ customerId, cust, group, totalAmount, totalPoints, latestDate, hasPending }) => {
+        const isOpen = expandedGroup === customerId
         return (
-          <div key={o.id} style={{ background:S.white, border:`1px solid ${S.border}`,
+          <div key={customerId} style={{ background:S.white, border:`1px solid ${S.border}`,
             borderRadius:10, padding:'12px 14px' }}>
-            <div onClick={() => setExpandedId(isOpen ? null : o.id)}
+            <div onClick={() => setExpandedGroup(isOpen ? null : customerId)}
               style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start',
                 cursor:'pointer' }}>
               <div>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <span style={{ fontSize:10, color:S.textLt, fontFamily:'monospace' }}>#{o.id}</span>
                   <span style={{ fontSize:13, fontWeight:600, color:S.ink }}>{cust?.name || '-'}</span>
+                  <span style={{ fontSize:10, color:S.textMid, background:S.bg, borderRadius:10,
+                    padding:'1px 7px', fontWeight:600 }}>{group.length} ออเดอร์</span>
+                  {hasPending && <span style={{ fontSize:9, fontWeight:700, color:S.gold,
+                    background:S.goldLt, padding:'2px 7px', borderRadius:10 }}>มีรอจ่าย</span>}
                   <span style={{ fontSize:10, color:S.textLt, transform: isOpen ? 'rotate(90deg)' : 'none',
                     display:'inline-block', transition:'transform 0.15s' }}>›</span>
                 </div>
                 <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
-                  {o.order_date} {cust?.contact && `· ${cust.contact}`}
+                  ล่าสุด {latestDate} {cust?.contact && `· ${cust.contact}`}
                 </div>
               </div>
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:15, fontWeight:700, color:S.gold,
-                  fontFamily:'Cormorant Garamond,serif' }}>฿{o.total_amount.toLocaleString()}</div>
-                <span style={{ fontSize:9, fontWeight:700, color:statusColor, background:statusBg,
-                  padding:'2px 8px', borderRadius:10, textTransform:'uppercase' }}>
-                  {o.status}
-                </span>
+                  fontFamily:'Cormorant Garamond,serif' }}>฿{totalAmount.toLocaleString()}</div>
+                {totalPoints > 0 && (
+                  <span style={{ fontSize:10, color:S.gold, fontWeight:600 }}>🏆 {totalPoints} แต้ม</span>
+                )}
               </div>
             </div>
 
             {isOpen && (
-              <div style={{ marginTop:10, padding:'10px 12px', background:S.bg,
-                borderRadius:8, border:`1px solid ${S.border}` }}>
-                <div style={{ fontSize:10, color:S.textLt, fontWeight:600,
-                  textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>รายการสินค้า</div>
-                {(o.items || []).map((it, idx) => (
-                  <div key={idx} style={{ display:'flex', justifyContent:'space-between',
-                    fontSize:12, color:S.ink, padding:'3px 0' }}>
-                    <span>{formulaName(it.formula_id)} {it.bottle_ml ? `${it.bottle_ml}ml` : ''} × {it.qty}</span>
-                    <span style={{ color:S.textMid }}>฿{(it.subtotal || 0).toLocaleString()}</span>
-                  </div>
+              <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:6 }}>
+                {group.map(o => (
+                  <OrderCard key={o.id} o={o} cust={cust} formulaName={formulaName}
+                    isOpen={expandedOrder === o.id}
+                    onToggle={() => setExpandedOrder(expandedOrder === o.id ? null : o.id)}
+                    onMarkPaid={onMarkPaid}
+                    copiedId={copiedId}
+                    onCopyLink={copyOrderLink}/>
                 ))}
-                {o.shipping_fee > 0 && (
-                  <div style={{ display:'flex', justifyContent:'space-between',
-                    fontSize:12, color:S.textMid, padding:'3px 0' }}>
-                    <span>ค่าจัดส่ง</span>
-                    <span>฿{o.shipping_fee.toLocaleString()}</span>
-                  </div>
-                )}
-                <div style={{ display:'flex', justifyContent:'space-between',
-                  fontSize:11, color:S.textLt, marginTop:6 }}>
-                  <span>ช่องทาง: {CHANNELS.find(c=>c.value===o.channel)?.label || o.channel || 'แอป'}</span>
-                  {o.points_earned > 0 && <span style={{ color:S.gold, fontWeight:600 }}>🏆 +{o.points_earned} แต้ม</span>}
-                </div>
-                {(cust?.address || o.notes) && (
-                  <div style={{ marginTop:8, paddingTop:8, borderTop:`1px dashed ${S.border}` }}>
-                    {cust?.address && (
-                      <div style={{ fontSize:11.5, color:S.textMid, lineHeight:1.5 }}>
-                        📍 {cust.address}
-                      </div>
-                    )}
-                    {o.notes && (
-                      <div style={{ fontSize:11.5, color:S.textLt, marginTop:4, fontStyle:'italic' }}>
-                        หมายเหตุ: {o.notes}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )}
-
-            <div style={{ display:'flex', gap:6, marginTop:8 }}>
-              {o.status === 'pending' && (
-                <button onClick={() => onMarkPaid(o.id)}
-                  style={{ fontSize:11, color:S.green, background:'none',
-                    border:`1px solid ${S.green}`, borderRadius:16, padding:'4px 10px',
-                    cursor:'pointer', fontWeight:600 }}>
-                  ✓ จ่ายแล้ว
-                </button>
-              )}
-              <button onClick={() => copyOrderLink(o.id)}
-                style={{ fontSize:11, color: copiedId === o.id ? '#fff' : S.textMid,
-                  background: copiedId === o.id ? S.green : 'none',
-                  border:`1px solid ${copiedId === o.id ? S.green : S.border}`,
-                  borderRadius:16, padding:'4px 10px', cursor:'pointer', fontWeight:600 }}>
-                {copiedId === o.id ? '✓ คัดลอกแล้ว' : '📋 คัดลอกลิงก์'}
-              </button>
-            </div>
           </div>
         )
       })}
