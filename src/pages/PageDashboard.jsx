@@ -583,15 +583,35 @@ export default function PageDashboard({ onNavigate }) {
             borderRadius:12, padding:'16px' }}>
             <div style={{ fontSize:11, fontWeight:700, color:S.gold,
               textTransform:'uppercase', letterSpacing:.8, marginBottom:12 }}>
-              ยอดรวมรายได้ — Retail + My Blends
+              ยอดรวมรายได้ — Retail + My Blends + Orders
             </div>
             <DonutChart
               segments={[
                 { value: revenueBreakdown.retail.revenue,   label: revenueBreakdown.retail.label,   color: S.green },
                 { value: revenueBreakdown.myBlends.revenue, label: revenueBreakdown.myBlends.label,  color: '#8a3a68' },
+                { value: revenueBreakdown.orders.revenue,   label: revenueBreakdown.orders.label,    color: S.gold },
               ]}
               centerLabel="รายได้รวม"
               centerValue={`฿${Math.round(revenueBreakdown.total).toLocaleString()}`}/>
+
+            {/* แยกตามช่องทางขาย (channel) — เฉพาะยอดจาก orders เดือนนี้ */}
+            {revenueBreakdown.orders.channels?.length > 0 && (
+              <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${S.border}` }}>
+                <div style={{ fontSize:10, fontWeight:700, color:S.gold,
+                  textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
+                  Orders แยกตามช่องทางขาย (เดือนนี้)
+                </div>
+                {revenueBreakdown.orders.channels.map((c, i) => (
+                  <div key={i} style={{ display:'flex', justifyContent:'space-between',
+                    fontSize:12, marginBottom:5 }}>
+                    <span style={{ color:S.textMid }}>{c.channel}</span>
+                    <span style={{ fontWeight:600 }}>
+                      ฿{Math.round(c.revenue).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* กำไรสุทธิหลังหักค่าใช้จ่ายแต่ละกลุ่ม */}
             <div style={{ marginTop:14, paddingTop:12, borderTop:`1px solid ${S.border}` }}>
@@ -609,6 +629,13 @@ export default function PageDashboard({ onNavigate }) {
                   ฿{Math.round(revenueBreakdown.myBlends.profit).toLocaleString()}
                 </span>
               </div>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:8 }}>
+                <span style={{ color:S.textMid }}>{revenueBreakdown.orders.label}</span>
+                <span style={{ fontWeight:600,
+                  color: revenueBreakdown.orders.revenue >= 0 ? S.green : S.red }}>
+                  ฿{Math.round(revenueBreakdown.orders.revenue).toLocaleString()}
+                </span>
+              </div>
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:700,
                 paddingTop:6, borderTop:`1px solid ${S.border}` }}>
                 <span>กำไรสุทธิรวม (หักค่าใช้จ่ายแล้ว)</span>
@@ -619,7 +646,7 @@ export default function PageDashboard({ onNavigate }) {
             </div>
 
             <div style={{ fontSize:10, color:S.textLt, marginTop:10, lineHeight:1.5 }}>
-              * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail เป็นยอดเดือนนี้เท่านั้น — เทียบกันตรงๆ ไม่ได้ 100%
+              * My Blends เป็นยอดสะสมทั้งหมดตั้งแต่สร้าง (ไม่มีข้อมูลแยกเดือน) ส่วน Retail และ Orders เป็นยอดเดือนนี้เท่านั้น — เทียบกันตรงๆ ไม่ได้ 100% · กำไรของ Orders ยังไม่หักค่าใช้จ่าย (ต้นทุนถูกหักผ่าน stock อยู่แล้วคนละระบบ)
             </div>
           </div>
         )}

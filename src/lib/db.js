@@ -685,10 +685,42 @@ export const db = {
     return { revenue, profit }
   },
 
+  // ── Revenue จาก orders (PageOrderBilling) แยกตามช่องทางขาย ──────────────────
+  // หมายเหตุ: เพิ่งพบว่า orders ไม่เคย sync เข้า adaptation_versions/retail_stock_logs
+  // เลยต้องดึงจาก orders ตรงๆ เป็นแหล่งรายได้ที่ 3 (เดิมมีแค่ retail + my blends)
+  async getRevenueByChannel() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      .toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('orders')
+      .select('channel, total_amount, status, created_at')
+      .eq('status', 'paid')
+      .gte('created_at', monthStart)
+
+    const byChannel = {}
+    let total = 0
+    ;(data || []).forEach(o => {
+      const ch = o.channel || 'ไม่ระบุ'
+      const amt = o.total_amount || 0
+      byChannel[ch] = (byChannel[ch] || 0) + amt
+      total += amt
+    })
+
+    return {
+      total,
+      channels: Object.entries(byChannel)
+        .map(([channel, revenue]) => ({ channel, revenue }))
+        .sort((a, b) => b.revenue - a.revenue),
+    }
+  },
+
   // ── ยอดขายรวม Retail (เดือนนี้) + My Blends (สะสมทั้งหมด) แยกกลุ่ม พร้อมหักค่าใช้จ่ายตามกลุ่ม ──
   // หมายเหตุ: My Blends ไม่มี timestamp ต่อการขายแบบ retail_stock_logs จึงนับเป็นยอดสะสม
   // ทั้งหมดตั้งแต่สร้าง version มา ไม่ใช่ยอดเฉพาะเดือนนี้ — ใช้ดูภาพรวมเชิงเปรียบเทียบกลุ่ม
   // ไม่ใช่ตัวเลขที่เทียบเดือนต่อเดือนได้ตรง 100%
+  //
+  // ✅ เพิ่ม orders (มี channel) เป็นแหล่งรายได้ที่ 3 — เดิมแก้แค่ retail+myBlends
+  // ทำให้ยอดขายผ่าน PageOrderBilling (ระบบแลกแต้ม/หน้าออเดอร์) ไม่ถูกนับเข้า revenue รวมเลย
   async getRevenueBreakdown() {
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
       .toISOString().slice(0, 10)
@@ -709,6 +741,10 @@ export const db = {
     const myBlendsRevenue = (versions || [])
       .reduce((s, v) => s + (v.sell_price ?? 0) * (v.qty_sold ?? 0), 0)
 
+    // Orders — เดือนนี้ (จาก PageOrderBilling, แยกตาม channel ได้)
+    const ordersData = await this.getRevenueByChannel()
+    const ordersRevenue = ordersData.total
+
     // ค่าใช้จ่ายแยกตามกลุ่ม — retail หักแบบเดือนนี้ (ตรงกับ revenue), myBlends หักแบบสะสม
     const [retailExpenses, myBlendsExpenses] = await Promise.all([
       this.getExpensesByGroupThisMonth('retail', false),
@@ -719,11 +755,12 @@ export const db = {
     const myBlendsProfit = myBlendsRevenue - myBlendsExpenses
 
     return {
-      total:        retailRevenue + myBlendsRevenue,
+      total:        retailRevenue + myBlendsRevenue + ordersRevenue,
       totalExpenses: retailExpenses + myBlendsExpenses,
-      totalProfit:  retailProfit + myBlendsProfit,
+      totalProfit:  retailProfit + myBlendsProfit + ordersRevenue, // ยังไม่มีค่าใช้จ่ายแยกของ orders
       retail:    { revenue: retailRevenue,   expenses: retailExpenses,   profit: retailProfit,   label: 'Retail (เดือนนี้)' },
       myBlends:  { revenue: myBlendsRevenue, expenses: myBlendsExpenses, profit: myBlendsProfit, label: 'My Blends (สะสมทั้งหมด)' },
+      orders:    { revenue: ordersRevenue, channels: ordersData.channels, label: 'Orders (เดือนนี้ · แยกตามช่องทาง)' },
     }
   },
 }
