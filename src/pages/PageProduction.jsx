@@ -29,12 +29,13 @@ const CONC_COLOR = {
 }
 
 function StockBadge({ remaining }) {
-  const color = remaining <= 0 ? S.red : remaining <= 5 ? '#c07820' : S.green
+  const r = Math.round(remaining * 10) / 10
+  const color = r <= 0 ? S.red : r <= 5 ? '#c07820' : S.green
   return (
     <span style={{ fontSize:12, fontWeight:700, color,
-      background: remaining <= 0 ? '#faeaea' : remaining <= 5 ? '#fef3e2' : '#eef4f0',
+      background: r <= 0 ? '#faeaea' : r <= 5 ? '#fef3e2' : '#eef4f0',
       padding:'2px 10px', borderRadius:20 }}>
-      {remaining <= 0 ? 'หมด' : `${remaining} ขวด`}
+      {r <= 0 ? 'หมด' : `${r} ขวด`}
     </span>
   )
 }
@@ -413,8 +414,10 @@ export default function PageProduction() {
   const [selected,  setSelected]  = useState(null)
   const [batches,   setBatches]   = useState([])
   const [stock,     setStock]     = useState([])
+  const [versions,  setVersions]  = useState([])
   const [loading,   setLoading]   = useState(true)
   const [showForm,  setShowForm]  = useState(false)
+  const [giveawayBatch, setGiveawayBatch] = useState(null) // batch ที่กำลังกรอก giveaway
 
   useEffect(() => {
     Promise.all([db.getFormulas(), db.getBatchSummaryByFormula()]).then(([f, bs]) => {
@@ -427,17 +430,24 @@ export default function PageProduction() {
   async function selectFormula(f) {
     setSelected(f)
     setShowForm(false)
-    const [b, s] = await Promise.all([db.getBatches(f.id), db.getStock(f.id)])
-    setBatches(b); setStock(s)
+    const [b, s, v] = await Promise.all([db.getBatches(f.id), db.getStock(f.id), db.getVersions(f.id)])
+    setBatches(b); setStock(s); setVersions(v)
   }
 
   async function reload() {
     if (!selected) return
-    const [b, s, bs] = await Promise.all([
-      db.getBatches(selected.id), db.getStock(selected.id), db.getBatchSummaryByFormula()
+    const [b, s, bs, v] = await Promise.all([
+      db.getBatches(selected.id), db.getStock(selected.id), db.getBatchSummaryByFormula(), db.getVersions(selected.id)
     ])
-    setBatches(b); setStock(s); setBatchSummary(bs)
+    setBatches(b); setStock(s); setBatchSummary(bs); setVersions(v)
     setShowForm(false)
+  }
+
+  // version สำหรับคำนวณต้นทุน — ใช้ตัวที่เป็น Final ก่อน ไม่งั้นใช้ตัวล่าสุด
+  function activeVersionId() {
+    const final = versions.find(v => v.is_final)
+    if (final) return final.id
+    return versions[versions.length - 1]?.id || null
   }
 
   async function deleteBatch(id) {
@@ -595,14 +605,23 @@ export default function PageProduction() {
                               </>
                             )
                           })()}
-                          {b.qty_sold > 0 && (
+                          {(b.qty_sold > 0 || b.giveaway_ml > 0) && (
                             <div style={{ fontSize:11, color:S.textMid, marginTop:2 }}>
-                              ขายแล้ว {b.qty_sold} · เหลือ {b.qty_produced - b.qty_sold}
+                              ขายแล้ว {b.qty_sold}
+                              {b.giveaway_ml > 0 && ` · แจกไป ${b.giveaway_ml}ml (≈${b.giveaway_bottles_equivalent.toFixed(1)} ขวด)`}
+                              {' · '}เหลือ {(b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)).toFixed(1)}
                             </div>
                           )}
                         </div>
                         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                          <StockBadge remaining={b.qty_produced - b.qty_sold}/>
+                          <StockBadge remaining={b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)}/>
+                          <button onClick={() => setGiveawayBatch(b)}
+                            style={{ fontSize:11, color:S.gold, background:S.goldLt,
+                              border:`1px solid ${S.goldBd}`, borderRadius:14,
+                              padding:'4px 10px', cursor:'pointer', fontWeight:600,
+                              whiteSpace:'nowrap' }}>
+                            + แจก
+                          </button>
                           <button onClick={() => deleteBatch(b.id)}
                             style={{ fontSize:12, color:S.textLt, background:'none',
                               border:'none', cursor:'pointer', padding:'4px 8px' }}>×</button>
@@ -630,6 +649,100 @@ export default function PageProduction() {
             )}
           </div>
         )}
+      </div>
+
+      {giveawayBatch && (
+        <GiveawayModal
+          batch={giveawayBatch}
+          versionId={activeVersionId()}
+          onClose={() => setGiveawayBatch(null)}
+          onSaved={() => { setGiveawayBatch(null); reload() }}/>
+      )}
+    </div>
+  )
+}
+
+// ── Modal บันทึกการแจก giveaway/sample ───────────────────────────────────────────
+function GiveawayModal({ batch, versionId, onClose, onSaved }) {
+  const [ml,     setMl]     = useState('')
+  const [note,   setNote]   = useState('')
+  const [cost,   setCost]   = useState(null) // preview ต้นทุนแบบ real-time
+  const [saving, setSaving] = useState(false)
+  const [err,    setErr]    = useState('')
+
+  useEffect(() => {
+    if (!versionId || !ml || isNaN(parseFloat(ml))) { setCost(null); return }
+    let cancelled = false
+    db.getCostPerUnit(versionId, batch).then(unit => {
+      if (!cancelled) setCost(unit.costPerMl * parseFloat(ml))
+    })
+    return () => { cancelled = true }
+  }, [ml, versionId, batch])
+
+  async function handleSave() {
+    const mlGiven = parseFloat(ml)
+    if (!mlGiven || mlGiven <= 0) { setErr('กรอกจำนวน ml ที่แจกก่อนค่ะ'); return }
+    if (!versionId) { setErr('ไม่พบสูตร version สำหรับคำนวณต้นทุน — เช็คว่าสูตรนี้มี version หรือยัง'); return }
+    setSaving(true)
+    setErr('')
+    const result = await db.logGiveaway(batch.id, versionId, mlGiven, note.trim() || null)
+    setSaving(false)
+    if (!result.success) {
+      setErr('บันทึกไม่สำเร็จ: ' + result.error)
+      return
+    }
+    onSaved?.()
+  }
+
+  return (
+    <div onClick={onClose}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:60,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background:S.white, borderRadius:14, padding:20, width:'100%',
+          maxWidth:360 }}>
+        <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:19, fontStyle:'italic',
+          color:S.ink, marginBottom:4 }}>+ แจก giveaway / sample</div>
+        <div style={{ fontSize:12, color:S.textLt, marginBottom:14 }}>
+          {batch.bottle_ml}ml × {batch.qty_produced} ขวด — {batch.concentration}
+        </div>
+
+        <label style={{ fontSize:11, color:S.textLt }}>จำนวนที่แจก (ml)</label>
+        <input type="number" min="0" step="0.1" value={ml}
+          onChange={e => setMl(e.target.value)} autoFocus
+          placeholder="เช่น 2 (สำหรับตัวอย่าง 2ml)"
+          style={{ width:'100%', marginTop:4, marginBottom:10, padding:'9px 12px',
+            fontSize:13, border:`1px solid ${S.border}`, borderRadius:8, boxSizing:'border-box' }}/>
+
+        <label style={{ fontSize:11, color:S.textLt }}>หมายเหตุ (ใครได้ไป/เหตุผล)</label>
+        <input value={note} onChange={e => setNote(e.target.value)}
+          placeholder="เช่น แจกลูกค้า VIP, ใช้รีวิว"
+          style={{ width:'100%', marginTop:4, marginBottom:10, padding:'9px 12px',
+            fontSize:13, border:`1px solid ${S.border}`, borderRadius:8, boxSizing:'border-box' }}/>
+
+        {cost != null && (
+          <div style={{ fontSize:12, color:S.gold, background:S.goldLt, borderRadius:8,
+            padding:'8px 10px', marginBottom:10 }}>
+            ต้นทุนที่ใช้ไปประมาณ ฿{cost.toFixed(2)}
+          </div>
+        )}
+        {err && (
+          <div style={{ fontSize:12, color:S.red, marginBottom:10 }}>{err}</div>
+        )}
+
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={onClose}
+            style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1px solid ${S.border}`,
+              background:'transparent', color:S.textMid, fontWeight:600, cursor:'pointer' }}>
+            ยกเลิก
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex:1, padding:'10px 0', borderRadius:8, border:'none',
+              background:S.gold, color:'#fff', fontWeight:600,
+              cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+          </button>
+        </div>
       </div>
     </div>
   )

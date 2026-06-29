@@ -838,8 +838,9 @@ export default function PageMyBlends() {
   const purchaseSavingRef = useRef(false) // กันกดซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
 
   useEffect(() => {
-    db.getExpensesByGroupThisMonth('myblends', true).then(setMyBlendsExpenses).catch(() => {})
-  }, [])
+    if (!selected?.id) { setMyBlendsExpenses(0); return }
+    db.getExpensesByAdaptation(selected.id).then(setMyBlendsExpenses).catch(() => {})
+  }, [selected?.id])
 
   useEffect(() => {
     Promise.all([getAdaptations(), db.getMaterials()]).then(([b, m]) => {
@@ -910,6 +911,7 @@ export default function PageMyBlends() {
         amount: total,
         note: `${blend.source_name}${blend.source_supplier ? ' ('+blend.source_supplier+')' : ''} ${size}g`,
         for_groups: groups,
+        adaptation_id: blend.id,
       })
       // เก็บขนาดล่าสุดที่ซื้อไว้ดูย้อนหลังได้ (ไม่กระทบ source_cost ที่ใช้คำนวณต้นทุนต่อกรัมในสูตร)
       await supabase.from('adaptations').update({ source_purchase_size: size }).eq('id', blend.id)
@@ -917,6 +919,7 @@ export default function PageMyBlends() {
       setPurchaseSize('')
       setPurchaseGroups(['myblends'])
       reload()
+      db.getExpensesByAdaptation(blend.id).then(setMyBlendsExpenses).catch(() => {})
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }

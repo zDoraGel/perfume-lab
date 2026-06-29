@@ -308,7 +308,29 @@ export const db = {
       .select('*')
       .eq('formula_id', formulaId)
       .order('produced_at', { ascending: false })
-    return data || []
+    const batches = data || []
+    if (batches.length === 0) return batches
+
+    // ดึงยอด giveaway ของ batch เหล่านี้ มารวม แล้วแปลงเป็น "ขวดเทียบเท่า"
+    // เพื่อหักออกจาก remaining stock ด้วย (กันนับสต็อกเหลือผิดทั้งที่แจกไปแล้ว)
+    const batchIds = batches.map(b => b.id)
+    const { data: giveaways } = await supabase
+      .from('giveaway_logs')
+      .select('batch_id, ml_given')
+      .in('batch_id', batchIds)
+    const giveawayMlByBatch = {}
+    ;(giveaways || []).forEach(g => {
+      giveawayMlByBatch[g.batch_id] = (giveawayMlByBatch[g.batch_id] || 0) + (g.ml_given || 0)
+    })
+
+    return batches.map(b => {
+      const giveawayMl = giveawayMlByBatch[b.id] || 0
+      return {
+        ...b,
+        giveaway_ml: giveawayMl,
+        giveaway_bottles_equivalent: giveawayMl / (b.bottle_ml || 1),
+      }
+    })
   },
 
   // ดึง batch ทุกสูตรทีเดียว แล้ว group ตาม formula_id — ใช้โชว์ "ผลิตแล้วหรือยัง" ในหน้า list
@@ -517,11 +539,12 @@ export const db = {
     const map = {}
     batches.forEach(b => {
       const key = `${b.concentration}_${b.bottle_ml}`
-      if (!map[key]) map[key] = { concentration: b.concentration, bottle_ml: b.bottle_ml, produced: 0, sold: 0 }
+      if (!map[key]) map[key] = { concentration: b.concentration, bottle_ml: b.bottle_ml, produced: 0, sold: 0, giveaway: 0 }
       map[key].produced += b.qty_produced
       map[key].sold     += b.qty_sold
+      map[key].giveaway += b.giveaway_bottles_equivalent || 0
     })
-    return Object.values(map).map(s => ({ ...s, remaining: s.produced - s.sold }))
+    return Object.values(map).map(s => ({ ...s, remaining: s.produced - s.sold - s.giveaway }))
   },
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
@@ -659,12 +682,20 @@ export const db = {
   },
 
   // ── สร้างรายการค่าใช้จ่ายใหม่ — ใช้ร่วมกันได้ทุกหน้า (PageExpenses, PageMaterials ฯลฯ) ──
-  async createExpense({ expense_date, category, amount, note, for_groups }) {
+  async createExpense({ expense_date, category, amount, note, for_groups, adaptation_id }) {
     const { error } = await supabase.from('expenses').insert({
       expense_date, category, amount, note: note || null,
       for_groups: (for_groups && for_groups.length) ? for_groups : null, source: 'app',
+      adaptation_id: adaptation_id || null,
     })
     if (error) throw error
+  },
+
+  // ── ค่าใช้จ่ายเฉพาะของ blend (adaptation) นั้น ๆ — ไม่ปนกับ blend อื่น ──────────
+  async getExpensesByAdaptation(adaptationId) {
+    const { data } = await supabase
+      .from('expenses').select('amount').eq('adaptation_id', adaptationId)
+    return (data || []).reduce((s, e) => s + (e.amount ?? 0), 0)
   },
 
   // ── Revenue เดือนนี้ (ช่วงเวลาเดียวกับ getExpensesThisMonth เพื่อเทียบกำไรสุทธิได้ถูกต้อง) ──
