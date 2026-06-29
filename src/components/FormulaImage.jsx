@@ -21,15 +21,22 @@ export default function FormulaImage({ formula, onImageUpdated }) {
   const [saving,       setSaving]       = useState(false)
   const fileRef = useRef()
 
-  const prompt      = buildPrompt(formula.name, formula.vibe || '')
-  const displayPrompt = savedPrompt || prompt
-  const shortHint   = displayPrompt.split(',').slice(0, 3).join(',') + '...'
+  const autoPrompt    = buildPrompt(formula.name, formula.vibe || '')
+  // ข้อความเริ่มต้น: ถ้ามีที่บันทึกไว้แล้วใช้อันนั้น ไม่งั้น generate ใหม่จาก vibe
+  const [promptText, setPromptText] = useState(savedPrompt || autoPrompt)
+  const shortHint   = (promptText || autoPrompt).split(',').slice(0, 3).join(',') + '...'
+  const isSaved     = savedPrompt && savedPrompt === promptText
+  const isDirty     = promptText !== (savedPrompt || autoPrompt)
 
   async function handleSavePrompt() {
     setSaving(true)
-    await supabase.from('formulas').update({ image_prompt: prompt }).eq('id', formula.id)
-    setSavedPrompt(prompt)
+    await supabase.from('formulas').update({ image_prompt: promptText }).eq('id', formula.id)
+    setSavedPrompt(promptText)
     setSaving(false)
+  }
+
+  function resetToAuto() {
+    setPromptText(autoPrompt)
   }
 
   async function handleUpload(e) {
@@ -52,7 +59,7 @@ export default function FormulaImage({ formula, onImageUpdated }) {
   }
 
   function copyPrompt() {
-    navigator.clipboard.writeText(prompt)
+    navigator.clipboard.writeText(promptText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -136,29 +143,43 @@ export default function FormulaImage({ formula, onImageUpdated }) {
         {showPrompt && (
           <div style={{ border:`1px solid ${S.border}`, borderTop:'none',
             borderRadius:'0 0 8px 8px', background:S.white, padding:'10px 12px' }}>
-            <div style={{ fontSize:12, color:S.text, lineHeight:1.8,
-              fontFamily:'Inter,sans-serif', marginBottom:10 }}>
-              {displayPrompt}
-              {savedPrompt && (
-                <div style={{ fontSize:10, color:S.green, marginTop:4 }}>✓ บันทึกไว้แล้ว</div>
+            <textarea
+              value={promptText}
+              onChange={e => setPromptText(e.target.value)}
+              rows={4}
+              style={{ width:'100%', fontSize:12, color: S.text || '#3a2f24', lineHeight:1.8,
+                fontFamily:'Inter,sans-serif', marginBottom:6, padding:'8px 10px',
+                background:'#ffffff', border:`1px solid ${S.goldBd || S.border}`, borderRadius:8,
+                resize:'vertical', boxSizing:'border-box', colorScheme:'light' }}/>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+              marginBottom:10 }}>
+              <div style={{ fontSize:10, color: isSaved ? S.green : S.textLt }}>
+                {isSaved ? '✓ บันทึกไว้แล้ว' : isDirty ? '● มีการแก้ไขที่ยังไม่บันทึก' : ''}
+              </div>
+              {promptText !== autoPrompt && (
+                <button onClick={resetToAuto}
+                  style={{ fontSize:10, color:S.textLt, background:'none', border:'none',
+                    cursor:'pointer', textDecoration:'underline', fontFamily:'Inter,sans-serif' }}>
+                  ↺ กลับเป็นค่าที่ generate อัตโนมัติ
+                </button>
               )}
             </div>
             <div style={{ display:'flex', gap:8, marginTop:10 }}>
-              <button onClick={() => { navigator.clipboard.writeText(displayPrompt); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              <button onClick={copyPrompt}
                 style={{ fontSize:11, fontWeight:600, padding:'6px 16px', borderRadius:20,
                   cursor:'pointer', fontFamily:'Inter,sans-serif', border:'none',
                   background: copied ? S.green : S.gold, color:'#fff',
                   transition:'background .2s' }}>
                 {copied ? '✓ Copied!' : 'Copy Prompt'}
               </button>
-              <button onClick={handleSavePrompt} disabled={saving || savedPrompt === prompt}
+              <button onClick={handleSavePrompt} disabled={saving || isSaved}
                 style={{ fontSize:11, fontWeight:600, padding:'6px 16px', borderRadius:20,
-                  cursor: savedPrompt === prompt ? 'default' : 'pointer',
+                  cursor: isSaved ? 'default' : 'pointer',
                   fontFamily:'Inter,sans-serif',
-                  border:`1px solid ${savedPrompt === prompt ? S.green : S.gold}`,
+                  border:`1px solid ${isSaved ? S.green : S.gold}`,
                   background:'transparent',
-                  color: savedPrompt === prompt ? S.green : saving ? S.textLt : S.gold }}>
-                {saving ? 'Saving...' : savedPrompt === prompt ? '✓ Saved' : '💾 Save Prompt'}
+                  color: isSaved ? S.green : saving ? S.textLt : S.gold }}>
+                {saving ? 'Saving...' : isSaved ? '✓ Saved' : '💾 Save Prompt'}
               </button>
             </div>
             <div style={{ fontSize:10, color:S.textLt, marginTop:8, lineHeight:1.6 }}>
