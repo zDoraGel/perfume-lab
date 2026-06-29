@@ -698,9 +698,14 @@ function BlendForm({ onSaved, onCancel, existingGroups = [] }) {
   const [blendGroup, setBlendGroup] = useState('')
   const [sourceName, setSourceName] = useState('')
   const [supplier,   setSupplier]   = useState('')
-  const [sourceCost, setSourceCost] = useState('')
+  const [bottleSize, setBottleSize] = useState('')  // ขนาดขวดที่ซื้อ (g)
+  const [bottlePrice,setBottlePrice]= useState('')  // ราคารวมทั้งขวด (บาท)
   const [goal,       setGoal]       = useState('')
   const [saving,     setSaving]     = useState(false)
+
+  // คำนวณราคา/กรัมจาก ขนาดขวด + ราคารวม — ไม่ต้องหารเองแล้ว กันกรอกผิดแบบ "110 บาท" ทั้งที่หมายถึงราคาทั้งขวด
+  const sourceCost = (bottleSize && bottlePrice)
+    ? parseFloat(bottlePrice) / parseFloat(bottleSize) : null
 
   const iStyle = { width:'100%', padding:'10px 14px', borderRadius:10, fontSize:14,
     fontFamily:'Inter,sans-serif', color:S.ink, background:S.white,
@@ -714,7 +719,8 @@ function BlendForm({ onSaved, onCancel, existingGroups = [] }) {
       blend_group:     blendGroup.trim() || name.trim(),
       source_name:     sourceName.trim(),
       source_supplier: supplier.trim() || null,
-      source_cost:     sourceCost ? parseFloat(sourceCost) : null,
+      source_cost:     sourceCost,
+      source_purchase_size: bottleSize ? parseFloat(bottleSize) : null,
       goal:            goal.trim() || null,
       is_winner:       false,
     })
@@ -759,32 +765,41 @@ function BlendForm({ onSaved, onCancel, existingGroups = [] }) {
         placeholder="เช่น Aventus Clone, Black Oud Accord..."
         style={iStyle}/>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr' }}>
         <div>
           <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>Supplier</div>
           <input value={supplier} onChange={e=>setSupplier(e.target.value)}
             placeholder="เช่น Perfume World"
+            style={iStyle}/>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div>
+          <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>ซื้อมา (กรัม)</div>
+          <input type="number" value={bottleSize} onChange={e=>setBottleSize(e.target.value)}
+            placeholder="เช่น 30"
             style={{ ...iStyle, marginBottom:0 }}/>
         </div>
         <div>
-          <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>ราคา (฿/g)</div>
-          <input type="number" value={sourceCost} onChange={e=>setSourceCost(e.target.value)}
-            placeholder="เช่น 2.5"
+          <div style={{ fontSize:10, color:S.textMid, marginBottom:4, textTransform:'uppercase', letterSpacing:.5 }}>ราคารวมทั้งขวด (฿)</div>
+          <input type="number" value={bottlePrice} onChange={e=>setBottlePrice(e.target.value)}
+            placeholder="เช่น 110"
             style={{ ...iStyle, marginBottom:0 }}/>
         </div>
       </div>
 
       {/* Cost per bottle */}
-      {sourceCost && (
+      {sourceCost != null && (
         <div style={{ marginTop:8, padding:'10px 14px', borderRadius:10,
           background:'#f0ece4', border:`1px solid ${S.goldBd}`,
           display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div style={{ fontSize:11, color:S.textMid }}>
-            ราคาหัวเชื้อ
+            ราคาหัวเชื้อ (คำนวณอัตโนมัติ)
           </div>
           <div style={{ fontSize:14, fontWeight:700, color:S.gold,
             fontFamily:'Cormorant Garamond,serif' }}>
-            ฿{parseFloat(sourceCost).toFixed(2)}/g
+            ฿{sourceCost.toFixed(2)}/g
           </div>
         </div>
       )}
@@ -828,7 +843,9 @@ export default function PageMyBlends() {
   const [eName,       setEName]       = useState('')
   const [eSourceName, setESourceName] = useState('')
   const [eSupplier,   setESupplier]   = useState('')
-  const [eSourceCost, setESourceCost] = useState('')
+  const [eSourceCost, setESourceCost] = useState('') // เก็บค่า fallback ถ้าไม่กรอกขนาด/ราคาขวดใหม่
+  const [eBottleSize, setEBottleSize] = useState('')
+  const [eBottlePrice, setEBottlePrice] = useState('')
   const [eGoal,       setEGoal]       = useState('')
   const [myBlendsExpenses, setMyBlendsExpenses] = useState(0)
   const [purchaseModal, setPurchaseModal] = useState(null) // blend ที่กำลังบันทึกการซื้อหัวเชื้อ
@@ -868,22 +885,37 @@ export default function PageMyBlends() {
     setESourceName(selected.source_name || '')
     setESupplier(selected.source_supplier || '')
     setESourceCost(selected.source_cost ? String(selected.source_cost) : '')
+    // ถ้ามีบันทึกขนาดขวดที่ซื้อล่าสุดไว้ ให้คำนวณราคารวมกลับมาเป็นค่าเริ่มต้น (กรอกง่ายกว่าราคา/กรัม)
+    if (selected.source_purchase_size && selected.source_cost) {
+      setEBottleSize(String(selected.source_purchase_size))
+      setEBottlePrice(String(Math.round(selected.source_purchase_size * selected.source_cost)))
+    } else {
+      setEBottleSize('')
+      setEBottlePrice('')
+    }
     setEGoal(selected.goal || '')
     setEditingBlend(true)
   }
+
+  // ราคา/กรัมที่จะบันทึกจริง — คำนวณจากขนาดขวด+ราคารวมถ้ากรอกใหม่ ไม่งั้น fallback ใช้ค่าราคา/กรัมเดิม
+  const eSourceCostComputed = (eBottleSize && eBottlePrice)
+    ? parseFloat(eBottlePrice) / parseFloat(eBottleSize)
+    : (eSourceCost ? parseFloat(eSourceCost) : null)
 
   async function saveBlendEdit() {
     await supabase.from('adaptations').update({
       name:            eName.trim(),
       source_name:     eSourceName.trim(),
       source_supplier: eSupplier.trim() || null,
-      source_cost:     eSourceCost ? parseFloat(eSourceCost) : null,
+      source_cost:     eSourceCostComputed,
+      source_purchase_size: eBottleSize ? parseFloat(eBottleSize) : null,
       goal:            eGoal.trim() || null,
     }).eq('id', selected.id)
     setSelected(s => ({ ...s,
       name: eName.trim(), source_name: eSourceName.trim(),
       source_supplier: eSupplier.trim() || null,
-      source_cost: eSourceCost ? parseFloat(eSourceCost) : null,
+      source_cost: eSourceCostComputed,
+      source_purchase_size: eBottleSize ? parseFloat(eBottleSize) : null,
       goal: eGoal.trim() || null,
     }))
     setEditingBlend(false)
@@ -1044,13 +1076,27 @@ export default function PageMyBlends() {
                         border:`1px solid ${S.border}`, outline:'none', boxSizing:'border-box' }}/>
                   </div>
                 ))}
-                <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:10, color:S.textMid, marginBottom:3, textTransform:'uppercase', letterSpacing:.5 }}>ราคา (฿/g)</div>
-                  <input type="number" value={eSourceCost} onChange={e=>setESourceCost(e.target.value)} placeholder="เช่น 2.5"
-                    style={{ width:'100%', padding:'8px 12px', borderRadius:8, fontSize:13,
-                      fontFamily:'Inter,sans-serif', color:S.ink, background:S.white,
-                      border:`1px solid ${S.border}`, outline:'none', boxSizing:'border-box' }}/>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontSize:10, color:S.textMid, marginBottom:3, textTransform:'uppercase', letterSpacing:.5 }}>ซื้อมา (กรัม)</div>
+                    <input type="number" value={eBottleSize} onChange={e=>setEBottleSize(e.target.value)} placeholder="เช่น 30"
+                      style={{ width:'100%', padding:'8px 12px', borderRadius:8, fontSize:13,
+                        fontFamily:'Inter,sans-serif', color:S.ink, background:S.white,
+                        border:`1px solid ${S.border}`, outline:'none', boxSizing:'border-box' }}/>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:10, color:S.textMid, marginBottom:3, textTransform:'uppercase', letterSpacing:.5 }}>ราคารวมทั้งขวด (฿)</div>
+                    <input type="number" value={eBottlePrice} onChange={e=>setEBottlePrice(e.target.value)} placeholder="เช่น 110"
+                      style={{ width:'100%', padding:'8px 12px', borderRadius:8, fontSize:13,
+                        fontFamily:'Inter,sans-serif', color:S.ink, background:S.white,
+                        border:`1px solid ${S.border}`, outline:'none', boxSizing:'border-box' }}/>
+                  </div>
                 </div>
+                {eSourceCostComputed != null && (
+                  <div style={{ fontSize:11, color:S.gold, marginBottom:8 }}>
+                    = ฿{eSourceCostComputed.toFixed(2)}/g
+                  </div>
+                )}
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:10, color:S.textMid, marginBottom:3, textTransform:'uppercase', letterSpacing:.5 }}>เป้าหมาย</div>
                   <textarea value={eGoal} onChange={e=>setEGoal(e.target.value)} rows={2}
