@@ -41,7 +41,7 @@ const CHANNELS = [
 ]
 
 // ── ฟอร์มสร้างออเดอร์ใหม่ ────────────────────────────────────────────────────────
-function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
+function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistory }) {
   const [channel,         setChannel]         = useState('app')
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
@@ -190,11 +190,15 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
           .from('customers').select('loyalty_points').eq('id', customerId).single()
         if (fetchErr) throw fetchErr
         const newPoints = Math.max(0, (freshCust?.loyalty_points || 0) + pointsDelta)
-        const { error: ptsErr } = await supabase.from('customers')
+        // .select() หลัง update เพื่อเช็คว่าอัปเดตติดกี่แถวจริง — RLS บล็อกแบบเงียบไม่ throw error
+        const { data: ptsResult, error: ptsErr } = await supabase.from('customers')
           .update({ loyalty_points: newPoints })
           .eq('id', customerId)
+          .select('id, loyalty_points')
         if (ptsErr) {
-          alert(`บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ: ${ptsErr.message}\nกรุณาแก้แต้มลูกค้าเองในหน้า Customers`)
+          alert(`บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ (error): ${ptsErr.message}\nกรุณาแก้แต้มลูกค้าเองในหน้า Customers`)
+        } else if (!ptsResult || ptsResult.length === 0) {
+          alert(`⚠️ บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ — ไม่มีสิทธิ์อัปเดต (ติด RLS policy)\nกรุณาเช็ค RLS policy ของตาราง customers ใน Supabase\nแต้มที่ควรจะเป็น: ${newPoints}`)
         }
       }
       if (redeemType) {
@@ -221,12 +225,13 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
   if (savedOrder) {
     if (savedOrder.isExternal) {
       return (
-        <ExternalSaleResult order={savedOrder} formulas={formulas} onNewOrder={() => onSaved()}/>
+        <ExternalSaleResult order={savedOrder} formulas={formulas} onNewOrder={() => onSaved()}
+          onViewHistory={onViewHistory}/>
       )
     }
     return (
       <OrderQrResult order={savedOrder} formulas={formulas} promptpay={promptpay}
-        onNewOrder={() => onSaved()}/>
+        onNewOrder={() => onSaved()} onViewHistory={onViewHistory}/>
     )
   }
 
@@ -571,7 +576,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved }) {
 }
 
 // ── ผลลัพธ์เมื่อบันทึกยอดขายจากช่องทางนอกแอป (ไม่มี QR เพราะจ่ายแล้ว) ──────────────
-function ExternalSaleResult({ order, formulas, onNewOrder }) {
+function ExternalSaleResult({ order, formulas, onNewOrder, onViewHistory }) {
   const channelLabel = CHANNELS.find(c => c.value === order.channel)?.label || order.channel
   return (
     <div style={{ background:S.white, borderRadius:14, border:`1px solid ${S.border}`,
@@ -607,6 +612,14 @@ function ExternalSaleResult({ order, formulas, onNewOrder }) {
       )}
 
       <Btn onClick={onNewOrder} style={{ width:'100%', marginTop:18 }}>+ บันทึกรายการต่อไป</Btn>
+      {onViewHistory && (
+        <button onClick={onViewHistory}
+          style={{ width:'100%', marginTop:8, padding:'9px 0', borderRadius:10, cursor:'pointer',
+            fontSize:12.5, fontWeight:600, fontFamily:'Inter,sans-serif',
+            border:`1.5px solid ${S.border}`, background:'transparent', color:S.textMid }}>
+          ดูประวัติ →
+        </button>
+      )}
     </div>
   )
 }
@@ -630,7 +643,7 @@ const SOCIALS = [
     icon:'M8 1.5c-3.6 0-6.5 2.4-6.5 5.4 0 2.7 2.3 4.9 5.4 5.3-.1.4-.5 1.6-.6 1.9-.1.3.1.3.3.2.1-.1 1.7-1.1 2.4-1.6.3 0 .6.05.9.05 3.6 0 6.5-2.4 6.5-5.4S11.6 1.5 8 1.5z' },
 ]
 
-function OrderQrResult({ order, formulas, promptpay, onNewOrder }) {
+function OrderQrResult({ order, formulas, promptpay, onNewOrder, onViewHistory }) {
   const qrUrl = getPromptPayQrUrl(promptpay, order.total_amount)
   const payUrl = `${PRODUCTION_URL}/pay/${order.id}`
   const [copied, setCopied] = useState(false)
@@ -770,6 +783,14 @@ function OrderQrResult({ order, formulas, promptpay, onNewOrder }) {
       </details>
 
       <Btn onClick={onNewOrder} style={{ width:'100%', marginTop:16 }}>+ สร้างออเดอร์ใหม่</Btn>
+      {onViewHistory && (
+        <button onClick={onViewHistory}
+          style={{ width:'100%', marginTop:8, padding:'9px 0', borderRadius:10, cursor:'pointer',
+            fontSize:12.5, fontWeight:600, fontFamily:'Inter,sans-serif',
+            border:`1.5px solid ${S.border}`, background:'transparent', color:S.textMid }}>
+          ดูประวัติ →
+        </button>
+      )}
     </div>
   )
 }
@@ -896,15 +917,17 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
   const groups = Array.from(groupMap.entries()).map(([customerId, group]) => {
     const cust = customers.find(c => c.id === group[0].customer_id)
     const totalAmount = group.reduce((s, o) => s + (o.total_amount || 0), 0)
-    const totalPoints = group.reduce((s, o) => s + (o.points_earned || 0), 0)
+    // แต้มคงเหลือจริง ต้องดึงจาก customers.loyalty_points (อัปเดตหลังหักแลกรางวัลแล้ว)
+    // ห้าม sum points_earned ของทุกออเดอร์เอง เพราะจะไม่ตัดแต้มที่แลกไปแล้วออก
+    const currentPoints = cust?.loyalty_points || 0
     const latestDate = group[0].order_date // orders มาเรียง desc แล้วจาก loadAll
     const hasPending = group.some(o => o.status === 'pending')
-    return { customerId, cust, group, totalAmount, totalPoints, latestDate, hasPending }
+    return { customerId, cust, group, totalAmount, currentPoints, latestDate, hasPending }
   })
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-      {groups.map(({ customerId, cust, group, totalAmount, totalPoints, latestDate, hasPending }) => {
+      {groups.map(({ customerId, cust, group, totalAmount, currentPoints, latestDate, hasPending }) => {
         const isOpen = expandedGroup === customerId
         return (
           <div key={customerId} style={{ background:S.white, border:`1px solid ${S.border}`,
@@ -929,8 +952,8 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:15, fontWeight:700, color:S.gold,
                   fontFamily:'Cormorant Garamond,serif' }}>฿{totalAmount.toLocaleString()}</div>
-                {totalPoints > 0 && (
-                  <span style={{ fontSize:10, color:S.gold, fontWeight:600 }}>🏆 {totalPoints} แต้ม</span>
+                {currentPoints > 0 && (
+                  <span style={{ fontSize:10, color:S.gold, fontWeight:600 }}>🏆 {currentPoints} แต้ม</span>
                 )}
               </div>
             </div>
@@ -950,6 +973,152 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── รายชื่อลูกค้าทั้งหมด ─────────────────────────────────────────────────────────
+function CustomerList({ customers, orders, onUpdated }) {
+  const [search,   setSearch]   = useState('')
+  const [sortBy,   setSortBy]   = useState('points') // 'points' | 'spent' | 'name'
+  const [editing,  setEditing]  = useState(null) // customer object ที่กำลังแก้
+  const [saving,   setSaving]   = useState(false)
+
+  // สรุปยอดซื้อสะสม + จำนวนออเดอร์ต่อลูกค้า จาก orders
+  const statsByCustomer = new Map()
+  for (const o of orders) {
+    if (!o.customer_id) continue
+    const cur = statsByCustomer.get(o.customer_id) || { totalSpent: 0, orderCount: 0 }
+    cur.totalSpent += o.total_amount || 0
+    cur.orderCount += 1
+    statsByCustomer.set(o.customer_id, cur)
+  }
+
+  let rows = customers.map(c => ({
+    ...c,
+    totalSpent:  statsByCustomer.get(c.id)?.totalSpent  || 0,
+    orderCount:  statsByCustomer.get(c.id)?.orderCount  || 0,
+  }))
+
+  if (search.trim()) {
+    const q = search.trim().toLowerCase()
+    rows = rows.filter(c =>
+      (c.name || '').toLowerCase().includes(q) || (c.contact || '').includes(q))
+  }
+
+  rows.sort((a, b) => {
+    if (sortBy === 'points') return (b.loyalty_points || 0) - (a.loyalty_points || 0)
+    if (sortBy === 'spent')  return b.totalSpent - a.totalSpent
+    return (a.name || '').localeCompare(b.name || '', 'th')
+  })
+
+  async function saveEdit() {
+    if (!editing) return
+    setSaving(true)
+    try {
+      const { error, data } = await supabase.from('customers')
+        .update({
+          name: editing.name?.trim() || null,
+          contact: editing.contact?.trim() || null,
+          address: editing.address?.trim() || null,
+          loyalty_points: parseInt(editing.loyalty_points) || 0,
+        })
+        .eq('id', editing.id)
+        .select('id')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        alert('⚠️ บันทึกไม่สำเร็จ — ติด RLS policy')
+      } else {
+        setEditing(null)
+        onUpdated?.()
+      }
+    } catch (e) {
+      alert('บันทึกไม่สำเร็จ: ' + e.message)
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+        <input placeholder="ค้นหาชื่อ/เบอร์โทร..." value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ ...inputStyle, flex:1 }}/>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+          style={{ ...inputStyle, width:140 }}>
+          <option value="points">เรียง: แต้มมาก→น้อย</option>
+          <option value="spent">เรียง: ยอดซื้อมาก→น้อย</option>
+          <option value="name">เรียง: ชื่อ ก-ฮ</option>
+        </select>
+      </div>
+
+      {rows.length === 0 && (
+        <div style={{ textAlign:'center', padding:30, color:S.textLt, fontSize:13 }}>
+          ไม่พบลูกค้า
+        </div>
+      )}
+
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {rows.map(c => (
+          <div key={c.id} onClick={() => setEditing({ ...c })}
+            style={{ background:S.white, border:`1px solid ${S.border}`, borderRadius:10,
+              padding:'12px 14px', display:'flex', justifyContent:'space-between',
+              alignItems:'center', cursor:'pointer' }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:S.ink }}>{c.name}</div>
+              <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
+                {c.contact || '-'} · {c.orderCount} ออเดอร์ · ใช้จ่ายรวม ฿{c.totalSpent.toLocaleString()}
+              </div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:14, fontWeight:700, color:S.gold,
+                fontFamily:'Cormorant Garamond,serif' }}>🏆 {c.loyalty_points || 0}</div>
+              <div style={{ fontSize:9, color:S.textLt }}>แต้ม</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div onClick={() => setEditing(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:50,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:S.white, borderRadius:14, padding:20, width:'100%',
+              maxWidth:380, maxHeight:'85vh', overflowY:'auto' }}>
+            <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:18, fontStyle:'italic',
+              color:S.ink, marginBottom:14 }}>แก้ไขข้อมูลลูกค้า</div>
+
+            <label style={{ fontSize:11, color:S.textLt }}>ชื่อ</label>
+            <input value={editing.name || ''} onChange={e => setEditing({ ...editing, name:e.target.value })}
+              style={{ ...inputStyle, marginTop:4, marginBottom:10 }}/>
+
+            <label style={{ fontSize:11, color:S.textLt }}>เบอร์โทร</label>
+            <input value={editing.contact || ''} onChange={e => setEditing({ ...editing, contact:e.target.value })}
+              style={{ ...inputStyle, marginTop:4, marginBottom:10 }}/>
+
+            <label style={{ fontSize:11, color:S.textLt }}>ที่อยู่</label>
+            <textarea value={editing.address || ''} onChange={e => setEditing({ ...editing, address:e.target.value })}
+              rows={2} style={{ ...inputStyle, marginTop:4, marginBottom:10, resize:'vertical' }}/>
+
+            <label style={{ fontSize:11, color:S.textLt }}>แต้มสะสม (แก้มือ)</label>
+            <input type="number" value={editing.loyalty_points ?? 0}
+              onChange={e => setEditing({ ...editing, loyalty_points:e.target.value })}
+              style={{ ...inputStyle, marginTop:4, marginBottom:16 }}/>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setEditing(null)}
+                style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1px solid ${S.border}`,
+                  background:'transparent', color:S.textMid, fontWeight:600, cursor:'pointer' }}>
+                ยกเลิก
+              </button>
+              <Btn onClick={saveEdit} disabled={saving} style={{ flex:1 }}>
+                {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -986,9 +1155,16 @@ export default function PageOrderBilling() {
         if (order?.customer_id && points > 0) {
           const { data: cust } = await supabase.from('customers')
             .select('loyalty_points').eq('id', order.customer_id).single()
-          await supabase.from('customers')
-            .update({ loyalty_points: (cust?.loyalty_points || 0) + points })
+          const newPoints = (cust?.loyalty_points || 0) + points
+          const { data: ptsResult, error: ptsErr } = await supabase.from('customers')
+            .update({ loyalty_points: newPoints })
             .eq('id', order.customer_id)
+            .select('id')
+          if (ptsErr) {
+            alert(`มาร์คจ่ายแล้ว แต่บวกแต้มไม่สำเร็จ: ${ptsErr.message}`)
+          } else if (!ptsResult || ptsResult.length === 0) {
+            alert(`⚠️ มาร์คจ่ายแล้ว แต่บวกแต้มไม่สำเร็จ — ติด RLS policy (แต้มที่ควรได้: ${newPoints})`)
+          }
         }
         await supabase.from('orders').update({ points_earned: points }).eq('id', orderId)
         setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid', points_earned: points } : o))
@@ -1014,7 +1190,7 @@ export default function PageOrderBilling() {
       </div>
 
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        {[['new','สร้างออเดอร์'],['history','ประวัติ']].map(([k,label]) => (
+        {[['new','สร้างออเดอร์'],['history','ประวัติ'],['customers','ลูกค้า']].map(([k,label]) => (
           <button key={k} onClick={() => setTab(k)}
             style={{ flex:1, padding:'9px 0', borderRadius:10, cursor:'pointer',
               fontSize:12, fontWeight:600, fontFamily:'Inter,sans-serif',
@@ -1029,11 +1205,15 @@ export default function PageOrderBilling() {
       {tab === 'new' && (
         <NewOrderForm key={formKey} formulas={formulas} customers={customers}
           onSaved={() => { loadAll(); setFormKey(k => k+1) }}
-          onOrderSaved={loadAll}/>
+          onOrderSaved={loadAll}
+          onViewHistory={() => { loadAll(); setTab('history') }}/>
       )}
       {tab === 'history' && (
         <OrderHistory orders={orders} customers={customers} formulas={formulas}
           onMarkPaid={markPaid}/>
+      )}
+      {tab === 'customers' && (
+        <CustomerList customers={customers} orders={orders} onUpdated={loadAll}/>
       )}
     </div>
   )
