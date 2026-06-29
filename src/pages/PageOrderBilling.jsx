@@ -59,6 +59,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   const [showCustList,    setShowCustList]    = useState(false)
   const [redeemType,      setRedeemType]      = useState(null) // null | 'discount_100' | 'perfume_2ml' | 'free_shipping'
   const [redeemFormulaId, setRedeemFormulaId] = useState('')
+  const savingRef = useRef(false) // กันกดบันทึกซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
 
   function addItem() {
     setItems(p => [...p, { formula_id:'', bottle_ml:15, qty:1, unit_price:'', original_price:'', discount_type:null, discount_value:'', discount_reason:'' }])
@@ -98,10 +99,12 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   }
 
   async function saveOrder() {
+    if (savingRef.current) return // กันกดซ้ำ — เช็คทันทีไม่รอ React re-render
     if (!customerName.trim()) return alert('กรอกชื่อลูกค้าก่อนค่ะ')
     if (items.every(it => !it.formula_id)) return alert('เลือกสินค้าอย่างน้อย 1 รายการ')
     if (redeemType === 'perfume_2ml' && !redeemFormulaId) return alert('เลือกกลิ่นที่จะแถม 2ml ก่อนค่ะ')
     const isExternal = !QR_CHANNELS.includes(channel)
+    savingRef.current = true
     setSaving(true)
     try {
       let customerId = existingId
@@ -219,6 +222,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
+    savingRef.current = false
     setSaving(false)
   }
 

@@ -391,6 +391,88 @@ export const db = {
 
     return { data, deduction, error: null }
   },
+  // ── ขั้นตอนที่ 1: ทำหัวเชื้อ — หักวัตถุดิบทันที ยังไม่ผสมแอล/บรรจุขวด ──────────────
+  async createConcentrateBatch(formulaId, { concentration, bottle_ml, qty_produced,
+    concentrate_made_at, concentrate_ml, notes }) {
+    const { data, error } = await supabase
+      .from('production_batches')
+      .insert({
+        formula_id:   formulaId,
+        concentration,
+        bottle_ml:    parseInt(bottle_ml),
+        qty_produced: parseInt(qty_produced),
+        qty_sold:     0,
+        produced_at:  concentrate_made_at || new Date().toISOString().split('T')[0], // จะถูกอัปเดตเป็นวันบรรจุจริงตอน completeBottling
+        concentrate_made_at: concentrate_made_at || new Date().toISOString().split('T')[0],
+        concentrate_ml: concentrate_ml != null ? parseFloat(concentrate_ml) : null,
+        notes:        notes || null,
+        stage:        'concentrate',
+      })
+      .select().single()
+    if (error) {
+      console.error('createConcentrateBatch error:', error)
+      return { data: null, deduction: null, error }
+    }
+
+    // หักสต็อกวัตถุดิบของหัวเชื้อทันที (ใช้ปริมาณรวมที่ตั้งใจผลิตคำนวณสัดส่วน)
+    const totalMl = parseInt(bottle_ml) * parseInt(qty_produced)
+    let deduction = null
+    try {
+      deduction = await this.deductStockFromBatch(formulaId, totalMl)
+      if (!deduction.ok) console.warn('deductStockFromBatch skipped:', deduction.reason)
+    } catch (e) {
+      console.error('deductStockFromBatch error:', e)
+      deduction = { ok: false, reason: e.message }
+    }
+
+    return { data, deduction, error: null }
+  },
+
+  // ── ขั้นตอนที่ 2: ผสมแอลกอฮอล์ + บรรจุขวด — ทำให้ batch จาก stage 'concentrate' เป็น 'bottled' ─────
+  async completeBottling(batchId, { alcohol_mix, alcohol_ml_per_bottle, produced_at, sell_price, notes }) {
+    const { data, error } = await supabase
+      .from('production_batches')
+      .update({
+        stage:        'bottled',
+        produced_at:  produced_at || new Date().toISOString().split('T')[0],
+        alcohol_mix:           (alcohol_mix && alcohol_mix.length) ? alcohol_mix : null,
+        alcohol_ml_per_bottle: alcohol_ml_per_bottle != null ? parseFloat(alcohol_ml_per_bottle) : null,
+        sell_price:            sell_price != null ? parseFloat(sell_price) : null,
+        notes:                 notes || null,
+      })
+      .eq('id', batchId)
+      .select().single()
+    if (error) {
+      console.error('completeBottling error:', error)
+      return { data: null, error }
+    }
+    return { data, error: null }
+  },
+
+  async updateBatch(batchId, { concentration, bottle_ml, qty_produced, produced_at, notes,
+    concentrate_made_at, alcohol_mix, concentrate_ml, alcohol_ml_per_bottle, sell_price }) {
+    const { data, error } = await supabase
+      .from('production_batches')
+      .update({
+        concentration,
+        bottle_ml:    parseInt(bottle_ml),
+        qty_produced: parseInt(qty_produced),
+        produced_at:  produced_at || new Date().toISOString().split('T')[0],
+        notes:        notes || null,
+        concentrate_made_at:   concentrate_made_at || null,
+        alcohol_mix:           (alcohol_mix && alcohol_mix.length) ? alcohol_mix : null,
+        concentrate_ml:        concentrate_ml != null ? parseFloat(concentrate_ml) : null,
+        alcohol_ml_per_bottle: alcohol_ml_per_bottle != null ? parseFloat(alcohol_ml_per_bottle) : null,
+        sell_price:            sell_price != null ? parseFloat(sell_price) : null,
+      })
+      .eq('id', batchId)
+      .select().single()
+    if (error) {
+      console.error('updateBatch error:', error)
+      return { data: null, error }
+    }
+    return { data, error: null }
+  },
   async updateBatchSold(batchId, qty_sold) {
     const { data } = await supabase
       .from('production_batches')
