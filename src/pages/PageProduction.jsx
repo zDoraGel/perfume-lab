@@ -428,23 +428,12 @@ function BatchForm({ formulaId, onSave, editingBatch, onCancelEdit }) {
   )
 }
 
-// ── ขั้นตอนที่ 1: ทำหัวเชื้อ ────────────────────────────────────────────────────
+// ── ขั้นตอนที่ 1: ทำหัวเชื้อ (ไม่ต้องเลือก concentration — ค่อยตัดสินใจตอนผสมแอล) ──────
 function ConcentrateForm({ formulaId, onSave, onCancel }) {
-  const [concentration, setConcentration] = useState('SIGNATURE')
-  const [bottle_ml,     setBottleMl]      = useState(15)
-  const [qty,           setQty]           = useState('')
+  const [totalMl,        setTotalMl]        = useState('')
   const [concentrateDate, setConcentrateDate] = useState(new Date().toISOString().split('T')[0])
-  const [concentrateMl,  setConcentrateMl] = useState('')
-  const [notes,          setNotes]         = useState('')
-  const [saving,         setSaving]        = useState(false)
-  const [overridden,     setOverridden]    = useState(false)
-
-  useEffect(() => {
-    if (overridden) return
-    const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-    const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
-    if (fill) setConcentrateMl(fill.concInBottle != null ? String(fill.concInBottle) : '')
-  }, [concentration, bottle_ml, overridden])
+  const [notes,           setNotes]           = useState('')
+  const [saving,          setSaving]          = useState(false)
 
   const inputStyle = {
     width:'100%', padding:'8px 12px', borderRadius:8, border:`1px solid ${S.border}`,
@@ -453,11 +442,16 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
   }
 
   async function save() {
-    if (!qty || parseInt(qty) <= 0) return
+    if (!totalMl || parseFloat(totalMl) <= 0) return
     setSaving(true)
+    // เก็บเป็น "1 ขวด" ที่มีปริมาตร = หัวเชื้อรวมที่ทำได้ — ยังไม่ผูกกับ concentration/ขนาดขวดจริง
+    // จะค่อยแบ่งสัดส่วนจริงตอนผสมแอล (AlcoholMixForm)
     const { error } = await db.createConcentrateBatch(formulaId, {
-      concentration, bottle_ml, qty_produced: qty,
-      concentrate_made_at: concentrateDate, concentrate_ml: concentrateMl ? parseFloat(concentrateMl) : null,
+      concentration: null,
+      bottle_ml: parseFloat(totalMl),
+      qty_produced: 1,
+      concentrate_made_at: concentrateDate,
+      concentrate_ml: parseFloat(totalMl),
       notes,
     })
     setSaving(false)
@@ -474,57 +468,15 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
       <div style={{ fontSize:12, fontWeight:700, color:S.gold, letterSpacing:1,
         textTransform:'uppercase', marginBottom:4 }}>🧪 ทำหัวเชื้อ</div>
       <div style={{ fontSize:11, color:S.textLt, marginBottom:12 }}>
-        บันทึกหัวเชื้อก่อน หักวัตถุดิบทันที — ค่อยมาผสมแอล+บรรจุขวดทีหลังได้
+        บันทึกหัวเชื้อก่อน หักวัตถุดิบทันที — ยังไม่ต้องตัดสินใจ concentration/ขนาดขวด
+        ค่อยมาเลือกตอนผสมแอล+บรรจุขวดทีหลังได้
       </div>
 
       <div style={{ marginBottom:10 }}>
         <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>Concentration</div>
-        <div style={{ display:'flex', gap:8 }}>
-          {CONC.map(c => (
-            <button key={c} onClick={() => setConcentration(c)}
-              style={{ flex:1, padding:'8px 0', borderRadius:8, cursor:'pointer',
-                fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600,
-                border:`1.5px solid ${concentration===c ? CONC_COLOR[c].c : S.border}`,
-                background: concentration===c ? CONC_COLOR[c].bg : S.white,
-                color: concentration===c ? CONC_COLOR[c].c : S.textMid }}>
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-        <div>
-          <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-            fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ขนาดขวด (ที่ตั้งใจ)</div>
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-            {[5,10,15,30,50,100].map(ml => (
-              <button key={ml} onClick={() => setBottleMl(ml)}
-                style={{ flex:'1 1 27%', minWidth:56, padding:'8px 0', borderRadius:8, cursor:'pointer',
-                  fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
-                  border:`1.5px solid ${bottle_ml===ml ? S.gold : S.border}`,
-                  background: bottle_ml===ml ? S.goldLt : S.white,
-                  color: bottle_ml===ml ? S.gold : S.textMid }}>
-                {ml} ml
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-            fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>จำนวน (ขวด ที่ตั้งใจ)</div>
-          <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
-            placeholder="เช่น 10" style={inputStyle}/>
-        </div>
-      </div>
-
-      <div style={{ marginBottom:10 }}>
-        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>หัวเชื้อ (ml/ขวด)</div>
-        <input type="number" step="0.01" value={concentrateMl}
-          onChange={e => { setConcentrateMl(e.target.value); setOverridden(true) }}
-          placeholder="0.00" style={inputStyle}/>
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ทำหัวเชื้อรวม (ml)</div>
+        <input type="number" step="0.01" value={totalMl} onChange={e => setTotalMl(e.target.value)}
+          placeholder="เช่น 45" style={inputStyle}/>
       </div>
 
       <div style={{ marginBottom:10 }}>
@@ -548,11 +500,11 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
             background:'transparent', border:`1px solid ${S.border}`, color:S.textMid }}>
           ยกเลิก
         </button>
-        <button onClick={save} disabled={!qty || saving}
+        <button onClick={save} disabled={!totalMl || saving}
           style={{ flex:1, padding:'10px 0', borderRadius:10, cursor:'pointer',
             fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
             background:S.gold, border:'none', color:'#fff',
-            opacity: !qty || saving ? .6 : 1 }}>
+            opacity: !totalMl || saving ? .6 : 1 }}>
           {saving ? 'กำลังบันทึก...' : '✓ บันทึกหัวเชื้อ'}
         </button>
       </div>
@@ -563,24 +515,38 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
 // ── ขั้นตอนที่ 2: ผสมแอลกอฮอล์ + บรรจุขวด (สำหรับ batch ที่ stage='concentrate' อยู่) ──────
 function AlcoholMixForm({ batch, onSave, onCancel }) {
   const ALCOHOL_PRESETS = ['DEB', 'BLISS', 'Ethanol 95%', 'Thailai']
+  const totalConcentrateMl = batch.concentrate_ml || 0 // หัวเชื้อรวมที่ทำไว้จากขั้นตอนที่ 1
+
+  const [concentration, setConcentration] = useState('SIGNATURE')
+  const [bottle_ml,     setBottleMl]      = useState(15)
+  const [qty,           setQty]           = useState('')
+  const [usedMl,        setUsedMl]        = useState(totalConcentrateMl ? String(totalConcentrateMl) : '')
   const [alcoholMix, setAlcoholMix] = useState([{ brand:'', ml:'', isCustom:false }])
   const [producedAt, setProducedAt] = useState(new Date().toISOString().split('T')[0])
   const [sellPrice,  setSellPrice]  = useState('')
   const [notes,      setNotes]      = useState(batch.notes || '')
   const [saving,     setSaving]     = useState(false)
+  const [overridden, setOverridden] = useState(false)
+
+  // หัวเชื้อ/ขวด คำนวณจาก "หัวเชื้อที่จะใช้รอบนี้" (ไม่จำเป็นต้องใช้หมด) หารด้วยจำนวนขวดที่จะบรรจุ
+  const usedMlNum = parseFloat(usedMl) || 0
+  const concentratePerBottle = (qty && parseInt(qty) > 0 && usedMlNum > 0) ? usedMlNum / parseInt(qty) : null
+  const remainingAfter = Math.max(0, Math.round((totalConcentrateMl - usedMlNum) * 100) / 100)
 
   useEffect(() => {
+    if (overridden) return
     const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-    const fill = calcBottleFill(0, concMap[batch.concentration], batch.bottle_ml, 0)
+    const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
     if (fill?.alcoholInBottle != null) {
       setAlcoholMix([{ brand:'', ml: String(fill.alcoholInBottle), isCustom:false }])
     }
-  }, [])
+  }, [concentration, bottle_ml, overridden])
 
   function addAlcoholRow() { setAlcoholMix(prev => [...prev, { brand:'', ml:'', isCustom:false }]) }
   function removeAlcoholRow(idx) { setAlcoholMix(prev => prev.filter((_, i) => i !== idx)) }
   function updateAlcoholRow(idx, field, value) {
     setAlcoholMix(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+    if (field === 'ml') setOverridden(true)
   }
   const alcoholMixTotalMl = alcoholMix.reduce((s, r) => s + (parseFloat(r.ml) || 0), 0)
 
@@ -591,6 +557,11 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
   }
 
   async function save() {
+    if (!qty || parseInt(qty) <= 0) return alert('กรอกจำนวนขวดที่จะบรรจุก่อนค่ะ')
+    if (!usedMl || usedMlNum <= 0) return alert('กรอกปริมาณหัวเชื้อที่จะใช้รอบนี้ก่อนค่ะ')
+    if (usedMlNum > totalConcentrateMl + 0.05) {
+      return alert(`ใช้หัวเชื้อเกินที่มี (มีอยู่ ${totalConcentrateMl}ml)`)
+    }
     const hasMlWithoutBrand = alcoholMix.some(r => r.ml && !r.brand)
     if (hasMlWithoutBrand) {
       const ok = window.confirm('ยังไม่ได้เลือกยี่ห้อแอลกอฮอล์ (มีแค่ปริมาณ ml) — บันทึกแบบไม่มีข้อมูลแอลกอฮอล์เลยไหม?')
@@ -598,6 +569,8 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
     }
     setSaving(true)
     const { error } = await db.completeBottling(batch.id, {
+      concentration, bottle_ml, qty_produced: qty,
+      concentrate_used_ml: usedMlNum,
       alcohol_mix: alcoholMix.filter(r => r.brand && r.ml).map(r => ({ brand: r.brand, ml: r.ml })),
       alcohol_ml_per_bottle: alcoholMixTotalMl || null,
       produced_at: producedAt,
@@ -617,10 +590,68 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
       borderRadius:12, padding:16, marginBottom:12 }}>
       <div style={{ fontSize:12, fontWeight:700, color:S.gold, letterSpacing:1,
         textTransform:'uppercase', marginBottom:4 }}>🧴 ผสมแอล + บรรจุขวด</div>
-      <div style={{ fontSize:11, color:S.textLt, marginBottom:12 }}>
-        {batch.bottle_ml}ml × {batch.qty_produced} ขวด · หัวเชื้อ {batch.concentrate_ml}ml/ขวด
-        ทำไว้ {batch.concentrate_made_at}
+      <div style={{ fontSize:11, color:S.textLt, marginBottom:8 }}>
+        หัวเชื้อที่มี {totalConcentrateMl}ml (ทำไว้ {batch.concentrate_made_at})
       </div>
+
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ใช้หัวเชื้อรอบนี้ (ml)</div>
+        <input type="number" step="0.01" value={usedMl} onChange={e => setUsedMl(e.target.value)}
+          placeholder={`สูงสุด ${totalConcentrateMl}`} style={inputStyle}/>
+        <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
+          {usedMlNum > 0 && usedMlNum < totalConcentrateMl
+            ? `เหลือหัวเชื้อไว้รอบหน้าอีก ${remainingAfter}ml`
+            : 'ไม่ต้องใช้หมดก็ได้ — ที่เหลือจะเก็บไว้บรรจุรอบหน้า'}
+        </div>
+      </div>
+
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>Concentration</div>
+        <div style={{ display:'flex', gap:8 }}>
+          {CONC.map(c => (
+            <button key={c} onClick={() => setConcentration(c)}
+              style={{ flex:1, padding:'8px 0', borderRadius:8, cursor:'pointer',
+                fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600,
+                border:`1.5px solid ${concentration===c ? CONC_COLOR[c].c : S.border}`,
+                background: concentration===c ? CONC_COLOR[c].bg : S.white,
+                color: concentration===c ? CONC_COLOR[c].c : S.textMid }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:6 }}>
+        <div>
+          <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+            fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ขนาดขวด</div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {[5,10,15,30,50,100].map(ml => (
+              <button key={ml} onClick={() => setBottleMl(ml)}
+                style={{ flex:'1 1 27%', minWidth:50, padding:'7px 0', borderRadius:8, cursor:'pointer',
+                  fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600,
+                  border:`1.5px solid ${bottle_ml===ml ? S.gold : S.border}`,
+                  background: bottle_ml===ml ? S.goldLt : S.white,
+                  color: bottle_ml===ml ? S.gold : S.textMid }}>
+                {ml}ml
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
+            fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>จำนวนขวดที่จะบรรจุ</div>
+          <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
+            placeholder="เช่น 3" style={inputStyle}/>
+        </div>
+      </div>
+      {concentratePerBottle != null && (
+        <div style={{ fontSize:11, color:S.gold, marginBottom:10 }}>
+          = หัวเชื้อ {concentratePerBottle.toFixed(2)}ml/ขวด
+        </div>
+      )}
 
       <div style={{ marginBottom:10 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
@@ -834,17 +865,26 @@ export default function PageProduction() {
                         </span>
                       )}
                     </div>
-                    {summary ? (
-                      <span style={{ fontSize:10, fontWeight:700, color:S.green, background:'#eef4ee',
-                        padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap', flexShrink:0 }}>
-                        ✓ ผลิตแล้ว {summary.produced} ขวด
-                      </span>
-                    ) : (
-                      <span style={{ fontSize:10, color:S.textLt, background:S.bg,
-                        padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap', flexShrink:0 }}>
-                        ยังไม่ผลิต
-                      </span>
-                    )}
+                    <div style={{ display:'flex', flexDirection:'column', gap:3, alignItems:'flex-end', flexShrink:0 }}>
+                      {summary?.produced > 0 && (
+                        <span style={{ fontSize:10, fontWeight:700, color:S.green, background:'#eef4ee',
+                          padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap' }}>
+                          ✓ ผสมแอลแล้ว {summary.produced} ขวด
+                        </span>
+                      )}
+                      {summary?.pendingConcentrate > 0 && (
+                        <span style={{ fontSize:10, fontWeight:700, color:S.gold, background:S.goldLt,
+                          padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap' }}>
+                          🧪 ทำหัวเชื้อ {summary.pendingConcentrate}
+                        </span>
+                      )}
+                      {!summary?.produced && !summary?.pendingConcentrate && (
+                        <span style={{ fontSize:10, color:S.textLt, background:S.bg,
+                          padding:'3px 9px', borderRadius:20, whiteSpace:'nowrap' }}>
+                          ยังไม่ผลิต
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               )
@@ -900,7 +940,12 @@ export default function PageProduction() {
                 <div style={{ fontSize:12, fontWeight:700, color:S.gold, letterSpacing:1,
                   textTransform:'uppercase', marginBottom:10 }}>ประวัติการผลิต</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {batches.map(b => (
+                  {[...batches].sort((a, b) => {
+                    // รอผสมแอลขึ้นก่อนเสมอ (เรียงตามวันทำหัวเชื้อล่าสุด) แล้วค่อยตามด้วยที่บรรจุเสร็จแล้ว (เรียงตามวันผลิตล่าสุด)
+                    if (a.stage === 'concentrate' && b.stage !== 'concentrate') return -1
+                    if (a.stage !== 'concentrate' && b.stage === 'concentrate') return 1
+                    return 0 // ลำดับเดิมจาก getBatches (produced_at desc) อยู่แล้วภายในกลุ่มเดียวกัน
+                  }).map(b => (
                     <div key={b.id}>
                       {b.stage === 'concentrate' ? (
                         /* ── รอผสมแอล/บรรจุขวด — แสดงแบบย่อ ไม่มีราคาขาย/กำไร/stock เพราะยังไม่บรรจุ ── */
@@ -914,12 +959,8 @@ export default function PageProduction() {
                             display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                             <div>
                               <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-                                <span style={{ fontSize:11, fontWeight:700,
-                                  color:CONC_COLOR[b.concentration]?.c || S.gold,
-                                  background:CONC_COLOR[b.concentration]?.bg,
-                                  padding:'2px 8px', borderRadius:10 }}>{b.concentration}</span>
                                 <span style={{ fontSize:13, color:S.ink, fontWeight:600 }}>
-                                  {b.bottle_ml} ml × {b.qty_produced} ขวด (ตั้งใจ)
+                                  หัวเชื้อ {b.concentrate_ml}ml
                                 </span>
                                 <span style={{ fontSize:10, fontWeight:700, color:S.gold,
                                   background:S.goldLt, padding:'2px 8px', borderRadius:10 }}>
@@ -928,18 +969,10 @@ export default function PageProduction() {
                               </div>
                               <div style={{ fontSize:11, color:S.textLt }}>
                                 ทำหัวเชื้อ {b.concentrate_made_at}
-                                {b.concentrate_ml != null && ` · หัวเชื้อ ${b.concentrate_ml}ml/ขวด`}
                                 {b.notes && ` · ${b.notes}`}
                               </div>
                             </div>
                             <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                              <button onClick={() => { setEditingBatch(b); setShowForm(false) }}
-                                style={{ fontSize:11, color:S.textMid, background:S.white,
-                                  border:`1px solid ${S.border}`, borderRadius:14,
-                                  padding:'4px 10px', cursor:'pointer', fontWeight:600,
-                                  whiteSpace:'nowrap' }}>
-                                ✏️ แก้ไข
-                              </button>
                               <button onClick={() => setMixingBatch(b)}
                                 style={{ fontSize:11, color:'#fff', background:S.gold,
                                   border:'none', borderRadius:14,
@@ -968,12 +1001,11 @@ export default function PageProduction() {
                               {b.bottle_ml} ml × {b.qty_produced} ขวด
                             </span>
                           </div>
-                          <div style={{ fontSize:11, color:S.textLt }}>
-                            {b.concentrate_made_at && (
-                              <span>หัวเชื้อ {b.concentrate_made_at} → </span>
+                          <div style={{ fontSize:11, color:S.textLt, lineHeight:1.6 }}>
+                            {b.concentrate_made_at && b.concentrate_made_at !== b.produced_at && (
+                              <div>🧪 ทำหัวเชื้อ {b.concentrate_made_at}</div>
                             )}
-                            ผลิต {b.produced_at}
-                            {b.notes && ` · ${b.notes}`}
+                            <div>🧴 ผลิต/บรรจุขวด {b.produced_at}{b.notes && ` · ${b.notes}`}</div>
                           </div>
                           {(b.alcohol_mix?.length > 0 || b.alcohol_brand || b.concentrate_ml != null) && (
                             <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>

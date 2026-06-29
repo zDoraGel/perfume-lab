@@ -338,11 +338,16 @@ export const db = {
   async getBatchSummaryByFormula() {
     const { data } = await supabase
       .from('production_batches')
-      .select('formula_id, qty_produced, qty_sold, produced_at')
+      .select('formula_id, qty_produced, qty_sold, produced_at, stage')
     const summary = {}
     ;(data || []).forEach(b => {
       if (!summary[b.formula_id]) {
-        summary[b.formula_id] = { produced: 0, sold: 0, batchCount: 0, lastProducedAt: null }
+        summary[b.formula_id] = { produced: 0, sold: 0, batchCount: 0, lastProducedAt: null, pendingConcentrate: 0 }
+      }
+      if (b.stage === 'concentrate') {
+        // หัวเชื้อที่ยังไม่บรรจุขวด — นับแยก ไม่รวมกับยอด "ผลิตแล้ว" (qty_produced ของแถวนี้เป็นแค่ placeholder ไม่ใช่ขวดจริง)
+        summary[b.formula_id].pendingConcentrate += 1
+        return
       }
       summary[b.formula_id].produced += b.qty_produced || 0
       summary[b.formula_id].sold     += b.qty_sold || 0
@@ -399,10 +404,10 @@ export const db = {
       .insert({
         formula_id:   formulaId,
         concentration,
-        bottle_ml:    parseInt(bottle_ml),
+        bottle_ml:    Math.round(parseFloat(bottle_ml)), // column เป็น integer — ปัดเศษ ค่าจริงเก็บแยกที่ concentrate_ml
         qty_produced: parseInt(qty_produced),
         qty_sold:     0,
-        produced_at:  concentrate_made_at || new Date().toISOString().split('T')[0], // จะถูกอัปเดตเป็นวันบรรจุจริงตอน completeBottling
+        produced_at:  concentrate_made_at || new Date().toISOString().split('T')[0],
         concentrate_made_at: concentrate_made_at || new Date().toISOString().split('T')[0],
         concentrate_ml: concentrate_ml != null ? parseFloat(concentrate_ml) : null,
         notes:        notes || null,
@@ -429,17 +434,56 @@ export const db = {
   },
 
   // ── ขั้นตอนที่ 2: ผสมแอลกอฮอล์ + บรรจุขวด — ทำให้ batch จาก stage 'concentrate' เป็น 'bottled' ─────
-  async completeBottling(batchId, { alcohol_mix, alcohol_ml_per_bottle, produced_at, sell_price, notes }) {
+  async completeBottling(batchId, { concentration, bottle_ml, qty_produced, concentrate_used_ml,
+    alcohol_mix, alcohol_ml_per_bottle, produced_at, sell_price, notes }) {
+    // ดึง batch หัวเชื้อเดิมก่อน เพื่อรู้ว่ามีหัวเชื้อเหลือเท่าไหร่
+    const { data: original, error: fetchErr } = await supabase
+      .from('production_batches').select('*').eq('id', batchId).single()
+    if (fetchErr) return { data: null, error: fetchErr }
+
+    const totalHave  = original.concentrate_ml || 0
+    const usedMl      = concentrate_used_ml != null ? parseFloat(concentrate_used_ml) : totalHave
+    const remainingMl = Math.round((totalHave - usedMl) * 100) / 100
+    const concentratePerBottle = qty_produced ? usedMl / parseInt(qty_produced) : null
+
+    const bottledFields = {
+      concentration,
+      bottle_ml:    Math.round(parseFloat(bottle_ml)),
+      qty_produced: parseInt(qty_produced),
+      qty_sold:     0,
+      concentrate_ml: concentratePerBottle,
+      produced_at:  produced_at || new Date().toISOString().split('T')[0],
+      alcohol_mix:           (alcohol_mix && alcohol_mix.length) ? alcohol_mix : null,
+      alcohol_ml_per_bottle: alcohol_ml_per_bottle != null ? parseFloat(alcohol_ml_per_bottle) : null,
+      sell_price:            sell_price != null ? parseFloat(sell_price) : null,
+      notes:                 notes || null,
+      stage:                 'bottled',
+    }
+
+    if (remainingMl > 0.05) {
+      // ใช้หัวเชื้อไม่หมด — แยกเป็น batch ใหม่ที่ bottled แล้ว เหลือของเดิมไว้เป็น pending ต่อ (ลด concentrate_ml ลง)
+      const { error: updErr } = await supabase
+        .from('production_batches')
+        .update({ concentrate_ml: remainingMl })
+        .eq('id', batchId)
+      if (updErr) return { data: null, error: updErr }
+
+      const { data: newBatch, error: insErr } = await supabase
+        .from('production_batches')
+        .insert({
+          formula_id: original.formula_id,
+          concentrate_made_at: original.concentrate_made_at,
+          ...bottledFields,
+        })
+        .select().single()
+      if (insErr) return { data: null, error: insErr }
+      return { data: newBatch, error: null, splitFromConcentrate: true, remainingMl }
+    }
+
+    // ใช้หัวเชื้อหมด — อัปเดต batch เดิมให้กลายเป็น bottled ไปเลย
     const { data, error } = await supabase
       .from('production_batches')
-      .update({
-        stage:        'bottled',
-        produced_at:  produced_at || new Date().toISOString().split('T')[0],
-        alcohol_mix:           (alcohol_mix && alcohol_mix.length) ? alcohol_mix : null,
-        alcohol_ml_per_bottle: alcohol_ml_per_bottle != null ? parseFloat(alcohol_ml_per_bottle) : null,
-        sell_price:            sell_price != null ? parseFloat(sell_price) : null,
-        notes:                 notes || null,
-      })
+      .update(bottledFields)
       .eq('id', batchId)
       .select().single()
     if (error) {
