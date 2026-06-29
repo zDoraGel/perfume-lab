@@ -424,6 +424,9 @@ export const db = {
       }
 
       const deductions = []
+      const versionCache = {} // formula_id -> versionId (กันดึงซ้ำถ้า order มีหลาย item ของสูตรเดียวกัน)
+      let totalCogs = 0
+
       for (const item of orderItems) {
         const { formula_id, qty } = item
         let remainingQty = qty
@@ -436,6 +439,14 @@ export const db = {
           throw new Error(`No batches found for formula ${formula_id}`)
         }
 
+        // หา version สำหรับคำนวณต้นทุน — ใช้ Final ก่อน ไม่งั้นใช้ตัวล่าสุด (cache ต่อสูตร)
+        if (!(formula_id in versionCache)) {
+          const versions = await this.getVersions(formula_id)
+          const final = versions.find(v => v.is_final)
+          versionCache[formula_id] = final ? final.id : (versions[versions.length - 1]?.id || null)
+        }
+        const versionId = versionCache[formula_id]
+
         for (const batch of batches) {
           if (remainingQty <= 0) break
           const currentRemaining = batch.qty_produced - batch.qty_sold
@@ -446,9 +457,22 @@ export const db = {
           await supabase.from('production_batches')
             .update({ qty_sold: newQtySold }).eq('id', batch.id)
 
+          // คำนวณต้นทุนจริงจาก batch ที่ถูกตัดก้อนนี้ (concentrate+alcohol+ขวด ของ batch นั้นจริง ๆ)
+          let batchCost = 0
+          if (versionId) {
+            try {
+              const unit = await this.getCostPerUnit(versionId, batch)
+              batchCost = (unit.totalCostPerBottle || 0) * deductAmount
+              totalCogs += batchCost
+            } catch (e) {
+              console.error('getCostPerUnit error during deduction:', e)
+            }
+          }
+
           deductions.push({
             formula_id, batch_id: batch.id,
             deduct_qty: deductAmount, batch_produced_at: batch.produced_at,
+            cost: parseFloat(batchCost.toFixed(2)),
           })
           remainingQty -= deductAmount
         }
@@ -458,12 +482,12 @@ export const db = {
         }
       }
 
-      // ✅ mark ว่าตัดสต็อกของ order นี้แล้ว พร้อมอัปเดต status เป็น paid
+      // ✅ mark ว่าตัดสต็อกของ order นี้แล้ว พร้อมอัปเดต status เป็น paid + เก็บต้นทุนจริงไว้
       await supabase.from('orders')
-        .update({ status: 'paid', stock_deducted: true })
+        .update({ status: 'paid', stock_deducted: true, cogs: parseFloat(totalCogs.toFixed(2)) })
         .eq('id', orderId)
 
-      return { success: true, orderId, deductions,
+      return { success: true, orderId, deductions, cogs: parseFloat(totalCogs.toFixed(2)),
         message: `Stock deducted successfully for order ${orderId}` }
     } catch (error) {
       console.error('deductStockForOrder error:', error)
@@ -724,23 +748,30 @@ export const db = {
       .toISOString().slice(0, 10)
     const { data } = await supabase
       .from('orders')
-      .select('channel, total_amount, status, created_at')
+      .select('channel, total_amount, status, created_at, cogs')
       .eq('status', 'paid')
       .gte('created_at', monthStart)
 
     const byChannel = {}
     let total = 0
+    let totalCogs = 0
     ;(data || []).forEach(o => {
       const ch = o.channel || 'ไม่ระบุ'
       const amt = o.total_amount || 0
-      byChannel[ch] = (byChannel[ch] || 0) + amt
+      const cogs = o.cogs || 0
+      if (!byChannel[ch]) byChannel[ch] = { revenue: 0, cogs: 0 }
+      byChannel[ch].revenue += amt
+      byChannel[ch].cogs    += cogs
       total += amt
+      totalCogs += cogs
     })
 
     return {
       total,
+      cogs: totalCogs,
+      profit: total - totalCogs,
       channels: Object.entries(byChannel)
-        .map(([channel, revenue]) => ({ channel, revenue }))
+        .map(([channel, v]) => ({ channel, revenue: v.revenue, cogs: v.cogs, profit: v.revenue - v.cogs }))
         .sort((a, b) => b.revenue - a.revenue),
     }
   },
@@ -775,6 +806,8 @@ export const db = {
     // Orders — เดือนนี้ (จาก PageOrderBilling, แยกตาม channel ได้)
     const ordersData = await this.getRevenueByChannel()
     const ordersRevenue = ordersData.total
+    const ordersCogs    = ordersData.cogs
+    const ordersProfit  = ordersData.profit
 
     // ค่าใช้จ่ายแยกตามกลุ่ม — retail หักแบบเดือนนี้ (ตรงกับ revenue), myBlends หักแบบสะสม
     const [retailExpenses, myBlendsExpenses] = await Promise.all([
@@ -787,11 +820,12 @@ export const db = {
 
     return {
       total:        retailRevenue + myBlendsRevenue + ordersRevenue,
-      totalExpenses: retailExpenses + myBlendsExpenses,
-      totalProfit:  retailProfit + myBlendsProfit + ordersRevenue, // ยังไม่มีค่าใช้จ่ายแยกของ orders
+      totalExpenses: retailExpenses + myBlendsExpenses + ordersCogs,
+      totalProfit:  retailProfit + myBlendsProfit + ordersProfit, // ✅ orders หักต้นทุนจริงจาก batch ที่ถูกตัดแล้ว
       retail:    { revenue: retailRevenue,   expenses: retailExpenses,   profit: retailProfit,   label: 'Retail (เดือนนี้)' },
       myBlends:  { revenue: myBlendsRevenue, expenses: myBlendsExpenses, profit: myBlendsProfit, label: 'My Blends (สะสมทั้งหมด)' },
-      orders:    { revenue: ordersRevenue, channels: ordersData.channels, label: 'Orders (เดือนนี้ · แยกตามช่องทาง)' },
+      orders:    { revenue: ordersRevenue, expenses: ordersCogs, profit: ordersProfit,
+                   channels: ordersData.channels, label: 'Orders (เดือนนี้ · แยกตามช่องทาง · หักต้นทุนวัตถุดิบแล้ว)' },
     }
   },
 }
