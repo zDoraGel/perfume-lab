@@ -5,6 +5,7 @@ import { S } from '../constants/theme'
 import { BackBtn } from '../components/ui'
 import MaterialPicker from '../components/MaterialPicker'
 import AgingLogSection from '../components/AgingLogSection'
+import LabelGenerator from '../components/LabelGenerator'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function readyDate(blendedAt, restDays) {
@@ -308,11 +309,27 @@ function VersionForm({ adaptationId, ver, materials, onSaved, onCancel }) {
 }
 
 // ── VersionCard ───────────────────────────────────────────────────────────────
-function VersionCard({ v, materials, onUpdate }) {
+function VersionCard({ v, materials, onUpdate, blendName }) {
   const [items,      setItems]      = useState([])
   const [expanded,   setExpanded]   = useState(false)
   const [soldInput,  setSoldInput]  = useState(String(v.qty_sold || 0))
   const [saving,     setSaving]     = useState(false)
+  const [showGiveaway, setShowGiveaway] = useState(false)
+  const [giveawayMl,   setGiveawayMl]  = useState('')
+  const [giveawayNote, setGiveawayNote] = useState('')
+  const [giveawaySaving, setGiveawaySaving] = useState(false)
+  const [giveawayLogs, setGiveawayLogs] = useState([])
+  const [showLabel, setShowLabel] = useState(false)
+
+  useEffect(() => {
+    loadGiveawayLogs()
+  }, [v.id])
+
+  async function loadGiveawayLogs() {
+    const { data } = await supabase.from('blend_giveaway_logs')
+      .select('*').eq('version_id', v.id).order('created_at', { ascending: false })
+    setGiveawayLogs(data || [])
+  }
   const [editing,    setEditing]    = useState(false)
 
   // edit states
@@ -391,6 +408,28 @@ function VersionCard({ v, materials, onUpdate }) {
     onUpdate()
   }
 
+  async function saveGiveaway() {
+    const ml = parseFloat(giveawayMl)
+    if (!ml || ml <= 0) return alert('กรอกจำนวน ml ที่แจกก่อนค่ะ')
+    setGiveawaySaving(true)
+    const { error } = await supabase.from('blend_giveaway_logs').insert({
+      version_id: v.id,
+      ml_given: ml,
+      note: giveawayNote.trim() || null,
+      given_at: new Date().toISOString().split('T')[0],
+    })
+    setGiveawaySaving(false)
+    if (error) {
+      alert('บันทึกไม่สำเร็จ: ' + error.message)
+      return
+    }
+    setShowGiveaway(false)
+    setGiveawayMl('')
+    setGiveawayNote('')
+    loadGiveawayLogs()
+    onUpdate()
+  }
+
   async function markReady() {
     await supabase.from('adaptation_versions').update({ status:'Ready' }).eq('id', v.id)
     onUpdate()
@@ -437,6 +476,13 @@ function VersionCard({ v, materials, onUpdate }) {
           )}
         </div>
         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <button onClick={e => { e.stopPropagation(); setShowLabel(true) }}
+            style={{ fontSize:11, color:S.textMid, background:S.white,
+              border:`1px solid ${S.border}`, borderRadius:16,
+              padding:'3px 10px', cursor:'pointer',
+              fontFamily:'Inter,sans-serif', fontWeight:500 }}>
+            🏷 Label
+          </button>
           <button onClick={e => { e.stopPropagation(); setEditing(p=>!p); setExpanded(false) }}
             style={{ fontSize:11, color: editing ? S.red : S.gold,
               background: editing ? '#faeaea' : S.goldLt,
@@ -448,6 +494,15 @@ function VersionCard({ v, materials, onUpdate }) {
           {!editing && <span style={{ color:S.textLt, fontSize:14 }}>{expanded ? '▲' : '▼'}</span>}
         </div>
       </div>
+
+      {/* ── Label Generator ── */}
+      {showLabel && (
+        <LabelGenerator
+          formula={{ name: blendName || '' }}
+          latestVersion={{ bottle_ml: v.batch_ml || 15 }}
+          defaultCollection="INSPIRED COLLECTION"
+          onClose={() => setShowLabel(false)}/>
+      )}
 
       {/* ── Edit Form ── */}
       {editing && (
@@ -686,13 +741,109 @@ function VersionCard({ v, materials, onUpdate }) {
 
           {/* Aging Log */}
           <AgingLogSection versionId={v.id}/>
+
+          {/* ── แจก giveaway/sample ── */}
+          {!showGiveaway ? (
+            <button onClick={() => setShowGiveaway(true)}
+              style={{ marginTop:10, fontSize:11, color:S.gold, background:S.goldLt,
+                border:`1px solid ${S.goldBd}`, borderRadius:16,
+                padding:'5px 14px', cursor:'pointer', fontWeight:600,
+                fontFamily:'Inter,sans-serif' }}>
+              + แจก giveaway / sample
+            </button>
+          ) : (
+            <div style={{ marginTop:10, padding:'12px 14px', background:S.goldLt,
+              borderRadius:10, border:`1px solid ${S.goldBd}` }}>
+              <div style={{ fontSize:12, fontWeight:700, color:S.gold, marginBottom:10 }}>
+                + แจก giveaway / sample
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+                <input type="number" step="0.1" value={giveawayMl}
+                  onChange={e => setGiveawayMl(e.target.value)}
+                  placeholder="ml ที่แจก"
+                  style={{ width:90, padding:'6px 10px', borderRadius:8, fontSize:13,
+                    border:`1px solid ${S.border}`, fontFamily:'Inter,sans-serif',
+                    color:S.ink, background:S.white, outline:'none' }}/>
+                <span style={{ fontSize:11, color:S.textMid }}>ml</span>
+              </div>
+              <input value={giveawayNote} onChange={e => setGiveawayNote(e.target.value)}
+                placeholder="ใครได้ไป / เหตุผล (optional)"
+                style={{ width:'100%', padding:'6px 10px', borderRadius:8, fontSize:13,
+                  border:`1px solid ${S.border}`, fontFamily:'Inter,sans-serif',
+                  color:S.ink, background:S.white, outline:'none', boxSizing:'border-box',
+                  marginBottom:10 }}/>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => { setShowGiveaway(false); setGiveawayMl(''); setGiveawayNote('') }}
+                  style={{ padding:'6px 14px', borderRadius:16, cursor:'pointer',
+                    fontSize:11, fontWeight:600, fontFamily:'Inter,sans-serif',
+                    background:'transparent', border:`1px solid ${S.border}`, color:S.textMid }}>
+                  ยกเลิก
+                </button>
+                <button onClick={saveGiveaway} disabled={giveawaySaving || !giveawayMl}
+                  style={{ flex:1, padding:'6px 0', borderRadius:16, cursor:'pointer',
+                    fontSize:11, fontWeight:600, fontFamily:'Inter,sans-serif',
+                    background:S.gold, border:'none', color:'#fff',
+                    opacity: giveawaySaving || !giveawayMl ? .6 : 1 }}>
+                  {giveawaySaving ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── ประวัติการแจก ── */}
+          {giveawayLogs.length > 0 && (
+            <div style={{ marginTop:10 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:S.gold,
+                letterSpacing:.8, textTransform:'uppercase', marginBottom:6 }}>
+                🎁 แจกไปแล้ว
+              </div>
+              {giveawayLogs.map(log => (
+                <div key={log.id} style={{ display:'flex', justifyContent:'space-between',
+                  alignItems:'center', padding:'6px 10px', marginBottom:4,
+                  background:S.bg, borderRadius:8, border:`1px solid ${S.border}` }}>
+                  <div>
+                    <span style={{ fontSize:12, fontWeight:600, color:S.ink }}>
+                      {log.ml_given} ml
+                    </span>
+                    {log.note && (
+                      <span style={{ fontSize:11, color:S.textMid, marginLeft:8 }}>
+                        · {log.note}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize:10, color:S.textLt }}>{log.given_at}</span>
+                </div>
+              ))}
+              {(() => {
+                const totalGiven = giveawayLogs.reduce((s, l) => s + (l.ml_given || 0), 0)
+                const batchMlTotal = v.batch_ml || 0
+                const remaining = batchMlTotal - totalGiven
+                return (
+                  <div style={{ marginTop:6, padding:'6px 10px', borderRadius:8,
+                    background: remaining < 0 ? '#faeaea' : S.goldLt,
+                    border:`1px solid ${remaining < 0 ? S.red+'44' : S.goldBd}` }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:11 }}>
+                      <span style={{ color:S.textMid }}>รวมแจกไป</span>
+                      <span style={{ fontWeight:600, color:S.gold }}>{totalGiven.toFixed(1)} ml</span>
+                    </div>
+                    {batchMlTotal > 0 && (
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginTop:2 }}>
+                        <span style={{ color:S.textMid }}>คงเหลือ (จาก {batchMlTotal}ml)</span>
+                        <span style={{ fontWeight:700, color: remaining < 0 ? S.red : S.green }}>
+                          {remaining.toFixed(1)} ml
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
-
-// ── BlendForm (New Adaptation) ────────────────────────────────────────────────
 function BlendForm({ onSaved, onCancel, existingGroups = [] }) {
   const [name,       setName]       = useState('')
   const [blendGroup, setBlendGroup] = useState('')
@@ -1231,7 +1382,7 @@ export default function PageMyBlends() {
               <div style={{ fontSize:11, color:S.textLt, letterSpacing:1,
                 textTransform:'uppercase', marginBottom:10 }}>ประวัติการผสม</div>
               {[...versions].reverse().map(v => (
-                <VersionCard key={v.id} v={v} materials={materials} onUpdate={reload}/>
+                <VersionCard key={v.id} v={v} materials={materials} onUpdate={reload} blendName={selected?.name}/>
               ))}
             </div>
           )}

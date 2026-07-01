@@ -42,13 +42,19 @@ function baseSetup(canvas) {
   return { ctx, w, h }
 }
 
-function draw15(canvas, { name, tier, concentration, bottleMl, tagline }) {
+function draw15(canvas, { name, tier, concentration, bottleMl, tagline, collection }) {
   const { ctx, w, h } = baseSetup(canvas)
   const pad = w * 0.1
   ctx.font = `${Math.round(w*0.072)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.018)}px`
-  ctx.fillText('LINEN THEORY', w/2, h*0.10)
+  ctx.fillText('LINEN THEORY', w/2, collection ? h*0.08 : h*0.10)
   ctx.letterSpacing = '0px'
+  if (collection) {
+    ctx.font = `${Math.round(w*0.052)}px "Inter","Helvetica Neue",Arial,sans-serif`
+    ctx.letterSpacing = `${Math.round(w*0.013)}px`
+    ctx.fillText(collection.toUpperCase(), w/2, h*0.08 + Math.round(w*0.072)*1.5)
+    ctx.letterSpacing = '0px'
+  }
   const nameSize = Math.round(w * 0.100)
   ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
   const nameLines = wrapText(ctx, name, w - pad*2)
@@ -75,13 +81,19 @@ function draw15(canvas, { name, tier, concentration, bottleMl, tagline }) {
   }
 }
 
-function draw30(canvas, { name, tier, concentration, bottleMl, tagline }) {
+function draw30(canvas, { name, tier, concentration, bottleMl, tagline, collection }) {
   const { ctx, w, h } = baseSetup(canvas)
   const pad = w * 0.1
   ctx.font = `${Math.round(w*0.072)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.018)}px`
-  ctx.fillText('LINEN THEORY', w/2, h*0.10)
+  ctx.fillText('LINEN THEORY', w/2, collection ? h*0.08 : h*0.10)
   ctx.letterSpacing = '0px'
+  if (collection) {
+    ctx.font = `${Math.round(w*0.052)}px "Inter","Helvetica Neue",Arial,sans-serif`
+    ctx.letterSpacing = `${Math.round(w*0.013)}px`
+    ctx.fillText(collection.toUpperCase(), w/2, h*0.08 + Math.round(w*0.072)*1.5)
+    ctx.letterSpacing = '0px'
+  }
   const nameSize = Math.round(w * 0.100)
   ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
   const nameLines = wrapText(ctx, name, w - pad*2)
@@ -112,14 +124,20 @@ function draw30(canvas, { name, tier, concentration, bottleMl, tagline }) {
   ctx.letterSpacing = '0px'
 }
 
-function draw2(canvas, { name, tier, concentration, bottleMl, tagline }) {
+function draw2(canvas, { name, tier, concentration, bottleMl, tagline, collection }) {
   const { ctx, w, h } = baseSetup(canvas)
   const pad = w * 0.1
   // LINEN THEORY — ขนาดเล็ก
   ctx.font = `${Math.round(w*0.060)}px "Inter","Helvetica Neue",Arial,sans-serif`
   ctx.letterSpacing = `${Math.round(w*0.014)}px`
-  ctx.fillText('LINEN THEORY', w/2, h*0.08)
+  ctx.fillText('LINEN THEORY', w/2, collection ? h*0.06 : h*0.08)
   ctx.letterSpacing = '0px'
+  if (collection) {
+    ctx.font = `${Math.round(w*0.044)}px "Inter","Helvetica Neue",Arial,sans-serif`
+    ctx.letterSpacing = `${Math.round(w*0.010)}px`
+    ctx.fillText(collection.toUpperCase(), w/2, h*0.06 + Math.round(w*0.060)*1.4)
+    ctx.letterSpacing = '0px'
+  }
   // ชื่อน้ำหอม — compact
   const nameSize = Math.round(w * 0.085)
   ctx.font = `bold ${nameSize}px "Courier New",Courier,monospace`
@@ -168,18 +186,19 @@ function LabelPreview({ params }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function LabelGenerator({ formula, latestVersion, onClose }) {
+export default function LabelGenerator({ formula, latestVersion, onClose, defaultCollection = '' }) {
   // ชื่อ: ถ้ามี formula ให้ใช้ชื่อ formula เป็น default แต่แก้ได้เสมอ
   const [customName,    setCustomName]    = useState(formula?.name || '')
   const [concentration, setConcentration] = useState('EAU DE PARFUM')
   const [bottleMl,      setBottleMl]      = useState(latestVersion?.bottle_ml || 15)
   const [tier,          setTier]          = useState('SIGNATURE')
   const [tagline,       setTagline]       = useState('the art of clean')
+  const [collection,    setCollection]    = useState(defaultCollection)
   const [exporting,     setExporting]     = useState(false)
 
   const displayName = (customName.trim() || 'UNTITLED').toUpperCase()
 
-  const params = { name: displayName, tier, concentration, bottleMl, tagline }
+  const params = { name: displayName, tier, concentration, bottleMl, tagline, collection }
 
   function handleExport() {
     setExporting(true)
@@ -247,6 +266,19 @@ export default function LabelGenerator({ formula, latestVersion, onClose }) {
               onChange={e => setCustomName(e.target.value)}
               placeholder="พิมพ์ชื่อน้ำหอม..."
               style={{ ...iStyle, fontFamily:'"Courier New",monospace', fontWeight:700, fontSize:14 }}
+            />
+          </div>
+
+          <div>
+            <div style={{ fontSize:11, color:S.textMid, letterSpacing:.6,
+              textTransform:'uppercase', marginBottom:5 }}>
+              Collection (ไม่บังคับ)
+            </div>
+            <input
+              value={collection}
+              onChange={e => setCollection(e.target.value)}
+              placeholder="เช่น INSPIRED COLLECTION"
+              style={{ ...iStyle, letterSpacing:1 }}
             />
           </div>
 
