@@ -572,7 +572,7 @@ function StockCard({ item, onEdit, onDelete, onTransaction, onLogs, onRecommend,
 }
 
 // ── Summary bar ───────────────────────────────────────────────────────────────
-function SummaryBar({ items }) {
+function SummaryBar({ items, onClickAlert }) {
   const total     = items.reduce((s, i) => s + i.qty_total, 0)
   const sold      = items.reduce((s, i) => s + i.qty_sold, 0)
   const remaining = total - sold
@@ -594,12 +594,20 @@ function SummaryBar({ items }) {
         </div>
       ))}
       {alerts > 0 && (
-        <div style={{ gridColumn:'1/-1', background:S.amberBg, border:`1px solid #f0c060`,
-          borderRadius:8, padding:'8px 12px', display:'flex', alignItems:'center', gap:8 }}>
+        <div onClick={() => onClickAlert?.()}
+          style={{ gridColumn:'1/-1', background:S.amberBg, border:`1px solid #f0c060`,
+            borderRadius:8, padding:'8px 12px', display:'flex', alignItems:'center', gap:8,
+            cursor: onClickAlert ? 'pointer' : 'default' }}>
           <span style={{ fontSize:16 }}>⚠</span>
           <span style={{ fontSize:12, color:S.amber, fontWeight:600 }}>
             {alerts} รายการใกล้หมด / หมดแล้ว — ควรเติม stock
           </span>
+          {onClickAlert && (
+            <span style={{ fontSize:11, color:S.amber, marginLeft:'auto',
+              textDecoration:'underline', whiteSpace:'nowrap' }}>
+              ดูรายการ →
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -662,6 +670,7 @@ export default function PageRetailStock() {
     const rem = i.qty_total - i.qty_sold
     if (filter === 'low'   && !(rem > 0 && rem <= i.alert_at)) return false
     if (filter === 'empty' && rem > 0) return false
+    if (filter === 'attention' && !(rem >= 0 && rem <= i.alert_at)) return false
     if (brandFilter !== 'all' && (i.brand || 'ไม่มีแบรนด์') !== brandFilter) return false
     if (search && !i.name.toLowerCase().includes(search.toLowerCase()) &&
         !(i.brand||'').toLowerCase().includes(search.toLowerCase())) return false
@@ -697,7 +706,9 @@ export default function PageRetailStock() {
       </div>
 
       {/* Summary */}
-      {!loading && items.length > 0 && <SummaryBar items={items} />}
+      {!loading && items.length > 0 && (
+        <SummaryBar items={items} onClickAlert={() => setFilter('attention')}/>
+      )}
 
       {/* Toolbar */}
       <div style={{ display:'flex', gap:8, marginBottom:14 }}>
@@ -713,7 +724,7 @@ export default function PageRetailStock() {
 
       {/* Filter tabs */}
       <div style={{ display:'flex', gap:6, marginBottom:16 }}>
-        {[['all','ทั้งหมด'], ['low','ใกล้หมด'], ['empty','หมดแล้ว']].map(([v, l]) => (
+        {[['all','ทั้งหมด'], ['attention','ต้องเติม'], ['low','ใกล้หมด'], ['empty','หมดแล้ว']].map(([v, l]) => (
           <button key={v} onClick={() => setFilter(v)}
             style={{ padding:'6px 14px', borderRadius:20, border:`1px solid ${filter===v ? S.gold : S.border}`,
               background: filter===v ? S.goldLt : S.white, cursor:'pointer',
