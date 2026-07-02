@@ -986,6 +986,8 @@ function CustomerList({ customers, orders, onUpdated }) {
   const [search,   setSearch]   = useState('')
   const [sortBy,   setSortBy]   = useState('points') // 'points' | 'spent' | 'name'
   const [editing,  setEditing]  = useState(null) // customer object ที่กำลังแก้
+  const [originalPoints, setOriginalPoints] = useState(0) // แต้มเดิมตอนเปิด modal (เทียบว่ามีการแก้มือไหม)
+  const [pointsReason, setPointsReason] = useState('')
   const [saving,   setSaving]   = useState(false)
 
   // สรุปยอดซื้อสะสม + จำนวนออเดอร์ต่อลูกค้า จาก orders
@@ -1018,14 +1020,29 @@ function CustomerList({ customers, orders, onUpdated }) {
 
   async function saveEdit() {
     if (!editing) return
+    const newPoints = parseInt(editing.loyalty_points) || 0
+    const pointsChanged = newPoints !== originalPoints
+    if (pointsChanged && !pointsReason.trim()) {
+      alert('แก้แต้มสะสมต้องกรอกเหตุผลก่อนค่ะ (เพื่อเก็บประวัติไว้ตรวจสอบย้อนหลังได้)')
+      return
+    }
     setSaving(true)
     try {
+      if (pointsChanged) {
+        const { error: auditErr } = await supabase.from('loyalty_points_audit').insert({
+          customer_id: editing.id,
+          old_points: originalPoints,
+          new_points: newPoints,
+          reason: pointsReason.trim(),
+        })
+        if (auditErr) throw new Error('บันทึก audit log ไม่สำเร็จ: ' + auditErr.message)
+      }
       const { error, data } = await supabase.from('customers')
         .update({
           name: editing.name?.trim() || null,
           contact: editing.contact?.trim() || null,
           address: editing.address?.trim() || null,
-          loyalty_points: parseInt(editing.loyalty_points) || 0,
+          loyalty_points: newPoints,
         })
         .eq('id', editing.id)
         .select('id')
@@ -1034,6 +1051,7 @@ function CustomerList({ customers, orders, onUpdated }) {
         alert('⚠️ บันทึกไม่สำเร็จ — ติด RLS policy')
       } else {
         setEditing(null)
+        setPointsReason('')
         onUpdated?.()
       }
     } catch (e) {
@@ -1064,7 +1082,7 @@ function CustomerList({ customers, orders, onUpdated }) {
 
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {rows.map(c => (
-          <div key={c.id} onClick={() => setEditing({ ...c })}
+          <div key={c.id} onClick={() => { setEditing({ ...c }); setOriginalPoints(c.loyalty_points || 0); setPointsReason('') }}
             style={{ background:S.white, border:`1px solid ${S.border}`, borderRadius:10,
               padding:'12px 14px', display:'flex', justifyContent:'space-between',
               alignItems:'center', cursor:'pointer' }}>
@@ -1084,7 +1102,7 @@ function CustomerList({ customers, orders, onUpdated }) {
       </div>
 
       {editing && (
-        <div onClick={() => setEditing(null)}
+        <div onClick={() => { setEditing(null); setPointsReason('') }}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:50,
             display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div onClick={e => e.stopPropagation()}
@@ -1108,10 +1126,19 @@ function CustomerList({ customers, orders, onUpdated }) {
             <label style={{ fontSize:11, color:S.textLt }}>แต้มสะสม (แก้มือ)</label>
             <input type="number" value={editing.loyalty_points ?? 0}
               onChange={e => setEditing({ ...editing, loyalty_points:e.target.value })}
-              style={{ ...inputStyle, marginTop:4, marginBottom:16 }}/>
+              style={{ ...inputStyle, marginTop:4, marginBottom:(parseInt(editing.loyalty_points) || 0) !== originalPoints ? 10 : 16 }}/>
+
+            {(parseInt(editing.loyalty_points) || 0) !== originalPoints && (
+              <>
+                <label style={{ fontSize:11, color:S.red }}>เหตุผลที่แก้แต้ม (จำเป็น) *</label>
+                <input value={pointsReason} onChange={e => setPointsReason(e.target.value)}
+                  placeholder="เช่น ลูกค้าแจ้งแต้มไม่ตรง, แก้ bug ระบบ"
+                  style={{ ...inputStyle, marginTop:4, marginBottom:16, borderColor:S.red }}/>
+              </>
+            )}
 
             <div style={{ display:'flex', gap:8 }}>
-              <button onClick={() => setEditing(null)}
+              <button onClick={() => { setEditing(null); setPointsReason('') }}
                 style={{ flex:1, padding:'10px 0', borderRadius:8, border:`1px solid ${S.border}`,
                   background:'transparent', color:S.textMid, fontWeight:600, cursor:'pointer' }}>
                 ยกเลิก
