@@ -590,8 +590,11 @@ export const db = {
           const deductAmount = deductMl / batchBottleMl
           const newQtySold = batch.qty_sold + deductAmount
 
-          await supabase.from('production_batches')
+          const { error: batchUpdateErr } = await supabase.from('production_batches')
             .update({ qty_sold: newQtySold }).eq('id', batch.id)
+          if (batchUpdateErr) {
+            throw new Error(`อัปเดตสต็อก batch ${batch.id} ไม่สำเร็จ: ${batchUpdateErr.message}`)
+          }
 
           // คำนวณต้นทุนจริงจาก batch ที่ถูกตัดก้อนนี้ (concentrate+alcohol+ขวด ของ batch นั้นจริง ๆ) ตามสัดส่วนที่ตัดจริง
           let batchCost = 0
@@ -619,9 +622,12 @@ export const db = {
       }
 
       // ✅ mark ว่าตัดสต็อกของ order นี้แล้ว พร้อมอัปเดต status เป็น paid + เก็บต้นทุนจริงไว้
-      await supabase.from('orders')
+      const { error: orderUpdateErr } = await supabase.from('orders')
         .update({ status: 'paid', stock_deducted: true, cogs: parseFloat(totalCogs.toFixed(2)) })
         .eq('id', orderId)
+      if (orderUpdateErr) {
+        throw new Error(`อัปเดตสถานะ order ${orderId} ไม่สำเร็จ: ${orderUpdateErr.message}`)
+      }
 
       return { success: true, orderId, deductions, cogs: parseFloat(totalCogs.toFixed(2)),
         message: `Stock deducted successfully for order ${orderId}` }

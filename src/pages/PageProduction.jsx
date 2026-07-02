@@ -28,14 +28,15 @@ const CONC_COLOR = {
   DEEP:      { bg:'#f0eaea', c:'#8a4a4a' },
 }
 
-function StockBadge({ remaining }) {
+function StockBadge({ remaining, bottleMl }) {
   const r = Math.round(remaining * 10) / 10
   const color = r <= 0 ? S.red : r <= 5 ? '#c07820' : S.green
+  const mlText = bottleMl ? ` (${(remaining * bottleMl).toFixed(1)}ml)` : ''
   return (
     <span style={{ fontSize:12, fontWeight:700, color,
       background: r <= 0 ? '#faeaea' : r <= 5 ? '#fef3e2' : '#eef4f0',
       padding:'2px 10px', borderRadius:20 }}>
-      {r <= 0 ? 'หมด' : `${r} ขวด`}
+      {r <= 0 ? 'หมด' : `${r} ขวด${mlText}`}
     </span>
   )
 }
@@ -763,7 +764,7 @@ function StockSummary({ stock }) {
             <div style={{ fontSize:10, fontWeight:700, color:CONC_COLOR[s.concentration]?.c || S.gold,
               letterSpacing:1, marginBottom:2 }}>{s.concentration}</div>
             <div style={{ fontSize:11, color:S.textMid, marginBottom:6 }}>{s.bottle_ml} ml</div>
-            <StockBadge remaining={s.remaining}/>
+            <StockBadge remaining={s.remaining} bottleMl={s.bottle_ml}/>
             <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
               ผลิต {s.produced} · ขาย {s.sold}
             </div>
@@ -1048,14 +1049,15 @@ export default function PageProduction() {
                           })()}
                           {(b.qty_sold > 0 || b.giveaway_ml > 0) && (
                             <div style={{ fontSize:11, color:S.textMid, marginTop:2 }}>
-                              ขายแล้ว {b.qty_sold}
+                              ขายแล้ว {b.qty_sold.toFixed(2)} ขวด ({(b.qty_sold * b.bottle_ml).toFixed(1)}ml)
                               {b.giveaway_ml > 0 && ` · แจกไป ${b.giveaway_ml}ml (≈${b.giveaway_bottles_equivalent.toFixed(1)} ขวด)`}
-                              {' · '}เหลือ {(b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)).toFixed(1)}
+                              {' · '}เหลือ {(b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)).toFixed(2)} ขวด
+                              ({((b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)) * b.bottle_ml).toFixed(1)}ml)
                             </div>
                           )}
                         </div>
                         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                          <StockBadge remaining={b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)}/>
+                          <StockBadge remaining={b.qty_produced - b.qty_sold - (b.giveaway_bottles_equivalent || 0)} bottleMl={b.bottle_ml}/>
                           <button onClick={() => { setEditingBatch(b); setShowForm(false) }}
                             style={{ fontSize:11, color:S.textMid, background:S.white,
                               border:`1px solid ${S.border}`, borderRadius:14,
