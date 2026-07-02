@@ -1171,7 +1171,10 @@ export default function PageOrderBilling() {
           }
         }
         await supabase.from('orders').update({ points_earned: points }).eq('id', orderId)
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status:'paid', points_earned: points } : o))
+        // ✅ โหลด orders + customers ใหม่ทั้งชุด แทนการ patch state เอง
+        // เพราะหน้า History ดึงแต้มจาก customers.loyalty_points ที่โหลดไว้ตอนเปิดหน้าครั้งแรก
+        // ถ้า patch แค่ orders แต้มจะไม่ขึ้นจนกว่าจะ browser refresh จริง ๆ
+        await loadAll()
         alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch${points > 0 ? ` · ให้ ${points} แต้ม` : ''}`)
       } else {
         alert(`✗ ตัด stock ล้มเหลว:\n${result.error}`)

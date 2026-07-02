@@ -554,8 +554,7 @@ export const db = {
       let totalCogs = 0
 
       for (const item of orderItems) {
-        const { formula_id, qty } = item
-        let remainingQty = qty
+        const { formula_id, qty, bottle_ml: itemBottleMl } = item
 
         const { data: batches } = await supabase
           .from('production_batches').select('*')
@@ -564,6 +563,13 @@ export const db = {
         if (!batches || batches.length === 0) {
           throw new Error(`No batches found for formula ${formula_id}`)
         }
+
+        // ✅ แปลงเป็น "ml รวม" ก่อนตัดสต็อก แทนการใช้ qty เป็นจำนวนขวดตรงๆ
+        // สำคัญมากสำหรับของแถมแลกแต้ม (เช่น น้ำหอม 2ml) ที่ bottle_ml ไม่เท่ากับขนาดขวดของ batch จริง —
+        // ถ้าใช้ qty ตรงๆ (qty:1) จะตัดสต็อกไปเต็ม 1 ขวด ทั้งที่แจกไปแค่ 2ml
+        // ถ้า item ไม่มี bottle_ml (ออเดอร์เก่าก่อนแก้บั๊กนี้) fallback ไปใช้ bottle_ml ของ batch แรกแทน (พฤติกรรมเดิม)
+        const mlPerUnit = itemBottleMl || batches[0]?.bottle_ml || 1
+        let remainingMl = qty * mlPerUnit
 
         // หา version สำหรับคำนวณต้นทุน — ใช้ Final ก่อน ไม่งั้นใช้ตัวล่าสุด (cache ต่อสูตร)
         if (!(formula_id in versionCache)) {
@@ -574,16 +580,20 @@ export const db = {
         const versionId = versionCache[formula_id]
 
         for (const batch of batches) {
-          if (remainingQty <= 0) break
-          const currentRemaining = batch.qty_produced - batch.qty_sold
-          if (currentRemaining <= 0) continue
-          const deductAmount = Math.min(remainingQty, currentRemaining)
+          if (remainingMl <= 0) break
+          const batchBottleMl = batch.bottle_ml || mlPerUnit || 1
+          const currentRemainingBottles = batch.qty_produced - batch.qty_sold
+          if (currentRemainingBottles <= 0) continue
+          const currentRemainingMl = currentRemainingBottles * batchBottleMl
+          const deductMl = Math.min(remainingMl, currentRemainingMl)
+          // แปลง ml ที่ตัดได้กลับเป็น "จำนวนขวดเทียบเท่า" ของ batch นี้ (อาจเป็นเศษส่วน เช่น 2ml จาก batch 15ml = 0.133 ขวด)
+          const deductAmount = deductMl / batchBottleMl
           const newQtySold = batch.qty_sold + deductAmount
 
           await supabase.from('production_batches')
             .update({ qty_sold: newQtySold }).eq('id', batch.id)
 
-          // คำนวณต้นทุนจริงจาก batch ที่ถูกตัดก้อนนี้ (concentrate+alcohol+ขวด ของ batch นั้นจริง ๆ)
+          // คำนวณต้นทุนจริงจาก batch ที่ถูกตัดก้อนนี้ (concentrate+alcohol+ขวด ของ batch นั้นจริง ๆ) ตามสัดส่วนที่ตัดจริง
           let batchCost = 0
           if (versionId) {
             try {
@@ -597,14 +607,14 @@ export const db = {
 
           deductions.push({
             formula_id, batch_id: batch.id,
-            deduct_qty: deductAmount, batch_produced_at: batch.produced_at,
+            deduct_qty: parseFloat(deductAmount.toFixed(4)), batch_produced_at: batch.produced_at,
             cost: parseFloat(batchCost.toFixed(2)),
           })
-          remainingQty -= deductAmount
+          remainingMl -= deductMl
         }
 
-        if (remainingQty > 0) {
-          throw new Error(`Insufficient stock for formula ${formula_id}. Needed ${remainingQty} more.`)
+        if (remainingMl > 0) {
+          throw new Error(`Insufficient stock for formula ${formula_id}. Needed ${(remainingMl / mlPerUnit).toFixed(2)} more unit(s).`)
         }
       }
 
