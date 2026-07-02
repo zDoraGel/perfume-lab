@@ -46,56 +46,79 @@ function checkIFRA(items, concentration) {
 
 export default function IFRAWarning({ items = [], concentration = 'SIGNATURE' }) {
   const results = checkIFRA(items, concentration)
-  if (!results.length) return null
-
   const overLimit = results.filter(r => r.ratio > 1)
   const nearLimit  = results.filter(r => r.ratio > 0.8 && r.ratio <= 1)
   const dilution   = DILUTION_PCT[concentration] ?? DILUTION_PCT.SIGNATURE
 
-  // ไม่มีอะไรน่าห่วง — ไม่ต้องโชว์อะไรเลยเพื่อไม่ให้รก UI
-  if (!overLimit.length && !nearLimit.length) return null
+  // วัตถุดิบที่มีอยู่ในสูตรแต่ยังไม่ได้กรอก ifra_limit เลย — ระบบเช็คให้ไม่ได้เพราะไม่มีเลขอ้างอิง
+  const missingLimit = items.filter(i => i.material?.name && i.material?.ifra_limit == null)
+
+  // ไม่มีอะไรน่าห่วง + ไม่มีวัตถุดิบที่ขาด limit ด้วย — ไม่ต้องโชว์อะไรเลยเพื่อไม่ให้รก UI
+  if (!overLimit.length && !nearLimit.length && !missingLimit.length) return null
 
   return (
-    <div style={{ marginTop:10, padding:'12px 14px', borderRadius:10,
-      background: overLimit.length ? '#fdf0ee' : '#fdf5e6',
-      border:`1px solid ${overLimit.length ? S.red + '55' : S.amber + '55'}` }}>
+    <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
+      {(overLimit.length > 0 || nearLimit.length > 0) && (
+        <div style={{ padding:'12px 14px', borderRadius:10,
+          background: overLimit.length ? '#fdf0ee' : '#fdf5e6',
+          border:`1px solid ${overLimit.length ? S.red + '55' : S.amber + '55'}` }}>
 
-      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-        <span style={{ fontSize:13 }}>{overLimit.length ? '⚠️' : '⚡'}</span>
-        <span style={{ fontSize:11, fontWeight:700,
-          color: overLimit.length ? S.red : S.amber,
-          textTransform:'uppercase', letterSpacing:.6 }}>
-          IFRA {overLimit.length ? 'เกิน Limit' : 'ใกล้ Limit'}
-        </span>
-        <span style={{ fontSize:10, color:S.textLt, marginLeft:'auto' }}>
-          คำนวณที่ {concentration} ({dilution}% dilution)
-        </span>
-      </div>
-
-      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-        {[...overLimit, ...nearLimit].map((r, i) => (
-          <div key={i} style={{ display:'flex', justifyContent:'space-between',
-            alignItems:'center', gap:10, fontSize:11.5 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <span style={{ color:S.ink, fontWeight:600 }}>{r.name}</span>
-              <span style={{ color:S.textLt, marginLeft:6, fontSize:10 }}>
-                {CATEGORY_LABEL[r.category] || r.category}
-              </span>
-            </div>
-            <div style={{ flexShrink:0, textAlign:'right', fontFamily:'Inter,sans-serif' }}>
-              <span style={{ fontWeight:700, color: r.ratio > 1 ? S.red : S.amber }}>
-                {r.pctInProduct.toFixed(3)}%
-              </span>
-              <span style={{ color:S.textLt }}> / {r.limit}%</span>
-            </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+            <span style={{ fontSize:13 }}>{overLimit.length ? '⚠️' : '⚡'}</span>
+            <span style={{ fontSize:11, fontWeight:700,
+              color: overLimit.length ? S.red : S.amber,
+              textTransform:'uppercase', letterSpacing:.6 }}>
+              IFRA {overLimit.length ? 'เกิน Limit' : 'ใกล้ Limit'}
+            </span>
+            <span style={{ fontSize:10, color:S.textLt, marginLeft:'auto' }}>
+              คำนวณที่ {concentration} ({dilution}% dilution)
+            </span>
           </div>
-        ))}
-      </div>
 
-      {overLimit.length > 0 && (
-        <div style={{ fontSize:10, color:S.textMid, marginTop:8, lineHeight:1.5 }}>
-          * ตัวเลข % คำนวณจากความเข้มข้นของวัตถุดิบในสูตร × % concentrate ที่เจือจางแล้ว
-          ลองลด grams ของวัตถุดิบที่เกิน limit หรือเปลี่ยนไปใช้ concentration ที่เจือจางน้อยกว่า
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {[...overLimit, ...nearLimit].map((r, i) => (
+              <div key={i} style={{ display:'flex', justifyContent:'space-between',
+                alignItems:'center', gap:10, fontSize:11.5 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <span style={{ color:S.ink, fontWeight:600 }}>{r.name}</span>
+                  <span style={{ color:S.textLt, marginLeft:6, fontSize:10 }}>
+                    {CATEGORY_LABEL[r.category] || r.category}
+                  </span>
+                </div>
+                <div style={{ flexShrink:0, textAlign:'right', fontFamily:'Inter,sans-serif' }}>
+                  <span style={{ fontWeight:700, color: r.ratio > 1 ? S.red : S.amber }}>
+                    {r.pctInProduct.toFixed(3)}%
+                  </span>
+                  <span style={{ color:S.textLt }}> / {r.limit}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {overLimit.length > 0 && (
+            <div style={{ fontSize:10, color:S.textMid, marginTop:8, lineHeight:1.5 }}>
+              * ตัวเลข % คำนวณจากความเข้มข้นของวัตถุดิบในสูตร × % concentrate ที่เจือจางแล้ว
+              ลองลด grams ของวัตถุดิบที่เกิน limit หรือเปลี่ยนไปใช้ concentration ที่เจือจางน้อยกว่า
+            </div>
+          )}
+        </div>
+      )}
+
+      {missingLimit.length > 0 && (
+        <div style={{ padding:'10px 14px', borderRadius:10,
+          background:'#f2f4f6', border:`1px solid ${S.border}` }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+            <span style={{ fontSize:13 }}>ℹ️</span>
+            <span style={{ fontSize:11, fontWeight:700, color:S.textMid,
+              textTransform:'uppercase', letterSpacing:.6 }}>
+              ยังไม่ได้ตั้งค่า IFRA Limit
+            </span>
+          </div>
+          <div style={{ fontSize:11, color:S.textMid, lineHeight:1.6 }}>
+            {missingLimit.map(i => i.material.name).join(', ')}
+            {' '}— ระบบเช็ค IFRA ให้ไม่ได้ครบ เพราะวัตถุดิบเหล่านี้ยังไม่มีเลข limit อ้างอิง
+            ไปกรอกเพิ่มที่หน้า Materials ได้ค่ะ
+          </div>
         </div>
       )}
     </div>
