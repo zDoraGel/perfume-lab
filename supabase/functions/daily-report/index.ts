@@ -196,8 +196,7 @@ function fmtB(n: number) {
   return `฿${n.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-function thaiDate() {
-  const d = new Date()
+function thaiDate(d: Date) {
   const days   = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์']
   const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()+543}`
@@ -214,8 +213,20 @@ Deno.serve(async (_req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  const today      = new Date()
+  // ✅ รองรับการยิงย้อนหลังสำหรับวันที่ระบุ เช่น {"date": "2026-07-03"}
+  // ถ้าไม่ส่งมา ใช้วันนี้ตามปกติ (ปลอดภัยกับ cron job เดิมที่ส่ง body ว่างๆ หรือ {"name":"Functions"})
+  let targetDate = new Date()
+  try {
+    const body = await _req.json().catch(() => null)
+    if (body?.date) {
+      const parsed = new Date(body.date + 'T00:00:00')
+      if (!isNaN(parsed.getTime())) targetDate = parsed
+    }
+  } catch { /* ไม่มี body หรือ parse ไม่ได้ ใช้วันนี้ตามปกติ */ }
+
+  const today      = targetDate
   const todayStr   = today.toISOString().split('T')[0]
+  const nextDayStr = new Date(today.getTime() + 86400000).toISOString().split('T')[0]
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]
 
   // ── 1. ยอดขาย + กำไร (วันนี้ และเดือนนี้) ──────────────────────────────────
@@ -224,6 +235,7 @@ Deno.serve(async (_req) => {
     .select('qty, cost_price, sell_price, stock_id, retail_stock:retail_stock(name)')
     .eq('type', 'out')
     .gte('logged_at', todayStr)
+    .lt('logged_at', nextDayStr)
 
   const { data: logsMonth } = await supabase
     .from('retail_stock_logs')
@@ -302,13 +314,14 @@ Deno.serve(async (_req) => {
   // ── 5. Production Stock ใกล้หมด ──────────────────────────────────────────────
   const { data: prodStock } = await supabase
     .from('product_stock')
-    .select('formula_name, stock_remaining')
+    .select('formula_name, bottle_ml, stock_remaining')
 
   const lowProd: { text: string; sub: string }[] = []
   if (prodStock) {
     for (const p of prodStock) {
       if ((p.stock_remaining ?? 0) <= 3) {
-        lowProd.push({ text: p.formula_name, sub: `${p.stock_remaining ?? 0} ขวด` })
+        const sizeLabel = p.bottle_ml ? ` ${p.bottle_ml}ml` : ''
+        lowProd.push({ text: `${p.formula_name}${sizeLabel}`, sub: `${p.stock_remaining ?? 0} ขวด` })
       }
     }
   }
@@ -341,13 +354,13 @@ Deno.serve(async (_req) => {
 
   // ── ส่ง LINE (Flex Message) ───────────────────────────────────────────────
   const flex = buildFlexReport({
-    dateLabel: thaiDate(),
+    dateLabel: thaiDate(today),
     todayRevenue: fmtB(today_.revenue), todayQty: today_.qty, todayProfit: fmtB(today_.profit),
     monthRevenue: fmtB(month_.revenue), monthQty: month_.qty, monthProfit: fmtB(month_.profit),
     bestSellers, lowRetail, lowMats, lowProd, readyToday, hasAlerts,
   })
 
-  await sendFlex(LINE_TOKEN, LINE_USER_ID, `Daily Report ${thaiDate()} — ยอดขาย ${fmtB(today_.revenue)}`, flex)
+  await sendFlex(LINE_TOKEN, LINE_USER_ID, `Daily Report ${thaiDate(today)} — ยอดขาย ${fmtB(today_.revenue)}`, flex)
 
   return new Response(JSON.stringify({ ok: true, sections: sectionsCount }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
