@@ -14,15 +14,27 @@ async function fetchSavedTrends() {
 }
 
 async function toggleSaved(id, is_saved) {
-  await supabase.from('trend_items').update({ is_saved }).eq('id', id)
+  const { data, error } = await supabase
+    .from('trend_items').update({ is_saved }).eq('id', id).select()
+  if (error) throw error
+  if (!data || data.length === 0) throw new Error('อัพเดทไม่สำเร็จ (ไม่มีสิทธิ์เขียน?)')
+  return data[0]
 }
 
 async function toggleDone(id, is_done) {
-  await supabase.from('trend_items').update({ is_done }).eq('id', id)
+  const { data, error } = await supabase
+    .from('trend_items').update({ is_done }).eq('id', id).select()
+  if (error) throw error
+  if (!data || data.length === 0) throw new Error('อัพเดทไม่สำเร็จ (ไม่มีสิทธิ์เขียน?)')
+  return data[0]
 }
 
 async function updateNote(id, saved_note) {
-  await supabase.from('trend_items').update({ saved_note }).eq('id', id)
+  const { data, error } = await supabase
+    .from('trend_items').update({ saved_note }).eq('id', id).select()
+  if (error) throw error
+  if (!data || data.length === 0) throw new Error('บันทึก note ไม่สำเร็จ (ไม่มีสิทธิ์เขียน?)')
+  return data[0]
 }
 
 async function callTrendFetch() {
@@ -255,6 +267,23 @@ function TopRow({ rank, name, sold, produced, isRetail }) {
 function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula }) {
   const [editNote, setEditNote] = useState(false)
   const [noteVal,  setNoteVal]  = useState(trend.saved_note || '')
+  const [copied,   setCopied]   = useState(false)
+
+  async function copyMaterials() {
+    const text = (trend.keywords || []).join(', ')
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // fallback สำหรับ browser ที่ clipboard API ใช้ไม่ได้
+      const ta = document.createElement('textarea')
+      ta.value = text; document.body.appendChild(ta); ta.select()
+      try { document.execCommand('copy') } catch {}
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <div style={{ background:S.white, border:`1px solid ${trend.is_saved ? S.goldBd : S.border}`,
@@ -272,13 +301,21 @@ function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula
             {trend.description}
           </div>
           {trend.keywords?.length > 0 && (
-            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:6 }}>
+            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:6, alignItems:'center' }}>
               {trend.keywords.map((k,i) => (
                 <span key={i} style={{ fontSize:10, padding:'2px 8px', borderRadius:12,
                   background:S.goldLt, color:S.gold, border:`1px solid ${S.goldBd}` }}>
                   {k}
                 </span>
               ))}
+              <button onClick={copyMaterials}
+                title="คัดลอกรายชื่อ material"
+                style={{ fontSize:10, padding:'2px 8px', borderRadius:12, cursor:'pointer',
+                  background: copied ? S.greenBg : 'none',
+                  color: copied ? '#2e7d32' : S.textMid,
+                  border:`1px dashed ${copied ? '#2e7d32' : S.border}` }}>
+                {copied ? '✓ คัดลอกแล้ว' : '📋 copy'}
+              </button>
             </div>
           )}
           {trend.saved_note && !editNote && (
@@ -387,18 +424,30 @@ export default function PageDashboard({ onNavigate }) {
   }
 
   async function handleToggleSaved(id, val) {
-    await toggleSaved(id, val)
-    loadTrends()
+    try {
+      await toggleSaved(id, val)
+      loadTrends()
+    } catch (e) {
+      alert('บันทึก bookmark ไม่สำเร็จ: ' + e.message)
+    }
   }
 
   async function handleToggleDone(id, val) {
-    await toggleDone(id, val)
-    loadTrends()
+    try {
+      await toggleDone(id, val)
+      loadTrends()
+    } catch (e) {
+      alert('อัพเดทสถานะไม่สำเร็จ: ' + e.message)
+    }
   }
 
   async function handleNote(id, note) {
-    await updateNote(id, note)
-    loadTrends()
+    try {
+      await updateNote(id, note)
+      loadTrends()
+    } catch (e) {
+      alert('บันทึก note ไม่สำเร็จ: ' + e.message)
+    }
   }
 
   useEffect(() => {
