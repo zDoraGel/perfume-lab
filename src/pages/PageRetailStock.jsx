@@ -49,6 +49,19 @@ async function updateStock(id, payload) {
   return data
 }
 
+// ✅ ดึงค่าล่าสุดจาก DB ก่อนคำนวณสต็อก — กัน race condition
+// เดิมคำนวณจาก state ที่โหลดตอนเปิดหน้า ถ้าทำ 2 รายการติดกัน (ขายแล้วรับเข้าทันที)
+// รายการที่สองจะทับค่าของรายการแรก ทำให้ qty_sold/qty_total เพี้ยน
+async function fetchFreshStock(id) {
+  const { data, error } = await supabase
+    .from('retail_stock')
+    .select('qty_total, qty_sold, cost_per_unit')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return data
+}
+
 async function deleteStock(id) {
   await supabase.from('retail_stock').delete().eq('id', id)
 }
@@ -207,39 +220,55 @@ function TransactionModal({ stock, onDone, onClose }) {
     setSaving(true)
     setErr('')
     try {
+      // ✅ ดึงค่าล่าสุดจาก DB ก่อนคำนวณ — กัน race condition
+      // (ถ้าใช้ค่าจาก state ที่โหลดตอนเปิดหน้า แล้วทำ 2 รายการติดกัน ตัวเลขจะทับกัน)
+      const fresh = await fetchFreshStock(stock.id)
+      const curSold  = fresh.qty_sold  ?? 0
+      const curTotal = fresh.qty_total ?? 0
+      const curCost  = fresh.cost_per_unit
+
+      // เช็คซ้ำด้วยค่าสด — เผื่อมีการขายจากที่อื่นระหว่างที่เปิดหน้าค้างไว้
+      const freshRemaining = curTotal - curSold
+      if (type === 'out' && n > freshRemaining) {
+        setSaving(false)
+        setErr(`เหลือแค่ ${freshRemaining} ขวด (ยอดอัพเดทแล้ว)`)
+        return
+      }
+
       // ✅ ตอนขาย บันทึก cost_price ด้วย (ใช้ต้นทุนเฉลี่ยของสินค้า)
       // เดิมส่ง null → daily-report คิดกำไร = ยอดขายเต็ม (ต้นทุน 0) ทำให้กำไรสูงเกินจริง
-      const costAtSale = type === 'out'
-        ? (stock.cost_per_unit ?? null)
-        : costPrice
+      const costAtSale = type === 'out' ? (curCost ?? null) : costPrice
 
       await logTransaction(stock.id, type, n, note, date,
         costAtSale,
         type === 'out' ? sellPrice : null,
       )
-      let newSold   = type === 'out' ? stock.qty_sold + n : Math.max(0, stock.qty_sold - n)
-      let newTotal  = stock.qty_total
-      // รับเข้า → เพิ่ม qty_total ด้วย
-      if (type === 'in') newTotal = stock.qty_total + n
-      const newRemain = newTotal - newSold
 
-      const updatePayload = { qty_sold: newSold }
-      if (type === 'in') {
+      // ✅ ขาย → qty_sold เพิ่ม | รับเข้า → qty_total เพิ่ม (ไม่แตะ qty_sold!)
+      // บั๊กเดิม: รับเข้าไปลด qty_sold ทำให้ยอดขายหายไป สต็อกเลยเกินจริง
+      const updatePayload = {}
+      let newSold  = curSold
+      let newTotal = curTotal
+
+      if (type === 'out') {
+        newSold = curSold + n
+        updatePayload.qty_sold = newSold
+        if (sellPrice) updatePayload.price_per_unit = parseFloat(sellPrice)
+      } else {
+        newTotal = curTotal + n
         updatePayload.qty_total = newTotal
-        // อัพ cost_per_unit ถ้าใส่ราคามา (weighted avg)
+        // อัพ cost_per_unit แบบ weighted average
         if (costPrice) {
-          const prevCost  = parseFloat(stock.cost_per_unit || 0)
-          const prevTotal = stock.qty_total
-          const newCost   = parseFloat(costPrice)
-          const avgCost   = prevTotal > 0
-            ? ((prevCost * prevTotal) + (newCost * n)) / (prevTotal + n)
+          const prevCost = parseFloat(curCost || 0)
+          const newCost  = parseFloat(costPrice)
+          const avgCost  = curTotal > 0
+            ? ((prevCost * curTotal) + (newCost * n)) / (curTotal + n)
             : newCost
           updatePayload.cost_per_unit = parseFloat(avgCost.toFixed(2))
         }
       }
-      if (type === 'out' && sellPrice) {
-        updatePayload.price_per_unit = parseFloat(sellPrice)
-      }
+
+      const newRemain = newTotal - newSold
 
       await updateStock(stock.id, updatePayload)
 
@@ -268,10 +297,13 @@ function TransactionModal({ stock, onDone, onClose }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(0,0,0,.45)',
-      display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+      boxSizing:'border-box' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:S.white, borderRadius:'16px 16px 0 0', padding:24,
-        width:'100%', maxWidth:480, paddingBottom: 32 }}>
+      <div style={{ background:S.white, borderRadius:16, padding:24,
+        width:'100%', maxWidth:480,
+        maxHeight:'85vh', overflowY:'auto', WebkitOverflowScrolling:'touch',
+        boxSizing:'border-box' }}>
 
         <div style={{ fontSize:13, fontWeight:700, color:S.gold, marginBottom:14,
           textTransform:'uppercase', letterSpacing:.8 }}>
@@ -397,21 +429,25 @@ function LogDrawer({ stock, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(0,0,0,.45)',
-      display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+      boxSizing:'border-box' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:S.white, borderRadius:'16px 16px 0 0',
-        width:'100%', maxWidth:480, maxHeight:'70vh', overflow:'hidden',
-        display:'flex', flexDirection:'column' }}>
+      <div style={{ background:S.white, borderRadius:16,
+        width:'100%', maxWidth:480, maxHeight:'80vh', overflow:'hidden',
+        display:'flex', flexDirection:'column', boxSizing:'border-box' }}>
         <div style={{ padding:'20px 20px 12px', borderBottom:`1px solid ${S.border}`,
-          display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div>
-            <div style={{ fontSize:13, fontWeight:700, color:S.text }}>{stock.name}</div>
+          display:'flex', justifyContent:'space-between', alignItems:'center',
+          flexShrink:0 }}>
+          <div style={{ minWidth:0, flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:S.text,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{stock.name}</div>
             <div style={{ fontSize:11, color:S.textLt }}>ประวัติการเคลื่อนไหว</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer',
-            fontSize:18, color:S.textLt, padding:4 }}>✕</button>
+            fontSize:18, color:S.textLt, padding:4, flexShrink:0 }}>✕</button>
         </div>
-        <div style={{ overflowY:'auto', padding:'12px 20px 24px' }}>
+        <div style={{ flex:1, minHeight:0, overflowY:'auto', WebkitOverflowScrolling:'touch',
+          padding:'12px 20px 24px' }}>
           {loading ? (
             <div style={{ textAlign:'center', color:S.textLt, padding:24, fontSize:13 }}>กำลังโหลด…</div>
           ) : logs.length === 0 ? (
