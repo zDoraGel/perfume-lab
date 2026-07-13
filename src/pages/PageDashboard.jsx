@@ -4,6 +4,51 @@ import { S } from '../constants/theme'
 import { supabase } from '../lib/supabase'
 
 // ── Trend helpers ─────────────────────────────────────────────────────────────
+// จับคู่ keyword จาก trend กับวัตถุดิบในคลัง — ลอง 3 ชั้น:
+// 1) ชื่อจริงใน materials  2) market_name ใน aliases  3) keywords ใน aliases (partial)
+// คืน { name, found, stock, matchedVia } ต่อ keyword
+function matchMaterial(keyword, materials, aliases) {
+  const kw = String(keyword || '').trim().toLowerCase()
+  if (!kw) return { name: keyword, found: false }
+
+  // ชั้น 1 — ชื่อจริง (ตรงเป๊ะก่อน แล้วค่อย partial)
+  let m = materials.find(x => (x.name || '').toLowerCase() === kw)
+  if (!m) m = materials.find(x => {
+    const n = (x.name || '').toLowerCase()
+    return n && (n.includes(kw) || kw.includes(n))
+  })
+  if (m) return { name: keyword, found: true, stock: m.stock ?? 0, matchedVia: m.name }
+
+  // ชั้น 2 — market_name
+  let a = aliases.find(x => (x.market_name || '').toLowerCase() === kw)
+  if (!a) a = aliases.find(x => {
+    const mn = (x.market_name || '').toLowerCase()
+    return mn && (mn.includes(kw) || kw.includes(mn))
+  })
+
+  // ชั้น 3 — keywords (คั่นด้วย comma)
+  if (!a) {
+    a = aliases.find(x => {
+      if (!x.keywords) return false
+      return String(x.keywords).toLowerCase()
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .some(k => k === kw || k.includes(kw) || kw.includes(k))
+    })
+  }
+
+  if (a) {
+    const mat = materials.find(x => x.id === a.material_id)
+    if (mat) {
+      return { name: keyword, found: true, stock: mat.stock ?? 0,
+        matchedVia: a.market_name || mat.name }
+    }
+  }
+
+  return { name: keyword, found: false }
+}
+
 async function fetchSavedTrends() {
   const { data } = await supabase
     .from('trend_items')
@@ -264,7 +309,8 @@ function TopRow({ rank, name, sold, produced, isRetail }) {
 }
 
 // ── Trend Card ────────────────────────────────────────────────────────────────
-function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula }) {
+function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula,
+  materials = [], aliases = [] }) {
   const [editNote, setEditNote] = useState(false)
   const [noteVal,  setNoteVal]  = useState(trend.saved_note || '')
   const [copied,   setCopied]   = useState(false)
@@ -302,12 +348,27 @@ function TrendCard({ trend, onToggleSaved, onToggleDone, onNote, onCreateFormula
           </div>
           {trend.keywords?.length > 0 && (
             <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:6, alignItems:'center' }}>
-              {trend.keywords.map((k,i) => (
-                <span key={i} style={{ fontSize:10, padding:'2px 8px', borderRadius:12,
-                  background:S.goldLt, color:S.gold, border:`1px solid ${S.goldBd}` }}>
-                  {k}
-                </span>
-              ))}
+              {trend.keywords.map((k, i) => {
+                const hit = matchMaterial(k, materials, aliases)
+                const has = hit.found
+                return (
+                  <span key={i}
+                    title={has
+                      ? `มีในคลัง: ${hit.matchedVia} · เหลือ ${hit.stock}g`
+                      : 'ไม่พบในคลัง — ต้องสั่งซื้อ'}
+                    style={{ fontSize:10, padding:'2px 8px', borderRadius:12,
+                      display:'inline-flex', alignItems:'center', gap:3,
+                      background: has ? S.greenBg : '#fcebeb',
+                      color:      has ? '#2e7d32' : '#a32d2d',
+                      border:`1px solid ${has ? '#c9dba8' : '#f0c9c9'}` }}>
+                    <span>{has ? '✓' : '✗'}</span>
+                    <span>{k}</span>
+                    {has && hit.stock != null && (
+                      <span style={{ opacity:.7, fontSize:9 }}>{hit.stock}g</span>
+                    )}
+                  </span>
+                )
+              })}
               <button onClick={copyMaterials}
                 title="คัดลอกรายชื่อ material"
                 style={{ fontSize:10, padding:'2px 8px', borderRadius:12, cursor:'pointer',
@@ -396,6 +457,8 @@ export default function PageDashboard({ onNavigate }) {
   const [expensesMonth, setExpensesMonth] = useState({ total: 0, items: [] })
   const [revenueMonth,  setRevenueMonth]  = useState({ revenue: 0, profit: 0 })
   const [revenueBreakdown, setRevenueBreakdown] = useState(null)
+  const [materials,  setMaterials]  = useState([])   // สำหรับเช็คว่า trend material มีในคลังไหม
+  const [aliases,    setAliases]    = useState([])
 
   async function handleSendReport() {
     setSending(true)
@@ -460,7 +523,9 @@ export default function PageDashboard({ onNavigate }) {
       db.getExpensesThisMonth().catch(() => ({ total: 0, items: [] })),
       db.getRevenueThisMonth().catch(() => ({ revenue: 0, profit: 0 })),
       db.getRevenueBreakdown().catch(() => null),
-    ]).then(([ps, ms, rs, s7, top, exp, revMonth, revBreakdown]) => {
+      db.getMaterials().catch(() => []),
+      db.getAllAliases().catch(() => []),
+    ]).then(([ps, ms, rs, s7, top, exp, revMonth, revBreakdown, mats, als]) => {
       setProdSum(ps)
       setMonthly(ms)
       setRetail(rs)
@@ -469,6 +534,8 @@ export default function PageDashboard({ onNavigate }) {
       setExpensesMonth(exp)
       setRevenueMonth(revMonth)
       setRevenueBreakdown(revBreakdown)
+      setMaterials(mats)
+      setAliases(als)
       setLoading(false)
     })
     loadTrends()
@@ -851,6 +918,7 @@ export default function PageDashboard({ onNavigate }) {
             </div>
             {trends.filter(t => t.is_saved).map(t => (
               <TrendCard key={t.id} trend={t}
+                materials={materials} aliases={aliases}
                 onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
                 onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
                 onNote={note => handleNote(t.id, note)}
@@ -864,6 +932,7 @@ export default function PageDashboard({ onNavigate }) {
           <div>
             {trends.filter(t => !t.is_saved).slice(0, 10).map(t => (
               <TrendCard key={t.id} trend={t}
+                materials={materials} aliases={aliases}
                 onToggleSaved={() => handleToggleSaved(t.id, !t.is_saved)}
                 onToggleDone={() => handleToggleDone(t.id, !t.is_done)}
                 onNote={note => handleNote(t.id, note)}
