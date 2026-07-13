@@ -201,11 +201,20 @@ function TransactionModal({ stock, onDone, onClose }) {
     const n = parseInt(qty)
     if (!n || n <= 0) return
     if (type === 'out' && n > remaining) { setErr(`เหลือแค่ ${remaining} ขวด`); return }
+    // ✅ บังคับใส่ราคา — ถ้าไม่ใส่ รายได้/กำไรจะเพี้ยน
+    if (type === 'out' && !sellPrice) { setErr('กรอกราคาขายด้วยค่ะ (ไม่งั้นรายได้จะเพี้ยน)'); return }
+    if (type === 'in'  && !costPrice) { setErr('กรอกต้นทุนด้วยค่ะ (ไม่งั้นกำไรจะเพี้ยน)'); return }
     setSaving(true)
     setErr('')
     try {
+      // ✅ ตอนขาย บันทึก cost_price ด้วย (ใช้ต้นทุนเฉลี่ยของสินค้า)
+      // เดิมส่ง null → daily-report คิดกำไร = ยอดขายเต็ม (ต้นทุน 0) ทำให้กำไรสูงเกินจริง
+      const costAtSale = type === 'out'
+        ? (stock.cost_per_unit ?? null)
+        : costPrice
+
       await logTransaction(stock.id, type, n, note, date,
-        type === 'in'  ? costPrice : null,
+        costAtSale,
         type === 'out' ? sellPrice : null,
       )
       let newSold   = type === 'out' ? stock.qty_sold + n : Math.max(0, stock.qty_sold - n)
@@ -342,25 +351,48 @@ function TransactionModal({ stock, onDone, onClose }) {
 }
 
 // ── Log drawer ────────────────────────────────────────────────────────────────
-function LogDrawer({ stock, onClose }) {
+function LogDrawer({ stock, onClose, onSaved }) {
   const [logs,    setLogs]    = useState([])
   const [loading, setLoading] = useState(true)
   const [editLog, setEditLog] = useState(null)  // log ที่กำลังแก้
   const [editNote, setEditNote] = useState('')
+  const [editCost, setEditCost] = useState('')  // ✅ แก้ต้นทุนย้อนหลังได้
+  const [editSell, setEditSell] = useState('')  // ✅ แก้ราคาขายย้อนหลังได้
   const [saving,  setSaving]  = useState(false)
 
   useEffect(() => {
     fetchLogs(stock.id).then(d => { setLogs(d); setLoading(false) })
   }, [stock.id])
 
-  async function saveEditNote() {
+  function startEdit(l) {
+    setEditLog(l)
+    setEditNote(l.note || '')
+    setEditCost(l.cost_price != null ? String(l.cost_price) : '')
+    setEditSell(l.sell_price != null ? String(l.sell_price) : '')
+  }
+
+  async function saveEditLog() {
     if (!editLog) return
     setSaving(true)
-    await supabase.from('retail_stock_logs').update({ note: editNote }).eq('id', editLog.id)
+    const payload = {
+      note: editNote,
+      cost_price: editCost === '' ? null : parseFloat(editCost),
+      sell_price: editSell === '' ? null : parseFloat(editSell),
+    }
+    const { data, error } = await supabase
+      .from('retail_stock_logs')
+      .update(payload)
+      .eq('id', editLog.id)
+      .select()
+    setSaving(false)
+    if (error || !data || data.length === 0) {
+      alert('บันทึกไม่สำเร็จ: ' + (error?.message || 'ไม่มีสิทธิ์เขียน?'))
+      return
+    }
     const d = await fetchLogs(stock.id)
     setLogs(d)
     setEditLog(null)
-    setSaving(false)
+    onSaved?.()   // ให้หน้าแม่ refresh ยอดรายได้
   }
 
   return (
@@ -384,7 +416,9 @@ function LogDrawer({ stock, onClose }) {
             <div style={{ textAlign:'center', color:S.textLt, padding:24, fontSize:13 }}>กำลังโหลด…</div>
           ) : logs.length === 0 ? (
             <div style={{ textAlign:'center', color:S.textLt, padding:24, fontSize:13 }}>ยังไม่มีประวัติ</div>
-          ) : logs.map(l => (
+          ) : logs.map(l => {
+            const missingPrice = l.type === 'out' ? (l.sell_price == null) : (l.cost_price == null)
+            return (
             <div key={l.id} style={{ padding:'10px 0', borderBottom:`1px solid ${S.border}` }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
@@ -395,45 +429,77 @@ function LogDrawer({ stock, onClose }) {
                     {l.type === 'out' ? '↓ ขาย' : '↑ รับ'}
                   </span>
                   <span style={{ fontSize:13, color:S.text, fontWeight:600 }}>{l.qty} ขวด</span>
-                {l.cost_price && <span style={{ fontSize:11, color:S.textMid, marginLeft:6 }}>ต้นทุน ฿{l.cost_price}/ขวด</span>}
-                {l.sell_price && <span style={{ fontSize:11, color:S.gold, marginLeft:6 }}>ขาย ฿{l.sell_price}/ขวด</span>}
+                {l.cost_price != null && <span style={{ fontSize:11, color:S.textMid, marginLeft:6 }}>ต้นทุน ฿{l.cost_price}/ขวด</span>}
+                {l.sell_price != null && <span style={{ fontSize:11, color:S.gold, marginLeft:6 }}>ขาย ฿{l.sell_price}/ขวด</span>}
+                {missingPrice && (
+                  <span style={{ fontSize:10, color:'#a32d2d', marginLeft:6,
+                    background:'#fcebeb', padding:'2px 6px', borderRadius:8,
+                    border:'1px solid #f0c9c9' }}>
+                    ⚠️ ไม่มีราคา
+                  </span>
+                )}
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ fontSize:11, color:S.textLt }}>
                     {new Date(l.logged_at).toLocaleDateString('th-TH', { day:'numeric', month:'short' })}
                   </span>
-                  <button onClick={() => { setEditLog(l); setEditNote(l.note || '') }}
+                  <button onClick={() => startEdit(l)}
+                    title="แก้ไขราคา/หมายเหตุ"
                     style={{ background:'none', border:'none', cursor:'pointer',
                       fontSize:12, color:S.textLt, padding:'2px 6px' }}>✎</button>
                 </div>
               </div>
 
-              {/* inline edit */}
+              {/* inline edit — แก้ได้ทั้งราคาและหมายเหตุ */}
               {editLog?.id === l.id ? (
-                <div style={{ marginTop:8, display:'flex', gap:6 }}>
+                <div style={{ marginTop:8, padding:10, borderRadius:8,
+                  background:S.bg, border:`1px solid ${S.goldBd}` }}>
+                  <div style={{ display:'flex', gap:6, marginBottom:6 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:10, color:S.textMid, marginBottom:3 }}>ต้นทุน/ขวด</div>
+                      <input type="number" step="0.01" value={editCost}
+                        onChange={e => setEditCost(e.target.value)}
+                        placeholder="95"
+                        style={{ width:'100%', padding:'6px 8px', borderRadius:6,
+                          border:`1px solid ${S.border}`, fontSize:12,
+                          fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }}/>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:10, color:S.textMid, marginBottom:3 }}>ราคาขาย/ขวด</div>
+                      <input type="number" step="0.01" value={editSell}
+                        onChange={e => setEditSell(e.target.value)}
+                        placeholder="139"
+                        style={{ width:'100%', padding:'6px 8px', borderRadius:6,
+                          border:`1px solid ${S.border}`, fontSize:12,
+                          fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }}/>
+                    </div>
+                  </div>
                   <input value={editNote} onChange={e => setEditNote(e.target.value)}
-                    placeholder="แก้ไขหมายเหตุ…"
-                    style={{ flex:1, padding:'6px 10px', borderRadius:6,
-                      border:`1px solid ${S.goldBd}`, fontSize:12,
-                      fontFamily:'Inter,sans-serif', outline:'none' }}/>
-                  <button onClick={saveEditNote} disabled={saving}
-                    style={{ padding:'6px 12px', borderRadius:6, border:'none',
-                      background:S.gold, color:S.white, cursor:'pointer',
-                      fontSize:12, fontWeight:600 }}>
-                    {saving ? '…' : 'บันทึก'}
-                  </button>
-                  <button onClick={() => setEditLog(null)}
-                    style={{ padding:'6px 10px', borderRadius:6,
-                      border:`1px solid ${S.border}`, background:'none',
-                      cursor:'pointer', fontSize:12, color:S.textMid }}>
-                    ยกเลิก
-                  </button>
+                    placeholder="หมายเหตุ…"
+                    style={{ width:'100%', padding:'6px 10px', borderRadius:6, marginBottom:6,
+                      border:`1px solid ${S.border}`, fontSize:12,
+                      fontFamily:'Inter,sans-serif', outline:'none', boxSizing:'border-box' }}/>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={saveEditLog} disabled={saving}
+                      style={{ flex:1, padding:'7px 12px', borderRadius:6, border:'none',
+                        background:S.gold, color:S.white, cursor:'pointer',
+                        fontSize:12, fontWeight:600 }}>
+                      {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+                    </button>
+                    <button onClick={() => setEditLog(null)}
+                      style={{ padding:'7px 12px', borderRadius:6,
+                        border:`1px solid ${S.border}`, background:S.white,
+                        cursor:'pointer', fontSize:12, color:S.textMid }}>
+                      ยกเลิก
+                    </button>
+                  </div>
                 </div>
               ) : (
                 l.note && <div style={{ fontSize:11, color:S.textMid, marginTop:4 }}>{l.note}</div>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
@@ -822,6 +888,7 @@ export default function PageRetailStock() {
         <LogDrawer
           stock={logItem}
           onClose={() => setLogItem(null)}
+          onSaved={load}
         />
       )}
     </div>
