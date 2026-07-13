@@ -1,12 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { S } from '../constants/theme'
 
-const TABLES = [
+// รายชื่อสำรอง — ใช้เฉพาะกรณี RPC list_public_tables() เรียกไม่ได้
+// ปกติจะดึงรายชื่อ table จริงจาก database ทุกครั้งที่เปิดหน้า
+const FALLBACK_TABLES = [
   'formulas', 'formula_versions', 'materials', 'material_aliases',
   'production_batches', 'aging_logs',
   'customers', 'orders', 'order_items'
 ]
+
+async function fetchTableList() {
+  const { data, error } = await supabase.rpc('list_public_tables')
+  if (error) {
+    console.error('list_public_tables error:', error)
+    return { tables: FALLBACK_TABLES, usedFallback: true }
+  }
+  const names = (data || [])
+    .map(r => (typeof r === 'string' ? r : r.table_name))
+    .filter(Boolean)
+  if (!names.length) return { tables: FALLBACK_TABLES, usedFallback: true }
+  return { tables: names, usedFallback: false }
+}
 
 function generateTimestamp() {
   const now = new Date()
@@ -58,14 +73,30 @@ function generateCSV(tableName, rows) {
 }
 
 export default function PageBackup() {
+  const [tables,         setTables]         = useState([])
+  const [loadingTables,  setLoadingTables]  = useState(true)
+  const [usedFallback,   setUsedFallback]   = useState(false)
   const [selectedTables, setSelectedTables] = useState({})
-  const [format, setFormat] = useState('sql')
-  const [exporting, setExporting] = useState(false)
-  const [status, setStatus] = useState('')
+  const [format,         setFormat]         = useState('sql')
+  const [exporting,      setExporting]      = useState(false)
+  const [status,         setStatus]         = useState('')
+
+  // โหลดรายชื่อ table จริงจาก database — table ใหม่จะโผล่เองไม่ต้องแก้โค้ด
+  useEffect(() => {
+    fetchTableList().then(({ tables: t, usedFallback: fb }) => {
+      setTables(t)
+      setUsedFallback(fb)
+      // default: เลือกทั้งหมด เพื่อไม่ให้ลืม backup table ใหม่
+      const sel = {}
+      t.forEach(name => { sel[name] = true })
+      setSelectedTables(sel)
+      setLoadingTables(false)
+    })
+  }, [])
 
   const handleSelectAll = (checked) => {
     const newSelected = {}
-    TABLES.forEach(t => newSelected[t] = checked)
+    tables.forEach(t => newSelected[t] = checked)
     setSelectedTables(newSelected)
   }
 
@@ -89,11 +120,14 @@ export default function PageBackup() {
       let content = ''
       const timestamp = generateTimestamp()
       let filename = `backup_${timestamp}`
+      let totalRows = 0
 
       // Query ทุก table
       for (const table of tablesToExport) {
+        setStatus(`กำลัง export... (${table})`)
         const { data, error } = await supabase.from(table).select('*')
-        if (error) throw error
+        if (error) throw new Error(`${table}: ${error.message}`)
+        totalRows += (data?.length || 0)
 
         if (format === 'sql') {
           content += generateSQLInserts(table, data)
@@ -118,7 +152,7 @@ export default function PageBackup() {
       link.click()
       URL.revokeObjectURL(url)
 
-      setStatus(`✓ Export สำเร็จ — ${tablesToExport.length} table`)
+      setStatus(`✓ Export สำเร็จ — ${tablesToExport.length} table · ${totalRows.toLocaleString()} แถว`)
     } catch (err) {
       setStatus(`✗ Error: ${err.message}`)
     } finally {
@@ -126,7 +160,7 @@ export default function PageBackup() {
     }
   }
 
-  const isAllSelected = TABLES.every(t => selectedTables[t])
+  const isAllSelected = tables.length > 0 && tables.every(t => selectedTables[t])
   const selectedCount = getTablesToExport().length
 
   const labelStyle = {
@@ -147,17 +181,39 @@ export default function PageBackup() {
     transition: 'all 0.2s'
   })
 
+  if (loadingTables) {
+    return (
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: 24 }}>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 24, color: S.ink }}>
+          💾 Backup Database
+        </div>
+        <div style={{ textAlign:'center', padding:40, color:S.textLt, fontSize:13 }}>
+          กำลังโหลดรายชื่อ table…
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 500, margin: '0 auto', padding: 24 }}>
       <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 24, color: S.ink }}>
         💾 Backup Database
       </div>
 
+      {usedFallback && (
+        <div style={{ marginBottom:16, padding:12, borderRadius:8,
+          background:'#fdf4e3', border:'1px solid #e0cda0',
+          fontSize:12, color:'#8a6f4e', lineHeight:1.5 }}>
+          ⚠️ ดึงรายชื่อ table จาก database ไม่สำเร็จ — ใช้รายชื่อสำรองแทน
+          อาจไม่ครบทุก table กรุณาตรวจสอบ RPC <code>list_public_tables()</code>
+        </div>
+      )}
+
       {/* Select Tables */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase',
           color: S.textMid, letterSpacing: .6, marginBottom: 12 }}>
-          เลือก Table ({selectedCount}/{TABLES.length})
+          เลือก Table ({selectedCount}/{tables.length})
         </div>
 
         <label style={labelStyle}>
@@ -168,7 +224,7 @@ export default function PageBackup() {
         </label>
 
         <div style={{ marginLeft: 24, marginTop: 8 }}>
-          {TABLES.map(table => (
+          {tables.map(table => (
             <label key={table} style={labelStyle}>
               <input type="checkbox" checked={selectedTables[table] || false}
                 onChange={e => handleSelectTable(table, e.target.checked)}
