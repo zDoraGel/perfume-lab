@@ -433,6 +433,38 @@ export const db = {
     return { data, deduction, error: null }
   },
 
+  // ── Opening Balance: บันทึกหัวเชื้อที่ทำไว้ก่อนมีระบบ — ไม่หักวัตถุดิบ ─────────────
+  // ใช้กับหัวเชื้อที่มีอยู่จริงในตู้แล้ว (material ถูกใช้ไปในโลกจริงก่อนหน้านี้)
+  // ถ้าหัก material ซ้ำจะทำให้สต็อกวัตถุดิบติดลบผิดความจริง
+  async createOpeningConcentrate(formulaId, { concentration, concentrate_ml,
+    concentrate_made_at, notes }) {
+    const ml = parseFloat(concentrate_ml)
+    if (!ml || ml <= 0) {
+      return { data: null, error: { message: 'ปริมาณหัวเชื้อต้องมากกว่า 0' } }
+    }
+    const madeAt = concentrate_made_at || new Date().toISOString().split('T')[0]
+    const { data, error } = await supabase
+      .from('production_batches')
+      .insert({
+        formula_id:   formulaId,
+        concentration: concentration || 'SIGNATURE',
+        bottle_ml:    Math.round(ml),
+        qty_produced: 1,
+        qty_sold:     0,
+        produced_at:  madeAt,
+        concentrate_made_at: madeAt,
+        concentrate_ml: ml,
+        notes: notes ? `[ยกยอดมา] ${notes}` : '[ยกยอดมา] หัวเชื้อที่ทำไว้ก่อนมีระบบ',
+        stage: 'concentrate',
+      })
+      .select().single()
+    if (error) {
+      console.error('createOpeningConcentrate error:', error)
+      return { data: null, error }
+    }
+    return { data, error: null }
+  },
+
   // ── ขั้นตอนที่ 2: ผสมแอลกอฮอล์ + บรรจุขวด — ทำให้ batch จาก stage 'concentrate' เป็น 'bottled' ─────
   async completeBottling(batchId, { concentration, bottle_ml, qty_produced, concentrate_used_ml,
     alcohol_mix, alcohol_ml_per_bottle, produced_at, sell_price, notes }) {
@@ -443,6 +475,11 @@ export const db = {
 
     const totalHave  = original.concentrate_ml || 0
     const usedMl      = concentrate_used_ml != null ? parseFloat(concentrate_used_ml) : totalHave
+    // ✅ กันหัวเชื้อติดลบ — ใช้เกินที่มีไม่ได้ (เผื่อเรียกจากที่อื่นที่ไม่ผ่าน guard ของ AlcoholMixForm)
+    if (usedMl > totalHave + 0.05) {
+      return { data: null,
+        error: { message: `ใช้หัวเชื้อ ${usedMl}ml เกินที่มีอยู่ (${totalHave}ml)` } }
+    }
     const remainingMl = Math.round((totalHave - usedMl) * 100) / 100
     const concentratePerBottle = qty_produced ? usedMl / parseInt(qty_produced) : null
 

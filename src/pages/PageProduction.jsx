@@ -435,6 +435,7 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
   const [concentrateDate, setConcentrateDate] = useState(new Date().toISOString().split('T')[0])
   const [notes,           setNotes]           = useState('')
   const [saving,          setSaving]          = useState(false)
+  const [isOpening,       setIsOpening]       = useState(false) // ยกยอดหัวเชื้อเก่า — ไม่หักวัตถุดิบ
 
   const inputStyle = {
     width:'100%', padding:'8px 12px', borderRadius:8, border:`1px solid ${S.border}`,
@@ -445,6 +446,24 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
   async function save() {
     if (!totalMl || parseFloat(totalMl) <= 0) return
     setSaving(true)
+
+    // โหมดยกยอด — หัวเชื้อที่ทำไว้ก่อนมีระบบ material ถูกใช้ไปแล้วในโลกจริง จึงไม่หักซ้ำ
+    if (isOpening) {
+      const { error } = await db.createOpeningConcentrate(formulaId, {
+        concentration: null,
+        concentrate_ml: parseFloat(totalMl),
+        concentrate_made_at: concentrateDate,
+        notes,
+      })
+      setSaving(false)
+      if (error) {
+        alert('บันทึกหัวเชื้อไม่สำเร็จ: ' + error.message)
+        return
+      }
+      onSave?.()
+      return
+    }
+
     // เก็บเป็น "1 ขวด" ที่มีปริมาตร = หัวเชื้อรวมที่ทำได้ — ยังไม่ผูกกับ concentration/ขนาดขวดจริง
     // จะค่อยแบ่งสัดส่วนจริงตอนผสมแอล (AlcoholMixForm)
     const { error } = await db.createConcentrateBatch(formulaId, {
@@ -473,9 +492,30 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
         ค่อยมาเลือกตอนผสมแอล+บรรจุขวดทีหลังได้
       </div>
 
+      {/* โหมดยกยอด — สำหรับหัวเชื้อที่ทำไว้ก่อนมีระบบ */}
+      <label style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:12,
+        padding:'10px 12px', borderRadius:8, cursor:'pointer',
+        background: isOpening ? '#fdf4e3' : 'transparent',
+        border:`1px ${isOpening ? 'solid' : 'dashed'} ${isOpening ? '#dcc9a8' : S.border}` }}>
+        <input type="checkbox" checked={isOpening}
+          onChange={e => setIsOpening(e.target.checked)}
+          style={{ marginTop:2, cursor:'pointer' }}/>
+        <span>
+          <span style={{ fontSize:12, fontWeight:600, color:S.ink }}>
+            ยกยอดหัวเชื้อเก่า (ทำไว้ก่อนมีระบบ)
+          </span>
+          <span style={{ display:'block', fontSize:10.5, color:S.textLt, marginTop:2 }}>
+            ติ๊กถ้าหัวเชื้อนี้ผสมไว้แล้วก่อนหน้านี้ — ระบบจะบันทึกเข้าสต็อกโดย
+            <b> ไม่หักวัตถุดิบซ้ำ</b> (เพราะใช้ไปแล้วในโลกจริง)
+          </span>
+        </span>
+      </label>
+
       <div style={{ marginBottom:10 }}>
         <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ทำหัวเชื้อรวม (ml)</div>
+          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>
+          {isOpening ? 'หัวเชื้อที่เหลืออยู่จริง (ml)' : 'ทำหัวเชื้อรวม (ml)'}
+        </div>
         <input type="number" step="0.01" value={totalMl} onChange={e => setTotalMl(e.target.value)}
           placeholder="เช่น 45" style={inputStyle}/>
       </div>
@@ -506,7 +546,8 @@ function ConcentrateForm({ formulaId, onSave, onCancel }) {
             fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:600,
             background:S.gold, border:'none', color:'#fff',
             opacity: !totalMl || saving ? .6 : 1 }}>
-          {saving ? 'กำลังบันทึก...' : '✓ บันทึกหัวเชื้อ'}
+          {saving ? 'กำลังบันทึก...'
+            : (isOpening ? '✓ ยกยอดหัวเชื้อเข้าระบบ' : '✓ บันทึกหัวเชื้อ')}
         </button>
       </div>
     </div>
@@ -908,13 +949,6 @@ export default function PageProduction() {
                     border:'none', color: showConcentrateForm ? S.textMid : S.ink }}>
                   {showConcentrateForm ? 'ยกเลิก' : '🧪 ทำหัวเชื้อ'}
                 </button>
-                <button onClick={() => { setShowForm(v => !v); setShowConcentrateForm(false) }}
-                  style={{ padding:'8px 16px', borderRadius:20, cursor:'pointer',
-                    fontFamily:'Inter,sans-serif', fontSize:12, fontWeight:600,
-                    background: showForm ? S.border : S.gold,
-                    border:'none', color: showForm ? S.textMid : '#fff' }}>
-                  {showForm ? 'ยกเลิก' : '+ ผลิตใหม่ (ครบในรอบเดียว)'}
-                </button>
               </div>
             </div>
 
@@ -1093,10 +1127,10 @@ export default function PageProduction() {
               </div>
             )}
 
-            {batches.length === 0 && !showForm && (
+            {batches.length === 0 && !showForm && !showConcentrateForm && (
               <div style={{ textAlign:'center', padding:'32px 0',
                 color:S.textLt, fontSize:13, fontStyle:'italic' }}>
-                ยังไม่มี batch — กด "+ ผลิตใหม่" เพื่อเริ่มค่ะ
+                ยังไม่มี batch — กด "🧪 ทำหัวเชื้อ" เพื่อเริ่มค่ะ
               </div>
             )}
           </div>
