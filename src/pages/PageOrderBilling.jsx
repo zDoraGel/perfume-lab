@@ -1156,8 +1156,8 @@ function CustomerList({ customers, orders, onUpdated }) {
             style={{ background:S.white, border:`1px solid ${S.border}`, borderRadius:10,
               padding:'12px 14px', display:'flex', justifyContent:'space-between',
               alignItems:'center', cursor:'pointer' }}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:S.ink }}>{c.name}</div>
+            <div style={{ textAlign:'left' }}>
+              <div style={{ fontSize:13, fontWeight:600, color:S.ink }}>{(c.name || '').trim()}</div>
               <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
                 {c.contact || '-'} · {c.orderCount} ออเดอร์ · ใช้จ่ายรวม ฿{c.totalSpent.toLocaleString()}
               </div>
