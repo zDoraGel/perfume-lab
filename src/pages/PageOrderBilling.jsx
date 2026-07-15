@@ -17,85 +17,29 @@ const inputStyle = {
   fontFamily:'Inter,sans-serif',
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// LINEN THEORY REWARDS — ระบบแต้มสะสม
-// ═══════════════════════════════════════════════════════════════════
-// การได้แต้ม: ทุก 50 บาท = 1 แต้ม + เก็บเศษบาทสะสม (ยกไปรอบหน้า ไม่ปัดทิ้ง)
-const POINTS_PER_BAHT = 50
+// แต้มสะสม: ทุก 100 บาท = 1 แต้ม — ให้เฉพาะช่องทาง แอป / Facebook / Instagram
+const POINTS_PER_BAHT = 100
 const POINTS_ELIGIBLE_CHANNELS = ['app', 'facebook', 'instagram', 'line']
 // ช่องทางที่ยังต้องสร้าง QR ให้ลูกค้าจ่าย (FB/IG/LINE = คุยขาย แต่ยังไม่จ่าย)
 // ส่วน TikTok/Shopee มีระบบจ่ายเงินในตัวแพลตฟอร์มแล้ว ไม่ต้องมี QR
 const QR_CHANNELS = ['app', 'facebook', 'instagram', 'line']
-
-// โบนัส
-const BONUS_REPEAT_DAYS   = 30  // ซื้อครั้งที่ 2 ภายในกี่วัน
-const BONUS_REPEAT_POINTS = 3   // +แต้มโบนัสซื้อซ้ำเร็ว
-const BONUS_LOYAL_ORDERS  = 3   // ครบกี่ออเดอร์ (paid) ได้โบนัสลูกค้าประจำ
-const BONUS_LOYAL_POINTS  = 5
-const BONUS_BIRTHDAY_POINTS = 5 // โบนัสเดือนเกิด (1 ครั้ง/ปี)
-
-// ของรางวัล (แลกแต้ม)
-const REWARDS = {
-  discount_100:  { cost: 20, label: 'ส่วนลด ฿100' },
-  perfume_5ml:   { cost: 30, label: 'น้ำหอม 5ml ฟรี' },
-  discovery_set: { cost: 50, label: 'Discovery Set 5ml' },
-}
-const REDEEM_POINTS_COST = 20 // (คงไว้เพื่อความเข้ากันได้กับโค้ดเดิม = ราคาต่ำสุด)
-
-// แต้มหมดอายุ (เดือน)
-const POINTS_EXPIRY_MONTHS = 12
-
-// ── คิดแต้มพื้นฐาน + เก็บเศษ ──
-// คืน { points, newRemainder } — points = แต้มที่ได้รอบนี้, newRemainder = เศษบาทสะสมใหม่
-function calcBasePoints(amount, channel, prevRemainder = 0) {
-  if (!POINTS_ELIGIBLE_CHANNELS.includes(channel)) return { points: 0, newRemainder: prevRemainder }
-  const pool = (prevRemainder || 0) + Math.round(amount || 0) // เศษเก่า + ยอดใหม่
-  const points = Math.floor(pool / POINTS_PER_BAHT)
-  const newRemainder = pool - points * POINTS_PER_BAHT
-  return { points, newRemainder }
-}
-
-// ── คิดโบนัสทั้งหมด — รับข้อมูลลูกค้า + ประวัติ order (paid) ──
-// customer: row จาก customers | paidOrders: order ของลูกค้าคนนี้ที่ status='paid' (ก่อนออเดอร์นี้)
-// คืน [{ type, points, detail }]
-function calcBonuses(customer, paidOrders) {
-  const bonuses = []
-  const now = new Date()
-
-  // 1) ซื้อซ้ำเร็ว — ออเดอร์ paid ก่อนหน้ามีเพียง 1 ครั้ง และห่างไม่เกิน 30 วัน
-  //    (แปลว่าออเดอร์นี้คือครั้งที่ 2)
-  if (paidOrders.length === 1) {
-    const firstDate = new Date(paidOrders[0].created_at)
-    const daysDiff = (now - firstDate) / (1000 * 60 * 60 * 24)
-    if (daysDiff <= BONUS_REPEAT_DAYS) {
-      bonuses.push({ type: 'bonus_repeat', points: BONUS_REPEAT_POINTS,
-        detail: `ซื้อซ้ำใน ${BONUS_REPEAT_DAYS} วัน` })
-    }
-  }
-
-  // 2) ลูกค้าประจำ — ออเดอร์นี้ทำให้ครบ 3 พอดี (ก่อนหน้ามี 2 paid)
-  if (paidOrders.length === BONUS_LOYAL_ORDERS - 1) {
-    bonuses.push({ type: 'bonus_loyal', points: BONUS_LOYAL_POINTS,
-      detail: `ครบ ${BONUS_LOYAL_ORDERS} ออเดอร์` })
-  }
-
-  // 3) เดือนเกิด — ตรงเดือนนี้ และยังไม่เคยรับโบนัสในปีนี้
-  if (customer?.birth_month && customer.birth_month === (now.getMonth() + 1)) {
-    if (customer.birthday_bonus_year !== now.getFullYear()) {
-      bonuses.push({ type: 'bonus_birthday', points: BONUS_BIRTHDAY_POINTS,
-        detail: `เดือนเกิด ${now.getFullYear()}` })
-    }
-  }
-
-  return bonuses
-}
-
-// ── เก่า: คงไว้ให้โค้ดส่วนอื่นที่ยังเรียกอยู่ไม่พัง ──
 function calcPoints(amount, channel) {
-  return calcBasePoints(amount, channel, 0).points
+  if (!POINTS_ELIGIBLE_CHANNELS.includes(channel)) return 0
+  return Math.floor((amount || 0) / POINTS_PER_BAHT)
 }
 
+const REDEEM_POINTS_COST = 20
+const WELCOME_DISCOUNT = 100         // ลูกค้าใหม่ลด 100 (ใช้ครั้งเดียว)
+const BIRTHDAY_BONUS_POINTS = 5      // โบนัสวันเกิด +5 แต้ม เมื่อซื้อในเดือนเกิด
 const BOTTLE_SIZES = [5, 15, 30, 50, 100]
+
+// เดือนเกิดตรงกับเดือนปัจจุบันไหม (เทียบเฉพาะเดือน ไม่สนปี)
+function isBirthdayMonth(birthDate) {
+  if (!birthDate) return false
+  const bd = new Date(birthDate)
+  if (isNaN(bd)) return false
+  return bd.getMonth() === new Date().getMonth()
+}
 
 const CHANNELS = [
   { value:'app',       label:'แอป (QR PromptPay)' },
@@ -112,6 +56,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [customerBirth,   setCustomerBirth]   = useState('')
   const [existingId,      setExistingId]      = useState(null)
   const [items,           setItems]           = useState([
     { formula_id:'', bottle_ml:15, qty:1, unit_price:'', original_price:'', discount_type:null, discount_value:'', discount_reason:'' }
@@ -125,6 +70,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   const [showCustList,    setShowCustList]    = useState(false)
   const [redeemType,      setRedeemType]      = useState(null) // null | 'discount_100' | 'perfume_2ml' | 'free_shipping'
   const [redeemFormulaId, setRedeemFormulaId] = useState('')
+  const [useWelcome,      setUseWelcome]      = useState(false) // ใช้ Welcome Offer กับออเดอร์นี้ไหม
   const savingRef = useRef(false) // กันกดบันทึกซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
 
   function addItem() {
@@ -149,29 +95,34 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
     s + itemFinalPrice(it) * (parseInt(it.qty) || 0), 0)
   const selectedCustomer = existingId ? customers.find(c => c.id === existingId) : null
   const customerPoints   = selectedCustomer?.loyalty_points || 0
-  // ต้นทุนแต้มของรางวัลที่เลือก (แปรตามชนิด)
-  const redeemCost       = redeemType ? (REWARDS[redeemType]?.cost || 0) : 0
-  const canRedeem        = customerPoints >= redeemCost
-  // ส่วนลด/ของแถมตามชนิดรางวัล
+  const canRedeem        = customerPoints >= REDEEM_POINTS_COST
+  // Welcome Offer: เสนอได้เมื่อเป็นลูกค้าใหม่ (ยังไม่มี existingId) หรือลูกค้าเดิมที่ยังไม่เคยใช้
+  const welcomeEligible  = !existingId || (selectedCustomer && !selectedCustomer.welcome_used)
+  // โบนัสวันเกิด: ลูกค้าเดิมที่ตั้งวันเกิด และเดือนนี้ตรงเดือนเกิด + ช่องทางให้แต้ม
+  const birthdayEligible = selectedCustomer && isBirthdayMonth(selectedCustomer.birth_date)
+    && POINTS_ELIGIBLE_CHANNELS.includes(channel)
+  const shippingAmount   = (hasShipping && redeemType !== 'free_shipping') ? (parseFloat(shippingFee) || 0) : 0
   const redeemDiscount   = redeemType === 'discount_100' ? 100 : 0
-  const shippingAmount   = hasShipping ? (parseFloat(shippingFee) || 0) : 0
-  const total = Math.max(0, itemsTotal + shippingAmount - redeemDiscount)
+  const welcomeDiscount  = (useWelcome && welcomeEligible) ? WELCOME_DISCOUNT : 0
+  const total = Math.max(0, itemsTotal + shippingAmount - redeemDiscount - welcomeDiscount)
 
   function pickCustomer(c) {
     setCustomerName(c.name)
     setCustomerContact(c.contact || '')
     setCustomerAddress(c.address || '')
+    setCustomerBirth(c.birth_date || '')
     setExistingId(c.id)
     setShowCustList(false)
     setRedeemType(null)
     setRedeemFormulaId('')
+    setUseWelcome(false)
   }
 
   async function saveOrder() {
     if (savingRef.current) return // กันกดซ้ำ — เช็คทันทีไม่รอ React re-render
     if (!customerName.trim()) return alert('กรอกชื่อลูกค้าก่อนค่ะ')
     if (items.every(it => !it.formula_id)) return alert('เลือกสินค้าอย่างน้อย 1 รายการ')
-    if (redeemType === 'perfume_5ml' && !redeemFormulaId) return alert('เลือกกลิ่นที่จะแถม 5ml ก่อนค่ะ')
+    if (redeemType === 'perfume_2ml' && !redeemFormulaId) return alert('เลือกกลิ่นที่จะแถม 2ml ก่อนค่ะ')
     const isExternal = !QR_CHANNELS.includes(channel)
     savingRef.current = true
     setSaving(true)
@@ -182,7 +133,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         const { data: newCust, error: custErr } = await supabase
           .from('customers')
           .insert({ name: customerName.trim(), contact: customerContact.trim() || null,
-            address: customerAddress.trim() || null })
+            address: customerAddress.trim() || null, birth_date: customerBirth || null })
           .select().single()
         if (custErr) throw custErr
         customerId = newCust.id
@@ -190,19 +141,18 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
       } else {
         // ถ้าลูกค้าเดิมแก้ที่อยู่ใหม่ ให้อัปเดตด้วย
         const { data: updated } = await supabase.from('customers')
-          .update({ address: customerAddress.trim() || null })
+          .update({ address: customerAddress.trim() || null, birth_date: customerBirth || null })
           .eq('id', customerId).select().single()
         customerRow = updated
       }
 
       const status = isExternal ? 'paid' : 'pending'
-      // แต้มจะถูกคิดโดย db.awardPointsForOrder ตอนจ่ายจริง (ด้านล่าง / หรือตอน markPaid)
-      // insert 0 ไว้ก่อน — helper จะอัปเดต points_earned ให้เอง
+      const pointsEarned = isExternal ? calcPoints(total, channel) : 0
 
       const { data: order, error: orderErr } = await supabase
         .from('orders')
         .insert({ customer_id: customerId, total_amount: total, notes: notes || null,
-          status, channel, points_earned: 0,
+          status, channel, points_earned: pointsEarned,
           promptpay_number: isExternal ? null : promptpay.trim(), shipping_fee: shippingAmount })
         .select().single()
       if (orderErr) throw orderErr
@@ -226,17 +176,17 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         }
       })
 
-      // ของแถมจากการแลกแต้ม (น้ำหอม 5ml ฟรี)
-      if (redeemType === 'perfume_5ml' && redeemFormulaId) {
+      // ของแถมจากการแลกแต้ม (น้ำหอม 2ml ฟรี)
+      if (redeemType === 'perfume_2ml' && redeemFormulaId) {
         itemRows.push({
           order_id: order.id,
           formula_id: parseInt(redeemFormulaId),
-          bottle_ml: 5,
+          bottle_ml: 2,
           qty: 1,
           original_price: 0,
           discount_type: null,
           discount_value: 0,
-          discount_reason: 'แลกแต้มสะสม (ของแถม 5ml)',
+          discount_reason: 'แลกแต้มสะสม (ของแถม)',
           unit_price: 0,
           subtotal: 0,
         })
@@ -253,43 +203,55 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         }
       }
 
-      // ── แลกแต้ม: หักแต้มตามชนิดรางวัล (ทำก่อน เพราะไม่ขึ้นกับการจ่าย) ──
-      let redeemResult = null
-      if (redeemType) {
-        const cost = REWARDS[redeemType]?.cost || 0
-        const redeemedFormulaName = redeemType === 'perfume_5ml'
-          ? formulas.find(f => f.id === parseInt(redeemFormulaId))?.name : null
-        try {
-          redeemResult = await db.redeemPoints({
-            customerId, orderId: order.id, cost,
-            rewardType: redeemType, detail: redeemedFormulaName || REWARDS[redeemType]?.label,
-          })
-          // เก็บประวัติการแลกแบบเดิมไว้ด้วย (ถ้าตาราง loyalty_redemptions ยังใช้อยู่)
-          await supabase.from('loyalty_redemptions').insert({
-            customer_id: customerId, reward_type: redeemType,
-            reward_detail: redeemedFormulaName, points_used: cost, order_id: order.id,
-          })
-        } catch (e) {
-          alert(`บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ: ${e.message}\nกรุณาแก้แต้มลูกค้าเองในหน้า Customers`)
-        }
-      }
-
-      // ── ให้แต้ม: เฉพาะตอนจ่ายจริง (external) — QR รอ markPaid ──
-      // helper คิด base + เก็บเศษ + bonus (ซื้อซ้ำ/ครบ3/วันเกิด) + เขียน ledger + อัปเดต orders.points_earned
-      let awardResult = { pointsEarned: 0, bonuses: [] }
+      // ── แต้มสะสม: ทุกอย่างผ่าน ledger (แต้มหมดอายุแบบก้อน) ──
+      // การได้แต้มจากออเดอร์ + โบนัสวันเกิด ให้เฉพาะช่องทางนอกแอป (จ่ายแล้วจริง)
+      // ช่องทางในแอปจะได้แต้มตอนยืนยันจ่าย (จัดการที่หน้ายืนยัน)
       if (isExternal) {
-        try {
-          awardResult = await db.awardPointsForOrder({
-            orderId: order.id, customerId, amount: total, channel,
-          })
-        } catch (e) {
-          alert(`บันทึกออเดอร์แล้ว แต่ให้แต้มไม่สำเร็จ: ${e.message}\nกรุณาแก้แต้มลูกค้าเองในหน้า Customers`)
+        if (pointsEarned > 0) {
+          const r = await db.earnPoints(customerId, pointsEarned,
+            { kind: 'earn', orderId: order.id, note: `ออเดอร์ #${order.id}` })
+          if (!r.ok) alert(`บันทึกออเดอร์แล้ว แต่ให้แต้มไม่สำเร็จ: ${r.error}\nกรุณาเช็ค RLS ของ loyalty_ledger`)
+        }
+        // โบนัสวันเกิด — ให้ครั้งเดียวต่อเดือนเกิด (กันซ้ำด้วย note ที่ผูกปี+เดือน)
+        if (birthdayEligible) {
+          const tag = `birthday:${customerId}:${new Date().getFullYear()}-${new Date().getMonth() + 1}`
+          const { data: already } = await supabase.from('loyalty_ledger')
+            .select('id').eq('kind', 'birthday').eq('note', tag).maybeSingle()
+          if (!already) {
+            await db.earnPoints(customerId, BIRTHDAY_BONUS_POINTS,
+              { kind: 'birthday', orderId: order.id, note: tag })
+          }
         }
       }
 
-      setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal,
-        pointsEarned: awardResult.pointsEarned, bonuses: awardResult.bonuses || [],
-        redeemType })
+      // แลกแต้ม: หัก 20 แต้มผ่าน ledger + บันทึกประวัติการแลก (ทำทันทีไม่รอจ่าย)
+      if (redeemType) {
+        const r = await db.spendPoints(customerId, REDEEM_POINTS_COST,
+          { orderId: order.id, note: `แลก ${redeemType}` })
+        if (!r.ok) {
+          alert(`⚠️ บันทึกออเดอร์แล้ว แต่หักแต้มไม่สำเร็จ: ${r.error}\nกรุณาเช็ค RLS ของ loyalty_ledger`)
+        }
+        const redeemedFormulaName = redeemType === 'perfume_2ml'
+          ? formulas.find(f => f.id === parseInt(redeemFormulaId))?.name : null
+        await supabase.from('loyalty_redemptions').insert({
+          customer_id: customerId,
+          reward_type: redeemType,
+          reward_detail: redeemedFormulaName,
+          points_used: REDEEM_POINTS_COST,
+          order_id: order.id,
+        })
+      }
+
+      // Welcome Offer: mark ว่าใช้แล้ว (กันใช้ซ้ำ) — เฉพาะเมื่อกดใช้จริงและลูกค้ายังไม่เคยใช้
+      if (welcomeDiscount > 0) {
+        await supabase.from('customers')
+          .update({ welcome_used: true })
+          .eq('id', customerId)
+          .select('id')
+      }
+
+      setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal, pointsEarned,
+        redeemType, welcomeDiscount, birthdayBonus: (isExternal && birthdayEligible) ? BIRTHDAY_BONUS_POINTS : 0 })
       onOrderSaved?.()
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
@@ -388,7 +350,34 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         <textarea value={customerAddress} onChange={e => setCustomerAddress(e.target.value)}
           placeholder="ที่อยู่จัดส่ง (ถ้ามี)" rows={2}
           style={{ ...inputStyle, marginTop:8, resize:'vertical', fontFamily:'Inter,sans-serif' }}/>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+          <span style={{ fontSize:12, color:S.textMid, whiteSpace:'nowrap' }}>🎂 วันเกิด</span>
+          <input type="date" value={customerBirth || ''}
+            onChange={e => setCustomerBirth(e.target.value)}
+            style={{ ...inputStyle, flex:1 }}/>
+        </div>
+        {birthdayEligible && (
+          <div style={{ fontSize:12, color:S.gold, marginTop:6, fontWeight:600 }}>
+            🎉 เดือนนี้วันเกิดลูกค้า — จะได้โบนัส +{BIRTHDAY_BONUS_POINTS} แต้ม (เฉพาะช่องทางที่ให้แต้ม)
+          </div>
+        )}
       </div>
+
+      {/* Welcome Offer — ลูกค้าใหม่/ยังไม่เคยใช้ ลด 100 (กดเลือกเอง) */}
+      {welcomeEligible && (
+        <div style={{ marginBottom:14, padding:'10px 12px',
+          background: useWelcome ? S.goldLt : S.white,
+          borderRadius:8, border:`1px solid ${useWelcome ? S.gold : S.border}` }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+            <input type="checkbox" checked={useWelcome}
+              onChange={e => setUseWelcome(e.target.checked)}
+              style={{ width:16, height:16, cursor:'pointer' }}/>
+            <span style={{ fontSize:12.5, fontWeight:700, color: useWelcome ? S.gold : S.textMid }}>
+              🎁 Welcome Offer — ลูกค้าใหม่ลด ฿{WELCOME_DISCOUNT} (ใช้ได้ครั้งเดียว)
+            </span>
+          </label>
+        </div>
+      )}
 
       {/* แลกรางวัล — โผล่เมื่อลูกค้าเดิมมีแต้มครบ 20 */}
       {canRedeem && (
@@ -399,38 +388,31 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
           </div>
           <div style={{ display:'flex', gap:6, marginBottom: redeemType ? 8 : 0 }}>
             {[
-              { v:'discount_100',  label:'ส่วนลด ฿100', cost:REWARDS.discount_100.cost },
-              { v:'perfume_5ml',   label:'น้ำหอม 5ml',   cost:REWARDS.perfume_5ml.cost },
-              { v:'discovery_set', label:'Discovery Set', cost:REWARDS.discovery_set.cost },
-            ].map(opt => {
-              const affordable = customerPoints >= opt.cost
-              const selected = redeemType === opt.v
-              return (
+              { v:'discount_100',  label:'ส่วนลด ฿100' },
+              { v:'perfume_2ml',   label:'น้ำหอม 2ml' },
+              { v:'free_shipping', label:'ส่งฟรี' },
+            ].map(opt => (
               <button key={opt.v}
-                disabled={!affordable && !selected}
-                onClick={() => setRedeemType(selected ? null : opt.v)}
-                style={{ flex:1, padding:'8px 0', borderRadius:8,
-                  cursor: (!affordable && !selected) ? 'not-allowed' : 'pointer',
-                  fontSize:11, fontWeight:600, lineHeight:1.3, opacity: (!affordable && !selected) ? .45 : 1,
-                  border:`1.5px solid ${selected ? S.gold : S.border}`,
-                  background: selected ? S.gold : S.white,
-                  color: selected ? '#fff' : S.textMid }}>
+                onClick={() => setRedeemType(redeemType === opt.v ? null : opt.v)}
+                style={{ flex:1, padding:'8px 0', borderRadius:8, cursor:'pointer',
+                  fontSize:11.5, fontWeight:600,
+                  border:`1.5px solid ${redeemType === opt.v ? S.gold : S.border}`,
+                  background: redeemType === opt.v ? S.gold : S.white,
+                  color: redeemType === opt.v ? '#fff' : S.textMid }}>
                 {opt.label}
-                <div style={{ fontSize:9, opacity:.8, marginTop:2 }}>{opt.cost} แต้ม</div>
               </button>
-              )
-            })}
+            ))}
           </div>
-          {redeemType === 'perfume_5ml' && (
+          {redeemType === 'perfume_2ml' && (
             <select value={redeemFormulaId} onChange={e => setRedeemFormulaId(e.target.value)}
               style={{ ...inputStyle, fontSize:12 }}>
-              <option value="">-- เลือกกลิ่นที่จะแถม 5ml --</option>
+              <option value="">-- เลือกกลิ่นที่จะแถม 2ml --</option>
               {formulas.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           )}
           {redeemType && (
             <div style={{ fontSize:10.5, color:S.textMid, marginTop:6 }}>
-              จะหัก {redeemCost} แต้มตอนบันทึกออเดอร์ (เหลือ {customerPoints - redeemCost} แต้ม)
+              จะหัก {REDEEM_POINTS_COST} แต้มตอนบันทึกออเดอร์ (เหลือ {customerPoints - REDEEM_POINTS_COST} แต้ม)
             </div>
           )}
         </div>
@@ -622,6 +604,12 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
             <span>ส่วนลดแลกแต้ม</span><span>-฿{redeemDiscount.toLocaleString()}</span>
           </div>
         )}
+        {welcomeDiscount > 0 && (
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
+            color:S.green, marginBottom:4 }}>
+            <span>🎁 Welcome Offer</span><span>-฿{welcomeDiscount.toLocaleString()}</span>
+          </div>
+        )}
         {redeemType === 'perfume_2ml' && redeemFormulaId && (
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
             color:S.green, marginBottom:4 }}>
@@ -691,13 +679,6 @@ function ExternalSaleResult({ order, formulas, onNewOrder, onViewHistory }) {
       {order.pointsEarned > 0 && (
         <div style={{ fontSize:12.5, color:S.gold, marginTop:8, fontWeight:600 }}>
           🏆 ลูกค้าได้รับ {order.pointsEarned} แต้ม
-          {order.bonuses && order.bonuses.length > 0 && (
-            <div style={{ fontSize:11, color:S.textMid, fontWeight:400, marginTop:3 }}>
-              {order.bonuses.map((b, i) => (
-                <div key={i}>✦ โบนัส +{b.points} — {b.detail}</div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -1122,14 +1103,16 @@ function CustomerList({ customers, orders, onUpdated }) {
           reason: pointsReason.trim(),
         })
         if (auditErr) throw new Error('บันทึก audit log ไม่สำเร็จ: ' + auditErr.message)
+        // ปรับส่วนต่างผ่าน ledger (source of truth) — syncPointsColumn จะอัปเดต loyalty_points ให้เอง
+        const adj = await db.adjustPointsManual(editing.id, newPoints - originalPoints, pointsReason.trim())
+        if (!adj.ok) throw new Error('ปรับแต้มไม่สำเร็จ: ' + adj.error)
       }
       const { error, data } = await supabase.from('customers')
         .update({
           name: editing.name?.trim() || null,
           contact: editing.contact?.trim() || null,
           address: editing.address?.trim() || null,
-          birth_month: editing.birth_month || null,
-          loyalty_points: newPoints,
+          birth_date: editing.birth_date || null,
         })
         .eq('id', editing.id)
         .select('id')
@@ -1210,16 +1193,10 @@ function CustomerList({ customers, orders, onUpdated }) {
             <textarea value={editing.address || ''} onChange={e => setEditing({ ...editing, address:e.target.value })}
               rows={2} style={{ ...inputStyle, marginTop:4, marginBottom:10, resize:'vertical' }}/>
 
-            <label style={{ fontSize:11, color:S.textLt }}>🎂 เดือนเกิด (สำหรับโบนัสวันเกิด)</label>
-            <select value={editing.birth_month || ''}
-              onChange={e => setEditing({ ...editing, birth_month: e.target.value ? parseInt(e.target.value) : null })}
-              style={{ ...inputStyle, marginTop:4, marginBottom:10 }}>
-              <option value="">-- ไม่ระบุ --</option>
-              {['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
-                'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'].map((m, i) => (
-                <option key={i+1} value={i+1}>{m}</option>
-              ))}
-            </select>
+            <label style={{ fontSize:11, color:S.textLt }}>🎂 วันเกิด</label>
+            <input type="date" value={editing.birth_date || ''}
+              onChange={e => setEditing({ ...editing, birth_date:e.target.value })}
+              style={{ ...inputStyle, marginTop:4, marginBottom:10 }}/>
 
             <label style={{ fontSize:11, color:S.textLt }}>แต้มสะสม (แก้มือ)</label>
             <input type="number" value={editing.loyalty_points ?? 0}
@@ -1280,27 +1257,29 @@ export default function PageOrderBilling() {
       const result = await db.deductStockForOrder(orderId)
       if (result.success) {
         const order = orders.find(o => o.id === orderId)
-        // ✅ อัปเดต status เป็น paid ก่อน — helper นับ bonus จาก order ที่ paid แล้ว
-        await supabase.from('orders').update({ status: 'paid' }).eq('id', orderId)
+        const points = Math.floor((order?.total_amount || 0) / 100)
+        if (order?.customer_id && points > 0) {
+          const r = await db.earnPoints(order.customer_id, points,
+            { kind: 'earn', orderId, note: `ออเดอร์ #${orderId}` })
+          if (!r.ok) alert(`มาร์คจ่ายแล้ว แต่บวกแต้มไม่สำเร็จ: ${r.error}`)
 
-        let awardMsg = ''
-        if (order?.customer_id) {
-          try {
-            const award = await db.awardPointsForOrder({
-              orderId, customerId: order.customer_id,
-              amount: order.total_amount || 0, channel: order.channel,
-            })
-            const bonusPts = (award.bonuses || []).reduce((s, b) => s + b.points, 0)
-            awardMsg = award.pointsEarned > 0
-              ? ` · ให้ ${award.pointsEarned} แต้ม${bonusPts > 0 ? ` (รวมโบนัส ${bonusPts})` : ''}`
-              : ''
-          } catch (e) {
-            alert(`มาร์คจ่ายแล้ว แต่ให้แต้มไม่สำเร็จ: ${e.message}`)
+          // โบนัสวันเกิด — เช็คเดือนเกิดตอนจ่าย (กันซ้ำต่อเดือน)
+          const { data: cust } = await supabase.from('customers')
+            .select('birth_date').eq('id', order.customer_id).single()
+          if (cust && isBirthdayMonth(cust.birth_date)) {
+            const tag = `birthday:${order.customer_id}:${new Date().getFullYear()}-${new Date().getMonth() + 1}`
+            const { data: already } = await supabase.from('loyalty_ledger')
+              .select('id').eq('kind', 'birthday').eq('note', tag).maybeSingle()
+            if (!already) {
+              await db.earnPoints(order.customer_id, BIRTHDAY_BONUS_POINTS,
+                { kind: 'birthday', orderId, note: tag })
+            }
           }
         }
+        await supabase.from('orders').update({ points_earned: points }).eq('id', orderId)
         // ✅ โหลด orders + customers ใหม่ทั้งชุด แทนการ patch state เอง
         await loadAll()
-        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch${awardMsg}`)
+        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch${points > 0 ? ` · ให้ ${points} แต้ม` : ''}`)
       } else {
         alert(`✗ ตัด stock ล้มเหลว:\n${result.error}`)
       }
