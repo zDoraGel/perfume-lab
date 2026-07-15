@@ -433,38 +433,6 @@ export const db = {
     return { data, deduction, error: null }
   },
 
-  // ── Opening Balance: บันทึกหัวเชื้อที่ทำไว้ก่อนมีระบบ — ไม่หักวัตถุดิบ ─────────────
-  // ใช้กับหัวเชื้อที่มีอยู่จริงในตู้แล้ว (material ถูกใช้ไปในโลกจริงก่อนหน้านี้)
-  // ถ้าหัก material ซ้ำจะทำให้สต็อกวัตถุดิบติดลบผิดความจริง
-  async createOpeningConcentrate(formulaId, { concentration, concentrate_ml,
-    concentrate_made_at, notes }) {
-    const ml = parseFloat(concentrate_ml)
-    if (!ml || ml <= 0) {
-      return { data: null, error: { message: 'ปริมาณหัวเชื้อต้องมากกว่า 0' } }
-    }
-    const madeAt = concentrate_made_at || new Date().toISOString().split('T')[0]
-    const { data, error } = await supabase
-      .from('production_batches')
-      .insert({
-        formula_id:   formulaId,
-        concentration: concentration || 'SIGNATURE',
-        bottle_ml:    Math.round(ml),
-        qty_produced: 1,
-        qty_sold:     0,
-        produced_at:  madeAt,
-        concentrate_made_at: madeAt,
-        concentrate_ml: ml,
-        notes: notes ? `[ยกยอดมา] ${notes}` : '[ยกยอดมา] หัวเชื้อที่ทำไว้ก่อนมีระบบ',
-        stage: 'concentrate',
-      })
-      .select().single()
-    if (error) {
-      console.error('createOpeningConcentrate error:', error)
-      return { data: null, error }
-    }
-    return { data, error: null }
-  },
-
   // ── ขั้นตอนที่ 2: ผสมแอลกอฮอล์ + บรรจุขวด — ทำให้ batch จาก stage 'concentrate' เป็น 'bottled' ─────
   async completeBottling(batchId, { concentration, bottle_ml, qty_produced, concentrate_used_ml,
     alcohol_mix, alcohol_ml_per_bottle, produced_at, sell_price, notes }) {
@@ -475,11 +443,6 @@ export const db = {
 
     const totalHave  = original.concentrate_ml || 0
     const usedMl      = concentrate_used_ml != null ? parseFloat(concentrate_used_ml) : totalHave
-    // ✅ กันหัวเชื้อติดลบ — ใช้เกินที่มีไม่ได้ (เผื่อเรียกจากที่อื่นที่ไม่ผ่าน guard ของ AlcoholMixForm)
-    if (usedMl > totalHave + 0.05) {
-      return { data: null,
-        error: { message: `ใช้หัวเชื้อ ${usedMl}ml เกินที่มีอยู่ (${totalHave}ml)` } }
-    }
     const remainingMl = Math.round((totalHave - usedMl) * 100) / 100
     const concentratePerBottle = qty_produced ? usedMl / parseInt(qty_produced) : null
 
@@ -1006,5 +969,133 @@ export const db = {
       orders:    { revenue: ordersRevenue, expenses: ordersCogs, profit: ordersProfit,
                    channels: ordersData.channels, label: 'Orders (เดือนนี้ · แยกตามช่องทาง · หักต้นทุนวัตถุดิบแล้ว)' },
     }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // LOYALTY — คิด + ให้แต้มสำหรับออเดอร์ (จุดเดียว ใช้ทั้ง saveOrder และ markPaid)
+  // ═══════════════════════════════════════════════════════════════════
+  // เรียกตอน "จ่ายจริง" เท่านั้น. คำนวณ: base points + เก็บเศษ + bonus (ซื้อซ้ำ/ครบ3/วันเกิด)
+  // แล้วอัปเดต customers + เขียน ledger log + อัปเดต orders.points_earned
+  //
+  // params: { orderId, customerId, amount, channel }
+  //   amount  = ยอดสุทธิที่จ่ายจริง (หลังหักส่วนลด/แลกแต้ม)
+  //   channel = ช่องทาง (ใช้เช็คว่าได้แต้มไหม)
+  // return: { pointsEarned, bonuses, newBalance, remainder } | { pointsEarned: 0, ... }
+  async awardPointsForOrder({ orderId, customerId, amount, channel }) {
+    const ELIGIBLE = ['app', 'facebook', 'instagram', 'line']
+    const PER_BAHT = 50
+    const EXPIRY_MONTHS = 12
+    const B_REPEAT_DAYS = 30, B_REPEAT_PTS = 3
+    const B_LOYAL_ORDERS = 3,  B_LOYAL_PTS = 5
+    const B_BIRTHDAY_PTS = 5
+
+    // ไม่เข้าเงื่อนไขช่องทาง → ไม่ให้แต้ม (แต่ไม่ error)
+    if (!ELIGIBLE.includes(channel)) {
+      return { pointsEarned: 0, bonuses: [], newBalance: null, remainder: null, skipped: true }
+    }
+
+    // 1) ดึงข้อมูลลูกค้าสด
+    const { data: cust, error: custErr } = await supabase
+      .from('customers')
+      .select('id, loyalty_points, point_remainder, birth_month, birthday_bonus_year')
+      .eq('id', customerId)
+      .single()
+    if (custErr) throw custErr
+
+    // 2) ดึงประวัติ order ที่จ่ายแล้ว (paid) ของลูกค้า — ไม่รวมออเดอร์นี้
+    const { data: paidOrders, error: ordErr } = await supabase
+      .from('orders')
+      .select('id, created_at, status')
+      .eq('customer_id', customerId)
+      .eq('status', 'paid')
+      .neq('id', orderId)
+      .order('created_at', { ascending: true })
+    if (ordErr) throw ordErr
+    const prevPaid = paidOrders || []
+
+    // 3) base points + เก็บเศษ
+    const prevRemainder = cust.point_remainder || 0
+    const pool = prevRemainder + Math.round(amount || 0)
+    const basePoints = Math.floor(pool / PER_BAHT)
+    const newRemainder = pool - basePoints * PER_BAHT
+
+    // 4) bonuses
+    const now = new Date()
+    const bonuses = []
+    // 4.1 ซื้อซ้ำเร็ว — ก่อนหน้ามี paid 1 ครั้ง + ห่างไม่เกิน 30 วัน (ออเดอร์นี้ = ครั้งที่ 2)
+    if (prevPaid.length === 1) {
+      const days = (now - new Date(prevPaid[0].created_at)) / 86400000
+      if (days <= B_REPEAT_DAYS) bonuses.push({ type: 'bonus_repeat', points: B_REPEAT_PTS, detail: `ซื้อซ้ำใน ${B_REPEAT_DAYS} วัน` })
+    }
+    // 4.2 ลูกค้าประจำ — ออเดอร์นี้ทำให้ครบ 3 พอดี (ก่อนหน้ามี 2)
+    if (prevPaid.length === B_LOYAL_ORDERS - 1) {
+      bonuses.push({ type: 'bonus_loyal', points: B_LOYAL_PTS, detail: `ครบ ${B_LOYAL_ORDERS} ออเดอร์` })
+    }
+    // 4.3 วันเกิด — ตรงเดือน + ยังไม่รับปีนี้
+    let birthdayClaimed = false
+    if (cust.birth_month && cust.birth_month === (now.getMonth() + 1) && cust.birthday_bonus_year !== now.getFullYear()) {
+      bonuses.push({ type: 'bonus_birthday', points: B_BIRTHDAY_PTS, detail: `เดือนเกิด ${now.getFullYear()}` })
+      birthdayClaimed = true
+    }
+
+    const bonusTotal = bonuses.reduce((s, b) => s + b.points, 0)
+    const totalEarned = basePoints + bonusTotal
+    const newBalance = (cust.loyalty_points || 0) + totalEarned
+
+    // 5) อัปเดต customers (แต้ม + เศษ + วันเกิดปีนี้ + เวลาแต้มขยับ)
+    const updatePayload = {
+      loyalty_points: newBalance,
+      point_remainder: newRemainder,
+      points_updated_at: now.toISOString(),
+    }
+    if (birthdayClaimed) updatePayload.birthday_bonus_year = now.getFullYear()
+
+    const { data: upd, error: updErr } = await supabase
+      .from('customers').update(updatePayload).eq('id', customerId).select('id')
+    if (updErr) throw updErr
+    if (!upd || upd.length === 0) {
+      // RLS บล็อกเงียบ
+      throw new Error('อัปเดตแต้มไม่สำเร็จ — ติด RLS policy ของตาราง customers')
+    }
+
+    // 6) เขียน ledger (base + แต่ละ bonus แยกบรรทัด) — best effort ไม่ให้ล้มทั้งงาน
+    let running = cust.loyalty_points || 0
+    const ledgerRows = []
+    if (basePoints > 0) {
+      running += basePoints
+      ledgerRows.push({ customer_id: customerId, order_id: orderId, delta: basePoints,
+        reason: 'earn', detail: `${amount} บาท`, balance_after: running })
+    }
+    for (const b of bonuses) {
+      running += b.points
+      ledgerRows.push({ customer_id: customerId, order_id: orderId, delta: b.points,
+        reason: b.type, detail: b.detail, balance_after: running })
+    }
+    if (ledgerRows.length > 0) {
+      await supabase.from('loyalty_points_ledger').insert(ledgerRows)
+    }
+
+    // 7) อัปเดต orders.points_earned (base + bonus)
+    await supabase.from('orders').update({ points_earned: totalEarned }).eq('id', orderId)
+
+    return { pointsEarned: totalEarned, basePoints, bonuses, newBalance, remainder: newRemainder }
+  },
+
+  // ── หักแต้มตอนแลกรางวัล — เขียน ledger ด้วย ──
+  async redeemPoints({ customerId, orderId, cost, rewardType, detail }) {
+    const { data: cust, error } = await supabase
+      .from('customers').select('loyalty_points').eq('id', customerId).single()
+    if (error) throw error
+    const newBalance = Math.max(0, (cust.loyalty_points || 0) - cost)
+    const { data: upd, error: updErr } = await supabase
+      .from('customers').update({ loyalty_points: newBalance, points_updated_at: new Date().toISOString() })
+      .eq('id', customerId).select('id')
+    if (updErr) throw updErr
+    if (!upd || upd.length === 0) throw new Error('หักแต้มไม่สำเร็จ — ติด RLS policy')
+    await supabase.from('loyalty_points_ledger').insert({
+      customer_id: customerId, order_id: orderId, delta: -cost,
+      reason: 'redeem', detail: detail || rewardType, balance_after: newBalance,
+    })
+    return { newBalance }
   },
 }

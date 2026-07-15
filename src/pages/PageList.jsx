@@ -1,8 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
 import { S } from '../constants/theme'
 import { Card, Btn, StatusBadge, FamilyBadge } from '../components/ui'
+
+// ── Lot status config — ใช้ร่วมกับหน้า Lot Planning ──────────────────────────
+const LOT_CONFIG = {
+  active:  { label: 'กำลังขาย', color: '#3b6d11', bg: '#eaf3de', bd: '#c9dba8' },
+  planned: { label: 'รอคิว',    color: '#8a6f4e', bg: '#f3ecdc', bd: '#e0cda0' },
+  special: { label: 'พิเศษ',    color: '#7a3a6a', bg: '#f5e9f2', bd: '#dbb8d0' },
+  retired: { label: 'เลิกขาย',  color: '#888',    bg: '#f0eee9', bd: '#d8d4cc' },
+}
+const LOT_ORDER = ['active', 'planned', 'special', 'retired']
 
 export default function PageList({ onSelect, onCreate }) {
   const [formulas,    setFormulas]    = useState([])
@@ -10,6 +19,9 @@ export default function PageList({ onSelect, onCreate }) {
   const [allVersions, setAllVersions] = useState([])
   const [loading,     setLoading]     = useState(true)
   const [notes,       setNotes]       = useState([])
+  const [search,      setSearch]      = useState('')
+  // default: ซ่อน retired ไว้ (สูตรที่เลิกทำแล้วไม่ต้องมารกตา)
+  const [lotFilter,   setLotFilter]   = useState('all')
 
   useEffect(() => {
     Promise.all([
@@ -35,6 +47,34 @@ export default function PageList({ onSelect, onCreate }) {
   const lowStock      = materials.filter(m => (m.stock || 0) < 10)
   const latestVersion = allVersions[0]
   const latestFormula = latestVersion ? formulas.find(f => f.id === latestVersion.formula_id) : null
+
+  // ── นับจำนวนสูตรในแต่ละกลุ่ม (สำหรับแสดงบน chip) ──
+  const lotCounts = useMemo(() => {
+    const c = { all: formulas.length, active: 0, planned: 0, special: 0, retired: 0 }
+    formulas.forEach(f => {
+      const st = f.lot_status || 'planned'
+      if (c[st] != null) c[st]++
+    })
+    return c
+  }, [formulas])
+
+  // ── กรอง: ค้นหา + lot status ──
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return formulas.filter(f => {
+      const st = f.lot_status || 'planned'
+      // ซ่อน retired เว้นแต่เลือกดูโดยเฉพาะ หรือกำลังค้นหา
+      if (lotFilter === 'all') {
+        if (st === 'retired' && !q) return false
+      } else if (st !== lotFilter) {
+        return false
+      }
+      if (!q) return true
+      return [f.name, f.vibe, f.name_meaning]
+        .filter(Boolean)
+        .some(v => String(v).toLowerCase().includes(q))
+    })
+  }, [formulas, search, lotFilter])
 
   return (
     <div>
@@ -148,9 +188,62 @@ export default function PageList({ onSelect, onCreate }) {
             </div>
           )}
 
-          {/* Formula list */}
-          <div style={{ fontSize:11, color:S.textLt, letterSpacing:1,
-            textTransform:'uppercase', marginBottom:10 }}>All Formulas</div>
+          {/* Formula list — header + search + filter */}
+          <div style={{ display:'flex', justifyContent:'space-between',
+            alignItems:'baseline', marginBottom:10 }}>
+            <div style={{ fontSize:11, color:S.textLt, letterSpacing:1,
+              textTransform:'uppercase' }}>All Formulas</div>
+            <div style={{ fontSize:11, color:S.textLt }}>
+              {filtered.length} / {formulas.length} สูตร
+            </div>
+          </div>
+
+          {/* Search */}
+          <div style={{ position:'relative', marginBottom:10 }}>
+            <span style={{ position:'absolute', left:12, top:'50%',
+              transform:'translateY(-50%)', fontSize:13, color:S.textLt,
+              pointerEvents:'none' }}>🔍</span>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="ค้นหาชื่อ / vibe / ความหมาย…"
+              style={{ width:'100%', padding:'10px 34px 10px 34px', borderRadius:10,
+                border:`1px solid ${S.border}`, fontSize:13, color:S.ink,
+                fontFamily:'Inter,sans-serif', background:S.white,
+                outline:'none', boxSizing:'border-box' }}/>
+            {search && (
+              <button onClick={() => setSearch('')}
+                title="ล้างการค้นหา"
+                style={{ position:'absolute', right:8, top:'50%',
+                  transform:'translateY(-50%)', width:22, height:22,
+                  borderRadius:'50%', border:'none', cursor:'pointer',
+                  background:S.bg, color:S.textMid, fontSize:12, lineHeight:1,
+                  display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+            )}
+          </div>
+
+          {/* Filter chips */}
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 }}>
+            {['all', ...LOT_ORDER].map(key => {
+              const isAll  = key === 'all'
+              const cfg    = isAll ? null : LOT_CONFIG[key]
+              const active = lotFilter === key
+              const count  = lotCounts[key] ?? 0
+              // ซ่อน chip ที่ไม่มีสูตรเลย (ยกเว้น 'ทั้งหมด')
+              if (!isAll && count === 0) return null
+              return (
+                <button key={key} onClick={() => setLotFilter(key)}
+                  style={{ padding:'5px 12px', borderRadius:16, cursor:'pointer',
+                    fontSize:11, fontFamily:'Inter,sans-serif', fontWeight:600,
+                    border:`1px solid ${active ? (cfg?.color || S.gold) : (cfg?.bd || S.border)}`,
+                    background: active ? (cfg?.bg || S.goldLt) : 'transparent',
+                    color: active ? (cfg?.color || S.gold) : S.textMid }}>
+                  {isAll ? 'ทั้งหมด' : cfg.label}
+                  <span style={{ opacity:.6, marginLeft:4 }}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
 
           {formulas.length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px 0', color:S.textLt }}>
@@ -158,19 +251,41 @@ export default function PageList({ onSelect, onCreate }) {
                 fontStyle:'italic', marginBottom:6 }}>ยังไม่มีสูตรน้ำหอม</div>
               <div style={{ fontSize:13 }}>กด New Formula เพื่อเริ่มบันทึก</div>
             </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 0', color:S.textLt }}>
+              <div style={{ fontSize:16, fontFamily:'Cormorant Garamond,serif',
+                fontStyle:'italic', marginBottom:6 }}>ไม่พบสูตรที่ค้นหา</div>
+              <div style={{ fontSize:12 }}>
+                {search ? `ไม่มีสูตรที่ตรงกับ "${search}"` : 'ไม่มีสูตรในกลุ่มนี้'}
+              </div>
+            </div>
           ) : (
-            formulas.map(f => {
+            filtered.map(f => {
               const fVers      = allVersions.filter(v => v.formula_id === f.id)
               const latest     = fVers[0]
               const bestRating = fVers.filter(v => v.rating).sort((a,b) => b.rating - a.rating)[0]
+              const lotSt      = f.lot_status || 'planned'
+              const lotCfg     = LOT_CONFIG[lotSt]
               return (
-                <Card key={f.id} onClick={() => onSelect(f)} style={{ cursor:'pointer' }}>
+                <Card key={f.id} onClick={() => onSelect(f)} style={{ cursor:'pointer',
+                  opacity: lotSt === 'retired' ? .65 : 1 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                    <div style={{ flex:1, paddingRight:10 }}>
-                      <div style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
-                        fontStyle:'italic', color:S.ink, marginBottom:2 }}>{f.name}</div>
+                    <div style={{ flex:1, paddingRight:10, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                        <span style={{ fontFamily:'Cormorant Garamond,serif', fontSize:20,
+                          fontStyle:'italic', color:S.ink }}>{f.name}</span>
+                        {/* ป้ายสถานะ lot */}
+                        <span style={{ fontSize:9, padding:'2px 7px', borderRadius:10,
+                          background:lotCfg.bg, color:lotCfg.color,
+                          border:`1px solid ${lotCfg.bd}`, fontWeight:600,
+                          fontFamily:'Inter,sans-serif', whiteSpace:'nowrap' }}>
+                          {lotCfg.label}
+                          {lotSt === 'active' && f.lot_number ? ` · Lot ${f.lot_number}` : ''}
+                        </span>
+                      </div>
                       {f.name_meaning && (
-                        <div style={{ fontSize:11, color:S.gold, fontStyle:'italic', marginBottom:4 }}>
+                        <div style={{ fontSize:11, color:S.gold, fontStyle:'italic',
+                          marginTop:3, marginBottom:4 }}>
                           ✦ {f.name_meaning}
                         </div>
                       )}
