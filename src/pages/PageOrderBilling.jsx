@@ -17,15 +17,23 @@ const inputStyle = {
   fontFamily:'Inter,sans-serif',
 }
 
-// แต้มสะสม: ทุก 100 บาท = 1 แต้ม — ให้เฉพาะช่องทาง แอป / Facebook / Instagram
-const POINTS_PER_BAHT = 100
+// แต้มสะสม: ทุก 50 บาท = 1 แต้ม — ไม่ปัดเศษทิ้ง เศษสะสมไปรวมยอดซื้อครั้งถัดไป — ให้เฉพาะช่องทาง แอป / Facebook / Instagram
+const POINTS_PER_BAHT = 50
 const POINTS_ELIGIBLE_CHANNELS = ['app', 'facebook', 'instagram', 'line']
 // ช่องทางที่ยังต้องสร้าง QR ให้ลูกค้าจ่าย (FB/IG/LINE = คุยขาย แต่ยังไม่จ่าย)
 // ส่วน TikTok/Shopee มีระบบจ่ายเงินในตัวแพลตฟอร์มแล้ว ไม่ต้องมี QR
 const QR_CHANNELS = ['app', 'facebook', 'instagram', 'line']
-function calcPoints(amount, channel) {
+// พรีวิวแต้มที่จะได้ — รวมเศษยอดซื้อเดิมของลูกค้าเข้าไปด้วยก่อนคำนวณ (ตัวเลขจริงคำนวณอีกทีตอนบันทึกผ่าน db.earnPointsFromPurchase)
+function calcPoints(amount, channel, remainder = 0) {
   if (!POINTS_ELIGIBLE_CHANNELS.includes(channel)) return 0
-  return Math.floor((amount || 0) / POINTS_PER_BAHT)
+  return Math.floor(((amount || 0) + (remainder || 0)) / POINTS_PER_BAHT)
+}
+// พรีวิวเศษที่จะเหลือหลังคำนวณแต้มรอบนี้
+function calcRemainder(amount, channel, remainder = 0) {
+  if (!POINTS_ELIGIBLE_CHANNELS.includes(channel)) return remainder || 0
+  const total = (amount || 0) + (remainder || 0)
+  const points = Math.floor(total / POINTS_PER_BAHT)
+  return Math.round((total - points * POINTS_PER_BAHT) * 100) / 100
 }
 
 const REDEEM_POINTS_COST = 20
@@ -147,7 +155,9 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
       }
 
       const status = isExternal ? 'paid' : 'pending'
-      const pointsEarned = isExternal ? calcPoints(total, channel) : 0
+      // ค่าจริงจะถูกคำนวณหลัง insert order (รวมเศษสะสมเดิม) แล้วอัปเดตกลับเข้า order อีกที
+      let pointsEarned = 0
+      let remainderAfter = customerRow?.point_remainder ?? 0
 
       const { data: order, error: orderErr } = await supabase
         .from('orders')
@@ -207,10 +217,16 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
       // การได้แต้มจากออเดอร์ + โบนัสวันเกิด ให้เฉพาะช่องทางนอกแอป (จ่ายแล้วจริง)
       // ช่องทางในแอปจะได้แต้มตอนยืนยันจ่าย (จัดการที่หน้ายืนยัน)
       if (isExternal) {
-        if (pointsEarned > 0) {
-          const r = await db.earnPoints(customerId, pointsEarned,
-            { kind: 'earn', orderId: order.id, note: `ออเดอร์ #${order.id}` })
-          if (!r.ok) alert(`บันทึกออเดอร์แล้ว แต่ให้แต้มไม่สำเร็จ: ${r.error}\nกรุณาเช็ค RLS ของ loyalty_ledger`)
+        if (POINTS_ELIGIBLE_CHANNELS.includes(channel)) {
+          const r = await db.earnPointsFromPurchase(customerId, total,
+            { orderId: order.id, note: `ออเดอร์ #${order.id}` })
+          if (!r.ok) {
+            alert(`บันทึกออเดอร์แล้ว แต่ให้แต้มไม่สำเร็จ: ${r.error}\nกรุณาเช็ค RLS ของ loyalty_ledger`)
+          } else {
+            pointsEarned = r.points
+            remainderAfter = r.remainder
+            await supabase.from('orders').update({ points_earned: pointsEarned }).eq('id', order.id)
+          }
         }
         // โบนัสวันเกิด — ให้ครั้งเดียวต่อเดือนเกิด (กันซ้ำด้วย note ที่ผูกปี+เดือน)
         if (birthdayEligible) {
@@ -251,7 +267,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
       }
 
       setSavedOrder({ ...order, customer_name: customerName, items: itemRows, isExternal, pointsEarned,
-        redeemType, welcomeDiscount, birthdayBonus: (isExternal && birthdayEligible) ? BIRTHDAY_BONUS_POINTS : 0 })
+        remainderAfter, redeemType, welcomeDiscount, birthdayBonus: (isExternal && birthdayEligible) ? BIRTHDAY_BONUS_POINTS : 0 })
       onOrderSaved?.()
     } catch (e) {
       alert('บันทึกไม่สำเร็จ: ' + e.message)
@@ -622,14 +638,19 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
           <span style={{ fontSize:20, fontWeight:700, color:S.gold,
             fontFamily:'Cormorant Garamond,serif' }}>฿{total.toLocaleString()}</span>
         </div>
-        {total > 0 && calcPoints(total, channel) > 0 && (
+        {total > 0 && calcPoints(total, channel, selectedCustomer?.point_remainder) > 0 && (
           <div style={{ fontSize:11, color:S.gold, textAlign:'right', marginTop:4 }}>
-            🏆 ลูกค้าจะได้ {calcPoints(total, channel)} แต้ม
+            🏆 ลูกค้าจะได้ {calcPoints(total, channel, selectedCustomer?.point_remainder)} แต้ม
+            {calcRemainder(total, channel, selectedCustomer?.point_remainder) > 0 && (
+              <> · เก็บเศษ ฿{calcRemainder(total, channel, selectedCustomer?.point_remainder).toLocaleString()} ไว้รวมครั้งหน้า</>
+            )}
           </div>
         )}
-        {total > 0 && calcPoints(total, channel) === 0 && (
+        {total > 0 && calcPoints(total, channel, selectedCustomer?.point_remainder) === 0 && (
           <div style={{ fontSize:11, color:S.textLt, textAlign:'right', marginTop:4 }}>
-            ช่องทางนี้ไม่ให้แต้มสะสม (บันทึกยอดขายเฉยๆ)
+            {POINTS_ELIGIBLE_CHANNELS.includes(channel)
+              ? `ยังไม่ครบ 50 บาท (เก็บเศษ ฿${calcRemainder(total, channel, selectedCustomer?.point_remainder).toLocaleString()} ไว้รวมครั้งหน้า)`
+              : 'ช่องทางนี้ไม่ให้แต้มสะสม (บันทึกยอดขายเฉยๆ)'}
           </div>
         )}
       </div>
@@ -679,6 +700,11 @@ function ExternalSaleResult({ order, formulas, onNewOrder, onViewHistory }) {
       {order.pointsEarned > 0 && (
         <div style={{ fontSize:12.5, color:S.gold, marginTop:8, fontWeight:600 }}>
           🏆 ลูกค้าได้รับ {order.pointsEarned} แต้ม
+        </div>
+      )}
+      {order.remainderAfter > 0 && (
+        <div style={{ fontSize:11, color:S.textLt, marginTop:4 }}>
+          เก็บเศษยอดซื้อ ฿{order.remainderAfter.toLocaleString()} ไว้รวมกับการซื้อครั้งหน้า
         </div>
       )}
 
@@ -1026,6 +1052,9 @@ function OrderHistory({ orders, customers, formulas, onMarkPaid }) {
                 {currentPoints > 0 && (
                   <span style={{ fontSize:10, color:S.gold, fontWeight:600 }}>🏆 {currentPoints} แต้ม</span>
                 )}
+                {cust?.point_remainder > 0 && (
+                  <div style={{ fontSize:9, color:S.textLt, marginTop:1 }}>เศษสะสม ฿{cust.point_remainder}</div>
+                )}
               </div>
             </div>
 
@@ -1166,6 +1195,9 @@ function CustomerList({ customers, orders, onUpdated }) {
               <div style={{ fontSize:14, fontWeight:700, color:S.gold,
                 fontFamily:'Cormorant Garamond,serif' }}>🏆 {c.loyalty_points || 0}</div>
               <div style={{ fontSize:9, color:S.textLt }}>แต้ม</div>
+              {c.point_remainder > 0 && (
+                <div style={{ fontSize:9, color:S.textLt, marginTop:2 }}>เศษสะสม ฿{c.point_remainder}</div>
+              )}
             </div>
           </div>
         ))}
@@ -1257,11 +1289,17 @@ export default function PageOrderBilling() {
       const result = await db.deductStockForOrder(orderId)
       if (result.success) {
         const order = orders.find(o => o.id === orderId)
-        const points = Math.floor((order?.total_amount || 0) / 100)
-        if (order?.customer_id && points > 0) {
-          const r = await db.earnPoints(order.customer_id, points,
-            { kind: 'earn', orderId, note: `ออเดอร์ #${orderId}` })
-          if (!r.ok) alert(`มาร์คจ่ายแล้ว แต่บวกแต้มไม่สำเร็จ: ${r.error}`)
+        let points = 0
+        let remainderAfter = 0
+        if (order?.customer_id) {
+          const r = await db.earnPointsFromPurchase(order.customer_id, order.total_amount || 0,
+            { orderId, note: `ออเดอร์ #${orderId}` })
+          if (!r.ok) {
+            alert(`มาร์คจ่ายแล้ว แต่บวกแต้มไม่สำเร็จ: ${r.error}`)
+          } else {
+            points = r.points
+            remainderAfter = r.remainder
+          }
 
           // โบนัสวันเกิด — เช็คเดือนเกิดตอนจ่าย (กันซ้ำต่อเดือน)
           const { data: cust } = await supabase.from('customers')
@@ -1279,7 +1317,9 @@ export default function PageOrderBilling() {
         await supabase.from('orders').update({ points_earned: points }).eq('id', orderId)
         // ✅ โหลด orders + customers ใหม่ทั้งชุด แทนการ patch state เอง
         await loadAll()
-        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch${points > 0 ? ` · ให้ ${points} แต้ม` : ''}`)
+        alert(`✓ ขายเสร็จ — ตัด stock ${result.deductions.length} batch`
+          + `${points > 0 ? ` · ให้ ${points} แต้ม` : ''}`
+          + `${remainderAfter > 0 ? ` · เก็บเศษ ฿${remainderAfter} ไว้รวมครั้งหน้า` : ''}`)
       } else {
         alert(`✗ ตัด stock ล้มเหลว:\n${result.error}`)
       }
