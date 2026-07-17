@@ -1011,6 +1011,42 @@ export const db = {
   // ── Loyalty ledger (แต้มหมดอายุแบบก้อน) ──────────────────────────────────────
   // ยอดคงเหลือจริงต้องอ่านจาก view customer_points_balance (นับเฉพาะก้อนที่ยังไม่หมดอายุ)
   POINTS_EXPIRY_MONTHS: 12,
+  POINTS_RATE_BAHT: 50, // ทุก 50 บาท = 1 แต้ม (ตรงตาม Rewards Program)
+
+  // คำนวณแต้มจากยอดซื้อ โดยรวมเศษยอดซื้อเก่าที่สะสมไว้ก่อน แล้วเก็บเศษใหม่กลับเข้า customers.pending_remainder
+  // ไม่มีการปัดเศษทิ้ง — เศษที่เหลือจะถูกนำไปรวมกับยอดซื้อครั้งถัดไปเสมอ
+  async earnPointsFromPurchase(customerId, purchaseAmount, { orderId = null, note = null } = {}) {
+    if (!purchaseAmount || purchaseAmount <= 0) return { ok: true, points: 0 }
+
+    const { data: cust, error: fetchErr } = await supabase
+      .from('customers')
+      .select('point_remainder')
+      .eq('id', customerId)
+      .maybeSingle()
+    if (fetchErr) return { ok: false, error: fetchErr.message }
+
+    const oldRemainder = Number(cust?.point_remainder || 0)
+    const total = oldRemainder + Number(purchaseAmount)
+    const points = Math.floor(total / this.POINTS_RATE_BAHT)
+    const newRemainder = Math.round((total - points * this.POINTS_RATE_BAHT) * 100) / 100
+
+    const { error: updateErr } = await supabase
+      .from('customers')
+      .update({ point_remainder: newRemainder })
+      .eq('id', customerId)
+    if (updateErr) return { ok: false, error: updateErr.message }
+
+    if (points > 0) {
+      const result = await this.earnPoints(customerId, points, {
+        kind: 'earn',
+        orderId,
+        note: note || `ซื้อ ${purchaseAmount} บาท (เศษเดิม ${oldRemainder} บาท → เศษคงเหลือ ${newRemainder} บาท)`,
+      })
+      if (!result.ok) return result
+    }
+
+    return { ok: true, points, remainder: newRemainder }
+  },
 
   async getPointsBalance(customerId) {
     const { data } = await supabase
