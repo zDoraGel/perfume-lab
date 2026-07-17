@@ -38,6 +38,8 @@ function calcRemainder(amount, channel, remainder = 0) {
 
 const REDEEM_POINTS_COST = 20
 const WELCOME_DISCOUNT = 100         // ลูกค้าใหม่ลด 100 (ใช้ครั้งเดียว)
+const WELCOME_MIN_PURCHASE = 450     // ต้องซื้อครบยอดนี้ถึงใช้ Welcome Gift ได้ (กันขาดทุนเวลาซื้อของชิ้นเล็ก เช่น 5ml)
+const WELCOME_VALID_DAYS = 30        // ใช้ได้ภายใน 30 วันหลังสมัคร ถ้าเกินแล้วไม่เคยใช้ก็หมดสิทธิ์
 const BIRTHDAY_BONUS_POINTS = 5      // โบนัสวันเกิด +5 แต้ม เมื่อซื้อในเดือนเกิด
 const BOTTLE_SIZES = [5, 15, 30, 50, 100]
 
@@ -47,6 +49,14 @@ function isBirthdayMonth(birthDate) {
   const bd = new Date(birthDate)
   if (isNaN(bd)) return false
   return bd.getMonth() === new Date().getMonth()
+}
+
+// เช็คว่ายังอยู่ในช่วง N วันนับจากวันที่ที่กำหนดไหม (ใช้เช็คสิทธิ์ Welcome Gift 30 วันหลังสมัคร)
+function isWithinDays(dateStr, days) {
+  if (!dateStr) return true // ไม่มีวันที่อ้างอิง (ลูกค้าใหม่ที่ยังไม่มี record) ถือว่ายังไม่หมดสิทธิ์
+  const created = new Date(dateStr)
+  if (isNaN(created)) return true
+  return (Date.now() - created.getTime()) <= days * 24 * 60 * 60 * 1000
 }
 
 const CHANNELS = [
@@ -78,7 +88,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   const [showCustList,    setShowCustList]    = useState(false)
   const [redeemType,      setRedeemType]      = useState(null) // null | 'discount_100' | 'perfume_2ml' | 'free_shipping'
   const [redeemFormulaId, setRedeemFormulaId] = useState('')
-  const [useWelcome,      setUseWelcome]      = useState(false) // ใช้ Welcome Offer กับออเดอร์นี้ไหม
+  const [useWelcome,      setUseWelcome]      = useState(false) // ใช้ Welcome Gift กับออเดอร์นี้ไหม
   const savingRef = useRef(false) // กันกดบันทึกซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
 
   function addItem() {
@@ -104,8 +114,11 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   const selectedCustomer = existingId ? customers.find(c => c.id === existingId) : null
   const customerPoints   = selectedCustomer?.loyalty_points || 0
   const canRedeem        = customerPoints >= REDEEM_POINTS_COST
-  // Welcome Offer: เสนอได้เมื่อเป็นลูกค้าใหม่ (ยังไม่มี existingId) หรือลูกค้าเดิมที่ยังไม่เคยใช้
-  const welcomeEligible  = !existingId || (selectedCustomer && !selectedCustomer.welcome_used)
+  // Welcome Gift: เสนอได้เมื่อเป็นลูกค้าใหม่ (ยังไม่มี existingId) หรือลูกค้าเดิมที่ยังไม่เคยใช้
+  const welcomeNotUsed     = !existingId || (selectedCustomer && !selectedCustomer.welcome_used)
+  const welcomeMeetsMin    = itemsTotal >= WELCOME_MIN_PURCHASE
+  const welcomeWithinWindow = existingId ? isWithinDays(selectedCustomer?.created_at, WELCOME_VALID_DAYS) : true
+  const welcomeEligible    = welcomeNotUsed && welcomeMeetsMin && welcomeWithinWindow
   // โบนัสวันเกิด: ลูกค้าเดิมที่ตั้งวันเกิด และเดือนนี้ตรงเดือนเกิด + ช่องทางให้แต้ม
   const birthdayEligible = selectedCustomer && isBirthdayMonth(selectedCustomer.birth_date)
     && POINTS_ELIGIBLE_CHANNELS.includes(channel)
@@ -258,7 +271,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         })
       }
 
-      // Welcome Offer: mark ว่าใช้แล้ว (กันใช้ซ้ำ) — เฉพาะเมื่อกดใช้จริงและลูกค้ายังไม่เคยใช้
+      // Welcome Gift: mark ว่าใช้แล้ว (กันใช้ซ้ำ) — เฉพาะเมื่อกดใช้จริงและลูกค้ายังไม่เคยใช้
       if (welcomeDiscount > 0) {
         await supabase.from('customers')
           .update({ welcome_used: true })
@@ -379,19 +392,30 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         )}
       </div>
 
-      {/* Welcome Offer — ลูกค้าใหม่/ยังไม่เคยใช้ ลด 100 (กดเลือกเอง) */}
-      {welcomeEligible && (
+      {/* Welcome Gift — ลูกค้าใหม่/ยังไม่เคยใช้ ลด 100 (กดเลือกเอง) — ต้องซื้อครบ 450 + ยังไม่เกิน 30 วันหลังสมัคร */}
+      {welcomeNotUsed && (
         <div style={{ marginBottom:14, padding:'10px 12px',
           background: useWelcome ? S.goldLt : S.white,
           borderRadius:8, border:`1px solid ${useWelcome ? S.gold : S.border}` }}>
-          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-            <input type="checkbox" checked={useWelcome}
-              onChange={e => setUseWelcome(e.target.checked)}
-              style={{ width:16, height:16, cursor:'pointer' }}/>
-            <span style={{ fontSize:12.5, fontWeight:700, color: useWelcome ? S.gold : S.textMid }}>
-              🎁 Welcome Offer — ลูกค้าใหม่ลด ฿{WELCOME_DISCOUNT} (ใช้ได้ครั้งเดียว)
-            </span>
-          </label>
+          {welcomeEligible ? (
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+              <input type="checkbox" checked={useWelcome}
+                onChange={e => setUseWelcome(e.target.checked)}
+                style={{ width:16, height:16, cursor:'pointer' }}/>
+              <span style={{ fontSize:12.5, fontWeight:700, color: useWelcome ? S.gold : S.textMid }}>
+                🎁 Welcome Gift — ลูกค้าใหม่ลด ฿{WELCOME_DISCOUNT} (ใช้ได้ครั้งเดียว)
+              </span>
+            </label>
+          ) : (
+            <div style={{ fontSize:11.5, color:S.textLt }}>
+              🎁 Welcome Gift — ลด ฿{WELCOME_DISCOUNT} เมื่อซื้อครบ ฿{WELCOME_MIN_PURCHASE} ขึ้นไป
+              {!welcomeWithinWindow
+                ? ' (หมดสิทธิ์แล้ว — เกิน 30 วันหลังสมัคร)'
+                : itemsTotal < WELCOME_MIN_PURCHASE
+                  ? ` (ตอนนี้ขาดอีก ฿${(WELCOME_MIN_PURCHASE - itemsTotal).toLocaleString()})`
+                  : ''}
+            </div>
+          )}
         </div>
       )}
 
@@ -623,7 +647,7 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
         {welcomeDiscount > 0 && (
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:12.5,
             color:S.green, marginBottom:4 }}>
-            <span>🎁 Welcome Offer</span><span>-฿{welcomeDiscount.toLocaleString()}</span>
+            <span>🎁 Welcome Gift</span><span>-฿{welcomeDiscount.toLocaleString()}</span>
           </div>
         )}
         {redeemType === 'perfume_2ml' && redeemFormulaId && (
