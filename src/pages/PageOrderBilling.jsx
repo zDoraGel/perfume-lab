@@ -69,7 +69,7 @@ const CHANNELS = [
 ]
 
 // ── ฟอร์มสร้างออเดอร์ใหม่ ────────────────────────────────────────────────────────
-function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistory }) {
+function NewOrderForm({ formulas, customers, orders, onSaved, onOrderSaved, onViewHistory }) {
   const [channel,         setChannel]         = useState('app')
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
@@ -117,7 +117,11 @@ function NewOrderForm({ formulas, customers, onSaved, onOrderSaved, onViewHistor
   // Welcome Gift: เสนอได้เมื่อเป็นลูกค้าใหม่ (ยังไม่มี existingId) หรือลูกค้าเดิมที่ยังไม่เคยใช้
   const welcomeNotUsed     = !existingId || (selectedCustomer && !selectedCustomer.welcome_used)
   const welcomeMeetsMin    = itemsTotal >= WELCOME_MIN_PURCHASE
-  const welcomeWithinWindow = existingId ? isWithinDays(selectedCustomer?.created_at, WELCOME_VALID_DAYS) : true
+  // นับ 30 วันจากออเดอร์แรกจริงของลูกค้า (ไม่ใช่วันสร้าง record) — ถ้ายังไม่เคยซื้อเลย ถือว่ายังไม่เริ่มนับ (มีสิทธิ์อยู่)
+  const customerOrders    = existingId ? (orders || []).filter(o => o.customer_id === existingId) : []
+  const firstPurchaseDate = customerOrders.reduce(
+    (earliest, o) => (!earliest || new Date(o.created_at) < new Date(earliest)) ? o.created_at : earliest, null)
+  const welcomeWithinWindow = isWithinDays(firstPurchaseDate, WELCOME_VALID_DAYS)
   const welcomeEligible    = welcomeNotUsed && welcomeMeetsMin && welcomeWithinWindow
   // โบนัสวันเกิด: ลูกค้าเดิมที่ตั้งวันเกิด และเดือนนี้ตรงเดือนเกิด + ช่องทางให้แต้ม
   const birthdayEligible = selectedCustomer && isBirthdayMonth(selectedCustomer.birth_date)
@@ -1378,7 +1382,7 @@ export default function PageOrderBilling() {
       </div>
 
       {tab === 'new' && (
-        <NewOrderForm key={formKey} formulas={formulas} customers={customers}
+        <NewOrderForm key={formKey} formulas={formulas} customers={customers} orders={orders}
           onSaved={() => { loadAll(); setFormKey(k => k+1) }}
           onOrderSaved={loadAll}
           onViewHistory={() => { loadAll(); setTab('history') }}/>
