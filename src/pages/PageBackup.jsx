@@ -5,9 +5,17 @@ import { S } from '../constants/theme'
 // รายชื่อสำรอง — ใช้เฉพาะกรณี RPC list_public_tables() เรียกไม่ได้
 // ปกติจะดึงรายชื่อ table จริงจาก database ทุกครั้งที่เปิดหน้า
 const FALLBACK_TABLES = [
-  'formulas', 'formula_versions', 'materials', 'material_aliases',
-  'production_batches', 'aging_logs',
-  'customers', 'orders', 'order_items'
+  'accord_items', 'accord_versions', 'accords',
+  'adaptation_items', 'adaptation_versions', 'adaptations',
+  'aging_logs', 'blend_aging_logs', 'blend_giveaway_logs',
+  'customer_points_balance', 'customers', 'expenses',
+  'formula_items', 'formula_versions', 'formulas',
+  'giveaway_logs', 'loyalty_ledger', 'loyalty_points_audit',
+  'loyalty_redemptions', 'master_ingredients', 'material_aliases',
+  'material_documents', 'material_traits', 'materials',
+  'order_items', 'orders', 'product_stock',
+  'production_batches', 'quick_notes', 'retail_stock',
+  'retail_stock_logs', 'suppliers', 'trend_items',
 ]
 
 async function fetchTableList() {
