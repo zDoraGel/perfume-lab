@@ -3,8 +3,68 @@ import { supabase } from './supabase'
 export const db = {
   // ── Materials ──────────────────────────────────────────────────────────────
   async getMaterials() {
-    const { data } = await supabase.from('materials').select('*').order('name')
+    const { data } = await supabase.from('materials')
+      .select('*, master_ingredient:master_ingredients(*), supplier_info:suppliers(*)').order('name')
     return data || []
+  },
+
+  // ── Suppliers ────────────────────────────────────────────────────────────────
+  async getSuppliers() {
+    const { data } = await supabase.from('suppliers').select('*').order('name')
+    return data || []
+  },
+  async createSupplier(payload) {
+    const { data } = await supabase.from('suppliers').insert(payload).select().single()
+    return data
+  },
+  async updateSupplier(id, payload) {
+    await supabase.from('suppliers').update(payload).eq('id', id)
+  },
+
+  // ── Material Documents (SDS / IFRA Cert / COA) ───────────────────────────────
+  async getMaterialDocuments(materialId) {
+    const { data } = await supabase.from('material_documents')
+      .select('*').eq('material_id', materialId).order('uploaded_at', { ascending:false })
+    return data || []
+  },
+  // ใช้แสดง badge "⚠️ ไม่มี SDS" ในหน้ารายการ — query ครั้งเดียวแทนที่จะยิงทีละ material
+  async getSdsMaterialIds() {
+    const { data } = await supabase.from('material_documents')
+      .select('material_id').eq('doc_type', 'sds')
+    return new Set((data || []).map(d => d.material_id))
+  },
+  async uploadMaterialDocument(materialId, file, docType) {
+    const ext  = file.name.split('.').pop()
+    const path = `material-${materialId}/${Date.now()}-${docType}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('material-documents').upload(path, file, { upsert:true })
+    if (upErr) throw upErr
+    const { data: pub } = supabase.storage.from('material-documents').getPublicUrl(path)
+    const { data } = await supabase.from('material_documents').insert({
+      material_id:  materialId,
+      doc_type:     docType,
+      file_name:    file.name,
+      file_url:     pub.publicUrl,
+      storage_path: path,
+    }).select().single()
+    return data
+  },
+  async deleteMaterialDocument(id, storagePath) {
+    if (storagePath) await supabase.storage.from('material-documents').remove([storagePath])
+    await supabase.from('material_documents').delete().eq('id', id)
+  },
+
+  // ── Master Ingredients (INCI / CAS / IFRA / SDS — ผูกได้หลาย Trade Name) ────
+  async getMasterIngredients() {
+    const { data } = await supabase.from('master_ingredients').select('*').order('name')
+    return data || []
+  },
+  async createMasterIngredient(payload) {
+    const { data } = await supabase.from('master_ingredients').insert(payload).select().single()
+    return data
+  },
+  async updateMasterIngredient(id, payload) {
+    await supabase.from('master_ingredients').update(payload).eq('id', id)
   },
   async createMaterial(data) {
     const { data: d } = await supabase.from('materials').insert(data).select().single()
@@ -165,7 +225,7 @@ export const db = {
   // ── Formula Items ──────────────────────────────────────────────────────────
   async getItems(versionId) {
     const { data } = await supabase.from('formula_items')
-      .select('*, material:materials(*, material_aliases(market_name, description))').eq('version_id', versionId)
+      .select('*, material:materials(*, material_aliases(market_name, description), supplier_info:suppliers(*))').eq('version_id', versionId)
     return data || []
   },
   async createItems(versionId, ingredients) {

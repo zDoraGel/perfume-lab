@@ -39,7 +39,7 @@ function stripThai(str) {
 /**
  * Export Formulas + Versions + Ingredients เป็น Excel
  */
-export async function exportFormulasToExcel(formulas, getAllVersionsAndItems) {
+export async function exportFormulasToExcel(formulas, getAllVersionsAndItems, shareMode = false) {
   const wb = XLSX.utils.book_new()
 
   // Sheet 1: Formulas summary
@@ -65,27 +65,70 @@ export async function exportFormulasToExcel(formulas, getAllVersionsAndItems) {
   XLSX.utils.book_append_sheet(wb, ws1, 'Formulas')
 
   // Sheet 2: All versions + ingredients
-  const versionRows = [
-    ['Formula', 'Version', 'Status', 'Rating', 'Blend Date', 'Batch ml',
-     'Notes', 'Projection', 'Longevity', 'Personal Note',
-     'Ingredient', 'Family', 'Role', 'Grams', 'ml']
+  const versionRows = [shareMode
+    ? ['Formula', 'Version', 'Blend Date', 'Notes', 'Personal Note', 'Ingredient', 'Supplier', '%']
+    : ['Formula', 'Version', 'Status', 'Rating', 'Blend Date', 'Batch ml',
+       'Notes', 'Projection', 'Longevity', 'Personal Note',
+       'Ingredient', 'Family', 'Role', 'Grams', 'ml']
   ]
   for (const f of formulas) {
     const { versions, itemsByVersion } = await getAllVersionsAndItems(f.id)
-    for (const v of versions) {
+    const exportVersions = shareMode
+      ? (versions.filter(v => v.is_final || v.status === 'Final' || v.final_date).length
+          ? versions.filter(v => v.is_final || v.status === 'Final' || v.final_date)
+          : versions.slice(-1))
+      : versions
+    for (const v of exportVersions) {
       const items = itemsByVersion[v.id] || []
       if (items.length === 0) {
-        versionRows.push([
-          f.name, `V${v.ver}`, v.status, v.rating || '',
-          v.blend_date || '', v.batch_ml || 15, v.notes || '',
-          v.projection_actual || '', v.longevity_actual || '', v.personal_note || '',
-          '', '', '', '', ''
-        ])
-      } else {
-        items.forEach((item, idx) => {
-          const density = getDensity(item.material?.family)
-          const ml = item.ml ? parseFloat(item.ml) : parseFloat(item.grams) / density
-          const role = item.material?.evaporation || ''
+        versionRows.push(shareMode
+          ? [f.name, 'Final Formula', v.blend_date || '', v.notes || '', v.personal_note || '', '', '', '']
+          : [f.name, `V${v.ver}`, v.status, v.rating || '',
+             v.blend_date || '', v.batch_ml || 15, v.notes || '',
+             v.projection_actual || '', v.longevity_actual || '', v.personal_note || '',
+             '', '', '', '', '']
+        )
+        continue
+      }
+
+      // Alias deduplication สำหรับ shareMode (เหมือน PDF)
+      const validItems = items.filter(item => item.material?.name)
+      const aliasMap = {}
+      if (shareMode) {
+        const aliasCount = {}
+        validItems.forEach(item => {
+          const aliases = item.material?.material_aliases || item.material?.aliases || []
+          const base    = aliases[0]?.market_name || item.material?.family || item.material?.name || ''
+          aliasCount[base] = (aliasCount[base] || 0) + 1
+        })
+        const seen = {}
+        validItems.forEach(item => {
+          const aliases = item.material?.material_aliases || item.material?.aliases || []
+          const base    = aliases[0]?.market_name || item.material?.family || item.material?.name || ''
+          seen[base]    = (seen[base] || 0) + 1
+          aliasMap[item.material_id] = aliasCount[base] > 1 ? `${base} ${seen[base]}` : base
+        })
+      }
+      const total = items.reduce((s,i) => s + parseFloat(i.grams||0), 0)
+
+      items.forEach((item, idx) => {
+        const density = getDensity(item.material?.family)
+        const ml = item.ml ? parseFloat(item.ml) : parseFloat(item.grams) / density
+        const role = item.material?.evaporation || ''
+        if (shareMode) {
+          const dispName = aliasMap[item.material_id] || item.material?.family || item.material?.name || ''
+          const pct = total > 0 ? ((item.grams / total) * 100).toFixed(1) : 0
+          versionRows.push([
+            idx === 0 ? f.name : '',
+            idx === 0 ? 'Final Formula' : '',
+            idx === 0 ? (v.blend_date || '') : '',
+            idx === 0 ? (v.notes || '') : '',
+            idx === 0 ? (v.personal_note || '') : '',
+            dispName,
+            item.material?.supplier_info?.name || item.material?.supplier || '',
+            `${pct}%`,
+          ])
+        } else {
           versionRows.push([
             idx === 0 ? f.name : '',
             idx === 0 ? `V${v.ver}` : '',
@@ -103,16 +146,18 @@ export async function exportFormulasToExcel(formulas, getAllVersionsAndItems) {
             parseFloat(item.grams).toFixed(4),
             ml.toFixed(2),
           ])
-        })
-      }
+        }
+      })
     }
   }
   const ws2 = XLSX.utils.aoa_to_sheet(versionRows)
-  ws2['!cols'] = [
-    { wch:18 },{ wch:8 },{ wch:10 },{ wch:8 },{ wch:12 },{ wch:10 },
-    { wch:30 },{ wch:12 },{ wch:12 },{ wch:25 },
-    { wch:20 },{ wch:12 },{ wch:8 },{ wch:8 },{ wch:8 }
-  ]
+  ws2['!cols'] = shareMode
+    ? [{ wch:18 },{ wch:14 },{ wch:12 },{ wch:30 },{ wch:25 },{ wch:20 },{ wch:16 },{ wch:8 }]
+    : [
+        { wch:18 },{ wch:8 },{ wch:10 },{ wch:8 },{ wch:12 },{ wch:10 },
+        { wch:30 },{ wch:12 },{ wch:12 },{ wch:25 },
+        { wch:20 },{ wch:12 },{ wch:8 },{ wch:8 },{ wch:8 }
+      ]
   XLSX.utils.book_append_sheet(wb, ws2, 'Versions & Ingredients')
 
   // Download
@@ -126,9 +171,10 @@ export function exportMaterialsToExcel(materials) {
   const wb   = XLSX.utils.book_new()
   const rows = [
     ['Name', 'Family', 'Evaporation', 'Stock (g)', 'Cost (฿/g)',
-     'Purchase Price (฿)', 'Purchase Size (g)', 'Dilution (%)', 'Supplier', 'Notes', 'CAS']
+     'Purchase Price (฿)', 'Purchase Size (g)', 'Dilution (%)', 'Supplier', 'Notes', 'CAS', 'INCI', 'SDS Link']
   ]
   materials.forEach(m => {
+    const mi = m.master_ingredient
     rows.push([
       m.name || '',
       m.family || '',
@@ -138,9 +184,11 @@ export function exportMaterialsToExcel(materials) {
       m.purchase_price || '',
       m.purchase_size || '',
       m.dilution || '',
-      m.supplier || '',
+      m.supplier_info?.name || m.supplier || '',
       m.notes || '',
-      m.cas || '',
+      mi?.cas || '',
+      mi?.inci || '',
+      mi?.sds_url || '',
     ])
   })
 
@@ -152,7 +200,7 @@ export function exportMaterialsToExcel(materials) {
   const ws = XLSX.utils.aoa_to_sheet(rows)
   ws['!cols'] = [
     { wch:22 },{ wch:12 },{ wch:12 },{ wch:10 },{ wch:12 },
-    { wch:16 },{ wch:16 },{ wch:12 },{ wch:16 },{ wch:30 },{ wch:14 }
+    { wch:16 },{ wch:16 },{ wch:12 },{ wch:16 },{ wch:30 },{ wch:14 },{ wch:30 },{ wch:35 }
   ]
   XLSX.utils.book_append_sheet(wb, ws, 'Materials Stock')
   XLSX.writeFile(wb, `perfume-lab-materials-${new Date().toISOString().slice(0,10)}.xlsx`)
@@ -302,7 +350,7 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion, shar
         : (item.material?.name || '')
       return [
         dispName,
-        shareMode ? '' : (item.material?.family || ''),
+        shareMode ? (item.material?.supplier_info?.name || item.material?.supplier || '') : (item.material?.family || ''),
         shareMode ? '' : (item.material?.evaporation || ''),
         `${parseFloat(item.grams).toFixed(3)}g`,
         `${ml.toFixed(2)}ml`,
@@ -313,13 +361,13 @@ export async function exportFormulaToPDF(formula, versions, itemsByVersion, shar
     autoTable(doc, {
       startY: y,
       head: [shareMode
-        ? ['Ingredient', 'Grams', 'ml', '%']
+        ? ['Ingredient', 'Supplier', '%']
         : ['Ingredient', 'Family', 'Role', 'Grams', 'ml', '%']],
       body: shareMode
-        ? tableData.map(r => [r[0], r[3], r[4], r[5]])
+        ? tableData.map(r => [r[0], r[1], r[5]])
         : tableData,
       foot: [shareMode
-        ? ['Total', `${total.toFixed(3)}g`, '', '100%']
+        ? ['Total', '', '100%']
         : ['Total', '', '', `${total.toFixed(3)}g`, '', '100%']],
       margin: { left:20, right:20 },
       styles: { fontSize:7.5, cellPadding:1.5 },
@@ -383,7 +431,7 @@ export async function exportMaterialsToPDF(materials) {
     `${(m.stock||0).toFixed(1)}g`,
     m.cost ? `฿${m.cost}` : '-',
     m.purchase_price && m.purchase_size ? `฿${m.purchase_price}/${m.purchase_size}g` : '-',
-    m.supplier || '-',
+    m.supplier_info?.name || m.supplier || '-',
     m.notes || '-',
   ])
 

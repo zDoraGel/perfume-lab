@@ -176,7 +176,7 @@ export default function PageExport() {
     setExporting(type)
     try {
       if (type === 'formulas-excel') {
-        await exportFormulasToExcel(selectedFormulas, getAllVersionsAndItems)
+        await exportFormulasToExcel(selectedFormulas, getAllVersionsAndItems, shareMode)
       } else if (type === 'materials-excel') {
         exportMaterialsToExcel(materials)
       } else if (type === 'formulas-pdf') {

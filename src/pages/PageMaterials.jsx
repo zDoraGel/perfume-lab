@@ -45,8 +45,120 @@ function NumInput({ label, value, onChange, placeholder, decimal = false }) {
   )
 }
 
+// ── Material Documents (SDS / IFRA Cert / COA) ─────────────────────────────────
+const DOC_TYPES = [
+  { v:'sds',  l:'SDS',  icon:'🧪' },
+  { v:'ifra', l:'IFRA', icon:'📋' },
+  { v:'coa',  l:'COA',  icon:'📄' },
+  { v:'other',l:'อื่นๆ', icon:'📎' },
+]
+
+function MaterialDocsSection({ materialId }) {
+  const [docs,     setDocs]     = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [docType,  setDocType]  = useState('sds')
+  const [uploading,setUploading]= useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [error,    setError]    = useState('')
+  const fileInputRef = useRef()
+
+  async function load() {
+    setLoading(true)
+    setDocs(await db.getMaterialDocuments(materialId))
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [materialId])
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || [])
+    if (files.length === 0) return
+    setUploading(true)
+    setError('')
+    try {
+      for (const f of files) {
+        await db.uploadMaterialDocument(materialId, f, docType)
+      }
+      await load()
+    } catch (e) {
+      console.error('[MaterialDocsSection]', e)
+      setError('อัปโหลดไม่สำเร็จ — เช็คว่าสร้าง bucket "material-documents" (public) ใน Supabase Storage แล้วหรือยัง')
+    }
+    setUploading(false)
+  }
+
+  async function handleDelete(doc) {
+    if (!window.confirm(`ลบ "${doc.file_name}" ?`)) return
+    await db.deleteMaterialDocument(doc.id, doc.storage_path)
+    await load()
+  }
+
+  return (
+    <div style={{ marginTop:14, padding:'14px 16px', background:S.bg,
+      borderRadius:12, border:`1px solid ${S.border}` }}>
+      <div style={{ fontSize:11, color:S.gold, fontWeight:700, letterSpacing:.8,
+        textTransform:'uppercase', marginBottom:10, fontFamily:'Inter,sans-serif' }}>
+        ✦ Supplier Documents
+      </div>
+
+      <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+        {DOC_TYPES.map(t => (
+          <button key={t.v} type="button" onClick={() => setDocType(t.v)}
+            style={{ padding:'6px 12px', borderRadius:8, cursor:'pointer',
+              fontSize:11, fontFamily:'Inter,sans-serif',
+              border:`1.5px solid ${docType === t.v ? S.gold : S.border}`,
+              background: docType === t.v ? S.goldLt : S.white,
+              color: docType === t.v ? S.gold : S.textMid,
+              fontWeight: docType === t.v ? 600 : 400 }}>
+            {t.icon} {t.l}
+          </button>
+        ))}
+      </div>
+
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
+        style={{ padding:'18px 12px', textAlign:'center', borderRadius:10, cursor:'pointer',
+          border:`1.5px dashed ${dragOver ? S.gold : S.border}`,
+          background: dragOver ? S.goldLt : S.white, fontSize:12, color:S.textLt, marginBottom:10 }}>
+        {uploading ? '⏳ กำลังอัปโหลด...' : `ลากไฟล์มาวาง หรือคลิกเพื่อเลือก (${DOC_TYPES.find(t=>t.v===docType)?.l})`}
+      </div>
+      <input ref={fileInputRef} type="file" multiple accept="application/pdf,image/*"
+        onChange={e => handleFiles(e.target.files)} style={{ display:'none' }}/>
+
+      {error && <div style={{ fontSize:11, color:S.red, marginBottom:8 }}>{error}</div>}
+
+      {loading ? (
+        <div style={{ fontSize:12, color:S.textLt }}>กำลังโหลด...</div>
+      ) : docs.length === 0 ? (
+        <div style={{ fontSize:12, color:S.textLt }}>ยังไม่มีเอกสาร</div>
+      ) : (
+        <div>
+          {docs.map(d => (
+            <div key={d.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+              padding:'8px 10px', background:S.white, borderRadius:8, marginBottom:6,
+              border:`1px solid ${S.border}` }}>
+              <a href={d.file_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize:12, color:S.ink, textDecoration:'none', flex:1, minWidth:0,
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {DOC_TYPES.find(t => t.v === d.doc_type)?.icon || '📎'}{' '}
+                <span style={{ fontWeight:600 }}>{DOC_TYPES.find(t => t.v === d.doc_type)?.l || 'อื่นๆ'}</span>
+                {' — '}{d.file_name}
+              </a>
+              <button type="button" onClick={() => handleDelete(d)}
+                style={{ background:'none', border:'none', color:S.textLt, cursor:'pointer',
+                  fontSize:14, padding:'0 4px' }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Material Modal ─────────────────────────────────────────────────────────────
-function MatModal({ mat, onClose, onSave }) {
+function MatModal({ mat, allMasterIngredients, allSuppliers, onClose, onSave }) {
   const editing  = !!mat?.id
   const FAMILIES_EXT = [
     'Woody','Floral','Citrus','Ambery','Musk','Fresh','Spicy','Gourmand',
@@ -55,7 +167,62 @@ function MatModal({ mat, onClose, onSave }) {
   ]
 
   const [name,          setName]          = useState(mat?.name || '')
-  const [cas,           setCas]           = useState(mat?.cas || '')
+  // ── Supplier picker (normalized suppliers table) ──
+  const [supplierId,        setSupplierId]        = useState(mat?.supplier_id ?? mat?.supplier_info?.id ?? null)
+  const [supplierSearch,    setSupplierSearch]    = useState('')
+  const [showCreateSupplier,setShowCreateSupplier]= useState(false)
+  const [newSupplierName,    setNewSupplierName]    = useState('')
+  const [newSupplierWebsite, setNewSupplierWebsite] = useState('')
+  const [newSupplierEmail,   setNewSupplierEmail]   = useState('')
+  const [newSupplierCountry, setNewSupplierCountry] = useState('')
+  const selectedSupplier = allSuppliers?.find(s => s.id === supplierId) ||
+    (supplierId === mat?.supplier_info?.id ? mat?.supplier_info : null)
+  const supplierMatches = supplierSearch.trim()
+    ? (allSuppliers || []).filter(s => s.name.toLowerCase().includes(supplierSearch.trim().toLowerCase())).slice(0, 8)
+    : []
+  // ── Master Ingredient (INCI/CAS/IFRA/SDS ผูกจากตาราง master_ingredients) ──
+  const [miId,        setMiId]        = useState(mat?.master_ingredient_id ?? mat?.master_ingredient?.id ?? null)
+  const [miSearch,    setMiSearch]    = useState('')
+  const [showCreateMi,setShowCreateMi]= useState(false)
+  const [showEditMi,  setShowEditMi]  = useState(false)
+  const [miSaving,    setMiSaving]    = useState(false)
+  const [newMiName,       setNewMiName]       = useState('')
+  const [newMiInci,       setNewMiInci]       = useState('')
+  const [newMiCas,        setNewMiCas]        = useState('')
+  const [newMiSdsUrl,     setNewMiSdsUrl]     = useState('')
+  const [newMiIfraLimit,  setNewMiIfraLimit]  = useState('')
+  const [newMiIfraCategory, setNewMiIfraCategory] = useState('leave-on')
+  const selectedMaster = allMasterIngredients?.find(m => m.id === miId) || (miId === mat?.master_ingredient?.id ? mat?.master_ingredient : null)
+  const [editMiInci,      setEditMiInci]      = useState(selectedMaster?.inci || '')
+  const [editMiCas,       setEditMiCas]       = useState(selectedMaster?.cas || '')
+  const [editMiSdsUrl,    setEditMiSdsUrl]    = useState(selectedMaster?.sds_url || '')
+  const [editMiIfraLimit, setEditMiIfraLimit] = useState(selectedMaster?.ifra_limit ?? '')
+  const [editMiIfraCategory, setEditMiIfraCategory] = useState(selectedMaster?.ifra_category || 'leave-on')
+  const miMatches = miSearch.trim()
+    ? (allMasterIngredients || []).filter(m =>
+        m.name.toLowerCase().includes(miSearch.trim().toLowerCase()) ||
+        (m.cas || '').toLowerCase().includes(miSearch.trim().toLowerCase())
+      ).slice(0, 8)
+    : []
+
+  async function saveMiEdit() {
+    if (!selectedMaster) return
+    setMiSaving(true)
+    await db.updateMasterIngredient(selectedMaster.id, {
+      inci:          editMiInci.trim() || null,
+      cas:           editMiCas.trim() || null,
+      sds_url:       editMiSdsUrl.trim() || null,
+      ifra_limit:    editMiIfraLimit !== '' ? parseFloat(editMiIfraLimit) : null,
+      ifra_category: editMiIfraCategory || 'leave-on',
+    })
+    selectedMaster.inci = editMiInci.trim() || null
+    selectedMaster.cas = editMiCas.trim() || null
+    selectedMaster.sds_url = editMiSdsUrl.trim() || null
+    selectedMaster.ifra_limit = editMiIfraLimit !== '' ? parseFloat(editMiIfraLimit) : null
+    selectedMaster.ifra_category = editMiIfraCategory || 'leave-on'
+    setMiSaving(false)
+    setShowEditMi(false)
+  }
   const [families, setFamilies] = useState(() => {
     const f = mat?.families
     let arr = []
@@ -70,15 +237,12 @@ function MatModal({ mat, onClose, onSave }) {
   const [cost,          setCost]          = useState(mat?.cost ?? '')
   const [dilution,      setDilution]      = useState(mat?.dilution ?? '')
   const [evap,          setEvap]          = useState(mat?.evaporation || 'Heart')
-  const [supplier,      setSupplier]      = useState(mat?.supplier || '')
   const [purchasePrice, setPurchasePrice] = useState(mat?.purchase_price ?? '')
   const [purchaseSize,  setPurchaseSize]  = useState(mat?.purchase_size ?? '')
   const [notes,         setNotes]         = useState(mat?.notes || '')
   const [scentProfile,  setScentProfile]  = useState(mat?.scent_profile || '')
   const [performance,   setPerformance]   = useState(mat?.performance || '')
   const [effect,        setEffect]        = useState(mat?.effect || '')
-  const [ifraLimit,     setIfraLimit]     = useState(mat?.ifra_limit ?? '')
-  const [ifraCategory,  setIfraCategory]  = useState(mat?.ifra_category || 'leave-on')
   const [isKey,         setIsKey]         = useState(mat?.is_key ?? false)
   const [stockAlertAt,  setStockAlertAt]  = useState(mat?.stock_alert_at ?? '')
   const [saving,        setSaving]        = useState(false)
@@ -91,23 +255,45 @@ function MatModal({ mat, onClose, onSave }) {
   async function save() {
     if (!name.trim()) return
     setSaving(true)
+    let finalMiId = miId
+    if (!finalMiId && showCreateMi) {
+      const newMi = await db.createMasterIngredient({
+        name:          (newMiName.trim() || name.trim()),
+        inci:          newMiInci.trim() || null,
+        cas:           newMiCas.trim() || null,
+        sds_url:       newMiSdsUrl.trim() || null,
+        ifra_limit:    newMiIfraLimit !== '' ? parseFloat(newMiIfraLimit) : null,
+        ifra_category: newMiIfraCategory || 'leave-on',
+      })
+      finalMiId = newMi?.id || null
+    }
+    let finalSupplierId = supplierId
+    if (!finalSupplierId && showCreateSupplier && newSupplierName.trim()) {
+      const newSup = await db.createSupplier({
+        name:    newSupplierName.trim(),
+        website: newSupplierWebsite.trim() || null,
+        email:   newSupplierEmail.trim() || null,
+        country: newSupplierCountry.trim() || null,
+      })
+      finalSupplierId = newSup?.id || null
+    }
     const finalCost = autoCost ? parseFloat(autoCost) : (cost !== '' ? parseFloat(cost) : null)
     const payload = {
-      name: name.trim(), cas: cas.trim() || null, family: families[0] || null,
+      name: name.trim(),
+      master_ingredient_id: finalMiId,
+      supplier_id: finalSupplierId,
+      family: families[0] || null,
       families:       families.length > 0 ? families : null,
       stock:          stock         !== '' ? parseFloat(stock)         : 0,
       cost:           finalCost,
       dilution:       dilution      !== '' ? parseFloat(dilution)      : null,
       evaporation:    evap,
-      supplier:       supplier.trim() || null,
       purchase_price: purchasePrice !== '' ? parseFloat(purchasePrice) : null,
       purchase_size:  purchaseSize  !== '' ? parseFloat(purchaseSize)  : null,
       notes:          notes.trim() || null,
       scent_profile:  scentProfile.trim() || null,
       performance:    performance.trim() || null,
       effect:         effect.trim() || null,
-      ifra_limit:     ifraLimit !== '' ? parseFloat(ifraLimit) : null,
-      ifra_category:  ifraCategory || 'leave-on',
       is_key:         isKey,
       stock_alert_at: stockAlertAt !== '' ? parseFloat(stockAlertAt) : null,
     }
@@ -131,8 +317,56 @@ function MatModal({ mat, onClose, onSave }) {
         </div>
 
         <TextInput label="ชื่อ *" value={name} onChange={setName} placeholder="เช่น Bergamot EO"/>
-        <TextInput label="Supplier / ร้านที่ซื้อ" value={supplier} onChange={setSupplier} placeholder="เช่น Thalia, อ.วิทย์, iHerb"/>
-        <TextInput label="CAS Number" value={cas} onChange={setCas} placeholder="เช่น 8007-75-8"/>
+        <Field label="Supplier / ร้านที่ซื้อ">
+          {selectedSupplier ? (
+            <div style={{ padding:'10px 12px', background:S.bg, borderRadius:10,
+              border:`1px solid ${S.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:S.ink }}>🏪 {selectedSupplier.name}</div>
+                {(selectedSupplier.website || selectedSupplier.country) && (
+                  <div style={{ fontSize:11, color:S.textLt }}>
+                    {selectedSupplier.country || ''}{selectedSupplier.website ? ` · ${selectedSupplier.website}` : ''}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={() => setSupplierId(null)}
+                style={{ fontSize:11, color:S.textMid, background:'none', border:`1px solid ${S.border}`,
+                  borderRadius:8, padding:'5px 10px', cursor:'pointer' }}>
+                เปลี่ยน
+              </button>
+            </div>
+          ) : (
+            <div>
+              <TextInput placeholder="ค้นหา supplier เดิม..." value={supplierSearch} onChange={setSupplierSearch}/>
+              {supplierMatches.length > 0 && (
+                <div style={{ border:`1px solid ${S.border}`, borderRadius:10, marginBottom:8, overflow:'hidden' }}>
+                  {supplierMatches.map(s => (
+                    <div key={s.id}
+                      onClick={() => { setSupplierId(s.id); setSupplierSearch(''); setShowCreateSupplier(false) }}
+                      style={{ padding:'9px 12px', cursor:'pointer', fontSize:13, color:S.ink,
+                        borderBottom:`1px solid ${S.border}`, background:S.white }}>
+                      {s.name}{s.country && <span style={{ color:S.textLt, fontSize:11 }}> · {s.country}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!showCreateSupplier ? (
+                <button type="button" onClick={() => { setShowCreateSupplier(true); setNewSupplierName(supplierSearch) }}
+                  style={{ fontSize:12, color:S.gold, background:'none', border:`1px dashed ${S.goldBd}`,
+                    borderRadius:8, padding:'9px 12px', cursor:'pointer', width:'100%' }}>
+                  + เพิ่ม Supplier ใหม่
+                </button>
+              ) : (
+                <div style={{ padding:'12px 14px', background:S.bg, borderRadius:10, border:`1px solid ${S.border}` }}>
+                  <TextInput label="ชื่อ Supplier" value={newSupplierName} onChange={setNewSupplierName} placeholder="เช่น Thalia, อ.วิทย์, iHerb"/>
+                  <TextInput label="Website" value={newSupplierWebsite} onChange={setNewSupplierWebsite} placeholder="https://..."/>
+                  <TextInput label="Email" value={newSupplierEmail} onChange={setNewSupplierEmail} placeholder="เช่น sales@thalia.com"/>
+                  <TextInput label="ประเทศ" value={newSupplierCountry} onChange={setNewSupplierCountry} placeholder="เช่น Thailand"/>
+                </div>
+              )}
+            </div>
+          )}
+        </Field>
 
         <Field label="Family" sub="เลือกได้ถึง 4 (จากหลักไปรอง)">
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -292,64 +526,165 @@ function MatModal({ mat, onClose, onSave }) {
           </div>
         </div>
 
-        {/* ── IFRA ── */}
+        {/* ── Master Ingredient (INCI / CAS / IFRA / SDS) ── */}
         <div style={{ marginTop:14, padding:'14px 16px', background:S.bg,
-          borderRadius:12, border:`1px solid ${ifraLimit ? S.goldBd : S.border}` }}>
+          borderRadius:12, border:`1px solid ${S.border}` }}>
           <div style={{ fontSize:11, color:S.gold, fontWeight:700, letterSpacing:.8,
-            textTransform:'uppercase', marginBottom:12,
-            fontFamily:'Inter,sans-serif' }}>✦ IFRA Limit</div>
-
-          <div style={{ display:'flex', gap:10, marginBottom: ifraLimit ? 10 : 0 }}>
-            {/* % input */}
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:11, color:S.textMid, fontWeight:500,
-                letterSpacing:.5, marginBottom:5, textTransform:'uppercase',
-                fontFamily:'Inter,sans-serif' }}>Max %</div>
-              <input
-                type="number" step="0.01" value={ifraLimit}
-                onChange={e => setIfraLimit(e.target.value)}
-                placeholder="เช่น 0.5"
-                style={{ width:'100%', padding:'10px 12px', borderRadius:10,
-                  border:`1.5px solid ${ifraLimit ? S.gold : S.border}`,
-                  fontSize:14, fontFamily:'Inter,sans-serif', color:S.ink,
-                  background:S.white, outline:'none', boxSizing:'border-box' }}/>
-            </div>
-
-            {/* Category buttons */}
-            <div style={{ flex:2 }}>
-              <div style={{ fontSize:11, color:S.textMid, fontWeight:500,
-                letterSpacing:.5, marginBottom:5, textTransform:'uppercase',
-                fontFamily:'Inter,sans-serif' }}>ประเภท</div>
-              <div style={{ display:'flex', gap:6 }}>
-                {[
-                  { v:'leave-on',       l:'น้ำหอม' },
-                  { v:'fine-fragrance', l:'Fine Frag' },
-                  { v:'rinse-off',      l:'Rinse-off' },
-                ].map(opt => (
-                  <button key={opt.v} onClick={() => setIfraCategory(opt.v)}
-                    style={{ flex:1, padding:'10px 4px', borderRadius:10, cursor:'pointer',
-                      fontSize:11, fontFamily:'Inter,sans-serif',
-                      border:`1.5px solid ${ifraCategory === opt.v ? S.gold : S.border}`,
-                      background: ifraCategory === opt.v ? S.goldLt : S.white,
-                      color: ifraCategory === opt.v ? S.gold : S.textMid,
-                      fontWeight: ifraCategory === opt.v ? 600 : 400 }}>
-                    {opt.l}
-                  </button>
-                ))}
-              </div>
-            </div>
+            textTransform:'uppercase', marginBottom:4,
+            fontFamily:'Inter,sans-serif' }}>✦ Master Ingredient</div>
+          <div style={{ fontSize:11, color:S.textLt, marginBottom:12 }}>
+            สารเคมีจริง (INCI/CAS/IFRA/SDS) — ผูก Trade Name นี้เข้ากับสารตัวเดียวกันได้ แม้ซื้อจาก supplier คนละเจ้า
           </div>
 
-          {ifraLimit && (
-            <div style={{ fontSize:11, color:S.gold, padding:'6px 10px',
-              background:S.goldLt, borderRadius:8, display:'inline-block' }}>
-              ใช้ได้สูงสุด <strong>{ifraLimit}%</strong> · {
-                ifraCategory === 'leave-on' ? 'Leave-on (น้ำหอม)' :
-                ifraCategory === 'fine-fragrance' ? 'Fine Fragrance' : 'Rinse-off'
-              }
+          {selectedMaster ? (
+            <div>
+              <div style={{ fontWeight:600, color:S.ink, marginBottom:4 }}>{selectedMaster.name}</div>
+              <div style={{ fontSize:11, color:S.textLt, marginBottom:6 }}>
+                {selectedMaster.inci && `INCI: ${selectedMaster.inci}`}
+                {selectedMaster.cas && `${selectedMaster.inci ? ' · ' : ''}CAS: ${selectedMaster.cas}`}
+                {selectedMaster.ifra_limit != null && ` · IFRA ≤${selectedMaster.ifra_limit}%`}
+              </div>
+              {selectedMaster.sds_url && (
+                <a href={selectedMaster.sds_url} target="_blank" rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  style={{ fontSize:11, color:S.gold, textDecoration:'underline' }}>📄 SDS</a>
+              )}
+              <div style={{ display:'flex', gap:8, marginTop:10 }}>
+                <button type="button" onClick={() => { setMiId(null); setShowEditMi(false) }}
+                  style={{ fontSize:11, color:S.textMid, background:'none', border:`1px solid ${S.border}`,
+                    borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+                  เปลี่ยน / ยกเลิกผูก
+                </button>
+                <button type="button" onClick={() => setShowEditMi(v => !v)}
+                  style={{ fontSize:11, color:S.gold, background:'none', border:`1px solid ${S.goldBd}`,
+                    borderRadius:8, padding:'6px 10px', cursor:'pointer' }}>
+                  แก้ไขข้อมูลเคมี
+                </button>
+              </div>
+
+              {showEditMi && (
+                <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${S.border}` }}>
+                  <TextInput label="INCI" value={editMiInci} onChange={setEditMiInci}/>
+                  <TextInput label="CAS Number" value={editMiCas} onChange={setEditMiCas} placeholder="เช่น 8007-75-8"/>
+                  <TextInput label="SDS Link" value={editMiSdsUrl} onChange={setEditMiSdsUrl} placeholder="https://..."/>
+                  <div style={{ display:'flex', gap:10, marginBottom:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:11, color:S.textMid, fontWeight:500, letterSpacing:.5,
+                        marginBottom:5, textTransform:'uppercase', fontFamily:'Inter,sans-serif' }}>IFRA Max %</div>
+                      <input type="number" step="0.01" value={editMiIfraLimit}
+                        onChange={e => setEditMiIfraLimit(e.target.value)} placeholder="เช่น 0.5"
+                        style={{ width:'100%', padding:'10px 12px', borderRadius:10,
+                          border:`1.5px solid ${S.border}`, fontSize:14, fontFamily:'Inter,sans-serif',
+                          color:S.ink, background:S.white, outline:'none', boxSizing:'border-box' }}/>
+                    </div>
+                    <div style={{ flex:2 }}>
+                      <div style={{ fontSize:11, color:S.textMid, fontWeight:500, letterSpacing:.5,
+                        marginBottom:5, textTransform:'uppercase', fontFamily:'Inter,sans-serif' }}>ประเภท</div>
+                      <div style={{ display:'flex', gap:6 }}>
+                        {[
+                          { v:'leave-on',       l:'น้ำหอม' },
+                          { v:'fine-fragrance', l:'Fine Frag' },
+                          { v:'rinse-off',      l:'Rinse-off' },
+                        ].map(opt => (
+                          <button key={opt.v} type="button" onClick={() => setEditMiIfraCategory(opt.v)}
+                            style={{ flex:1, padding:'10px 4px', borderRadius:10, cursor:'pointer',
+                              fontSize:11, fontFamily:'Inter,sans-serif',
+                              border:`1.5px solid ${editMiIfraCategory === opt.v ? S.gold : S.border}`,
+                              background: editMiIfraCategory === opt.v ? S.goldLt : S.white,
+                              color: editMiIfraCategory === opt.v ? S.gold : S.textMid,
+                              fontWeight: editMiIfraCategory === opt.v ? 600 : 400 }}>
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={saveMiEdit} disabled={miSaving}
+                    style={{ width:'100%', padding:'10px', borderRadius:10, border:'none',
+                      background:S.gold, color:S.white, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                    {miSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลเคมี'}
+                  </button>
+                  <div style={{ fontSize:10, color:S.textLt, marginTop:6 }}>
+                    * จะกระทบวัตถุดิบอื่นทุกตัวที่ผูกกับ Master Ingredient นี้
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <TextInput placeholder="ค้นหา Master Ingredient เดิม (ชื่อ/CAS)..." value={miSearch} onChange={setMiSearch}/>
+              {miMatches.length > 0 && (
+                <div style={{ border:`1px solid ${S.border}`, borderRadius:10, marginBottom:10, overflow:'hidden' }}>
+                  {miMatches.map(m => (
+                    <div key={m.id}
+                      onClick={() => { setMiId(m.id); setMiSearch(''); setShowCreateMi(false) }}
+                      style={{ padding:'9px 12px', cursor:'pointer', fontSize:13, color:S.ink,
+                        borderBottom:`1px solid ${S.border}`, background:S.white }}>
+                      {m.name}
+                      {m.cas && <span style={{ color:S.textLt, fontSize:11 }}> · CAS {m.cas}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!showCreateMi ? (
+                <button type="button" onClick={() => { setShowCreateMi(true); setNewMiName(name) }}
+                  style={{ fontSize:12, color:S.gold, background:'none', border:`1px dashed ${S.goldBd}`,
+                    borderRadius:8, padding:'10px 12px', cursor:'pointer', width:'100%' }}>
+                  + สร้าง Master Ingredient ใหม่
+                </button>
+              ) : (
+                <div style={{ padding:'12px 14px', background:S.white, borderRadius:10, border:`1px solid ${S.border}` }}>
+                  <TextInput label="ชื่อ Master Ingredient" value={newMiName} onChange={setNewMiName} placeholder="เช่น Ambroxan"/>
+                  <TextInput label="INCI" value={newMiInci} onChange={setNewMiInci} placeholder="เช่น Ambroxide"/>
+                  <TextInput label="CAS Number" value={newMiCas} onChange={setNewMiCas} placeholder="เช่น 8007-75-8"/>
+                  <TextInput label="SDS Link" value={newMiSdsUrl} onChange={setNewMiSdsUrl} placeholder="https://..."/>
+                  <div style={{ display:'flex', gap:10 }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:11, color:S.textMid, fontWeight:500, letterSpacing:.5,
+                        marginBottom:5, textTransform:'uppercase', fontFamily:'Inter,sans-serif' }}>IFRA Max %</div>
+                      <input type="number" step="0.01" value={newMiIfraLimit}
+                        onChange={e => setNewMiIfraLimit(e.target.value)} placeholder="เช่น 0.5"
+                        style={{ width:'100%', padding:'10px 12px', borderRadius:10,
+                          border:`1.5px solid ${S.border}`, fontSize:14, fontFamily:'Inter,sans-serif',
+                          color:S.ink, background:S.bg, outline:'none', boxSizing:'border-box' }}/>
+                    </div>
+                    <div style={{ flex:2 }}>
+                      <div style={{ fontSize:11, color:S.textMid, fontWeight:500, letterSpacing:.5,
+                        marginBottom:5, textTransform:'uppercase', fontFamily:'Inter,sans-serif' }}>ประเภท</div>
+                      <div style={{ display:'flex', gap:6 }}>
+                        {[
+                          { v:'leave-on',       l:'น้ำหอม' },
+                          { v:'fine-fragrance', l:'Fine Frag' },
+                          { v:'rinse-off',      l:'Rinse-off' },
+                        ].map(opt => (
+                          <button key={opt.v} type="button" onClick={() => setNewMiIfraCategory(opt.v)}
+                            style={{ flex:1, padding:'10px 4px', borderRadius:10, cursor:'pointer',
+                              fontSize:11, fontFamily:'Inter,sans-serif',
+                              border:`1.5px solid ${newMiIfraCategory === opt.v ? S.gold : S.border}`,
+                              background: newMiIfraCategory === opt.v ? S.goldLt : S.bg,
+                              color: newMiIfraCategory === opt.v ? S.gold : S.textMid,
+                              fontWeight: newMiIfraCategory === opt.v ? 600 : 400 }}>
+                            {opt.l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {editing ? (
+          <MaterialDocsSection materialId={mat.id}/>
+        ) : (
+          <div style={{ marginTop:14, padding:'12px 14px', background:S.bg, borderRadius:10,
+            border:`1px dashed ${S.border}`, fontSize:11, color:S.textLt, textAlign:'center' }}>
+            บันทึกวัตถุดิบนี้ก่อน แล้วค่อยกลับมาแก้ไขเพื่ออัปโหลดเอกสาร SDS/IFRA/COA
+          </div>
+        )}
 
         {/* ── Key Material ── */}
         <div style={{ marginTop:14, padding:'12px 14px', background:isKey ? '#eef5f0' : S.bg,
@@ -731,11 +1066,16 @@ export default function PageMaterials() {
   const [purchaseSaving, setPurchaseSaving] = useState(false)
   const purchaseSavingRef = useRef(false) // กันกดซ้ำแบบ synchronous — ไม่ต้องรอ React re-render
   const [purchaseGroups, setPurchaseGroups] = useState(['material']) // default ติ๊ก material ไว้ก่อน เพิ่มกลุ่มอื่นได้
+  const [masterIngredients, setMasterIngredients] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [sdsMaterialIds, setSdsMaterialIds] = useState(new Set())
 
   async function load() {
     setLoading(true)
-    const d = await db.getMaterials()
-    setMaterials(d); setLoading(false)
+    const [d, mi, sup, sdsIds] = await Promise.all([
+      db.getMaterials(), db.getMasterIngredients(), db.getSuppliers(), db.getSdsMaterialIds(),
+    ])
+    setMaterials(d); setMasterIngredients(mi); setSuppliers(sup); setSdsMaterialIds(sdsIds); setLoading(false)
   }
   useEffect(() => { load() }, [])
 
@@ -787,7 +1127,9 @@ export default function PageMaterials() {
       {modal && (
         <MatModal
           mat={modal === 'new' ? null : modal}
-          onClose={() => setModal(null)}
+          allMasterIngredients={masterIngredients}
+          allSuppliers={suppliers}
+          onClose={() => { setModal(null); load() }}
           onSave={handleSave}
         />
       )}
@@ -844,7 +1186,9 @@ export default function PageMaterials() {
       {filtered.map(m => {
         const evapColor = { Top:S.green, Heart:'#8a3a68', Base:'#7a5c2e' }[m.evaporation] || S.textLt
         const isLow     = (m.stock||0) < 10
-        const hasIfra   = m.ifra_limit != null
+        const mi        = m.master_ingredient
+        const hasIfra   = mi?.ifra_limit != null
+        const hasSds    = !!mi?.sds_url || sdsMaterialIds.has(m.id)
         return (
           <Card key={m.id}
             style={{ padding:'14px 16px',
@@ -868,9 +1212,9 @@ export default function PageMaterials() {
                     </span>
                   )}
                 </div>
-                {m.supplier && (
+                {(m.supplier_info?.name || m.supplier) && (
                   <div style={{ fontSize:11, color:S.gold, marginBottom:3, fontWeight:500 }}>
-                    🏪 {m.supplier}
+                    🏪 {m.supplier_info?.name || m.supplier}
                     {m.purchase_price && m.purchase_size && (
                       <span style={{ color:S.textMid, fontWeight:400 }}>
                         {` · ฿${m.purchase_price}/${m.purchase_size}g`}
@@ -878,7 +1222,17 @@ export default function PageMaterials() {
                     )}
                   </div>
                 )}
-                {m.cas && <div style={{ fontSize:11, color:S.textLt, marginBottom:3 }}>CAS: {m.cas}</div>}
+                {mi?.cas && <div style={{ fontSize:11, color:S.textLt, marginBottom:3 }}>CAS: {mi.cas}</div>}
+                {mi?.inci && <div style={{ fontSize:11, color:S.textLt, marginBottom:3 }}>INCI: {mi.inci}</div>}
+                {mi?.sds_url && (
+                  <div style={{ fontSize:11, marginBottom:3 }}>
+                    <a href={mi.sds_url} target="_blank" rel="noopener noreferrer"
+                      style={{ color:S.gold, textDecoration:'underline' }}
+                      onClick={e => e.stopPropagation()}>
+                      📄 SDS
+                    </a>
+                  </div>
+                )}
                 {m.notes && (
                   <div style={{ fontSize:11, color:S.textMid, marginBottom:4,
                     fontStyle:'italic' }}>♪ {m.notes}</div>
@@ -894,11 +1248,18 @@ export default function PageMaterials() {
                     <span style={{ fontSize:11, color:'#c07820', fontWeight:600,
                       background:'#fff8f0', padding:'1px 7px', borderRadius:10,
                       border:'1px solid #e8c88a' }}>
-                      IFRA ≤{m.ifra_limit}%
+                      IFRA ≤{mi.ifra_limit}%
                     </span>
                   )}
                   {m.dilution != null && (
                     <span style={{ fontSize:12, color:S.textMid }}>{m.dilution}%</span>
+                  )}
+                  {!hasSds && (
+                    <span style={{ fontSize:11, color:'#b0402a', fontWeight:600,
+                      background:'#fdf0ec', padding:'1px 7px', borderRadius:10,
+                      border:'1px solid #f0c4b4' }}>
+                      ⚠️ ไม่มี SDS
+                    </span>
                   )}
                 </div>
               </div>
