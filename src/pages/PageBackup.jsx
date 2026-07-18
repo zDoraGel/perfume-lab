@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { S } from '../constants/theme'
 
 // รายชื่อสำรอง — ใช้เฉพาะกรณี RPC list_public_tables() เรียกไม่ได้
-// ปกติจะดึงรายชื่อ table จริงจาก database ทุกครั้งที่เปิดหน้า
+// ปกติจะดึงรายชื่อ table+view จริงจาก database ทุกครั้งที่เปิดหน้า
 const FALLBACK_TABLES = [
   'accord_items', 'accord_versions', 'accords',
   'adaptation_items', 'adaptation_versions', 'adaptations',
@@ -16,7 +16,7 @@ const FALLBACK_TABLES = [
   'order_items', 'orders', 'product_stock',
   'production_batches', 'quick_notes', 'retail_stock',
   'retail_stock_logs', 'suppliers', 'trend_items',
-]
+].map(name => ({ name, kind: 'table' }))
 
 async function fetchTableList() {
   const { data, error } = await supabase.rpc('list_public_tables')
@@ -24,11 +24,13 @@ async function fetchTableList() {
     console.error('list_public_tables error:', error)
     return { tables: FALLBACK_TABLES, usedFallback: true }
   }
-  const names = (data || [])
-    .map(r => (typeof r === 'string' ? r : r.table_name))
-    .filter(Boolean)
-  if (!names.length) return { tables: FALLBACK_TABLES, usedFallback: true }
-  return { tables: names, usedFallback: false }
+  const items = (data || [])
+    .map(r => (typeof r === 'string'
+      ? { name: r, kind: 'table' }
+      : { name: r.table_name, kind: r.table_kind || 'table' }))
+    .filter(t => t.name)
+  if (!items.length) return { tables: FALLBACK_TABLES, usedFallback: true }
+  return { tables: items, usedFallback: false }
 }
 
 function generateTimestamp() {
@@ -96,7 +98,7 @@ export default function PageBackup() {
       setUsedFallback(fb)
       // default: เลือกทั้งหมด เพื่อไม่ให้ลืม backup table ใหม่
       const sel = {}
-      t.forEach(name => { sel[name] = true })
+      t.forEach(item => { sel[item.name] = true })
       setSelectedTables(sel)
       setLoadingTables(false)
     })
@@ -104,7 +106,7 @@ export default function PageBackup() {
 
   const handleSelectAll = (checked) => {
     const newSelected = {}
-    tables.forEach(t => newSelected[t] = checked)
+    tables.forEach(t => newSelected[t.name] = checked)
     setSelectedTables(newSelected)
   }
 
@@ -130,19 +132,31 @@ export default function PageBackup() {
       let filename = `backup_${timestamp}`
       let totalRows = 0
 
-      // Query ทุก table
-      for (const table of tablesToExport) {
-        setStatus(`กำลัง export... (${table})`)
-        const { data, error } = await supabase.from(table).select('*')
-        if (error) throw new Error(`${table}: ${error.message}`)
+      // Query ทุก table/view
+      for (const tableName of tablesToExport) {
+        const kind = tables.find(t => t.name === tableName)?.kind || 'table'
+        setStatus(`กำลัง export... (${tableName}${kind === 'view' ? ' [view]' : ''})`)
+
+        if (format === 'sql' && kind === 'view') {
+          // View ไม่มีข้อมูลเป็นของตัวเอง — backup เป็น definition แทน (recreate ได้)
+          const { data: viewDef, error: viewErr } = await supabase.rpc('get_view_definition', { view_name: tableName })
+          if (viewErr) throw new Error(`${tableName}: ${viewErr.message}`)
+          content += `-- View: ${tableName}\n`
+          content += `DROP VIEW IF EXISTS ${tableName};\n`
+          content += `CREATE VIEW ${tableName} AS\n${viewDef}\n\n`
+          continue
+        }
+
+        const { data, error } = await supabase.from(tableName).select('*')
+        if (error) throw new Error(`${tableName}: ${error.message}`)
         totalRows += (data?.length || 0)
 
         if (format === 'sql') {
-          content += generateSQLInserts(table, data)
+          content += generateSQLInserts(tableName, data)
         } else if (format === 'json') {
-          content += (content ? ',\n' : '') + generateJSON(table, data)
+          content += (content ? ',\n' : '') + generateJSON(tableName, data)
         } else if (format === 'csv') {
-          content += `\n=== ${table} ===\n` + generateCSV(table, data)
+          content += `\n=== ${tableName}${kind === 'view' ? ' [VIEW]' : ''} ===\n` + generateCSV(tableName, data)
         }
       }
 
@@ -168,7 +182,7 @@ export default function PageBackup() {
     }
   }
 
-  const isAllSelected = tables.length > 0 && tables.every(t => selectedTables[t])
+  const isAllSelected = tables.length > 0 && tables.every(t => selectedTables[t.name])
   const selectedCount = getTablesToExport().length
 
   const labelStyle = {
@@ -233,11 +247,16 @@ export default function PageBackup() {
 
         <div style={{ marginLeft: 24, marginTop: 8 }}>
           {tables.map(table => (
-            <label key={table} style={labelStyle}>
-              <input type="checkbox" checked={selectedTables[table] || false}
-                onChange={e => handleSelectTable(table, e.target.checked)}
+            <label key={table.name} style={labelStyle}>
+              <input type="checkbox" checked={selectedTables[table.name] || false}
+                onChange={e => handleSelectTable(table.name, e.target.checked)}
                 style={checkboxStyle} />
-              {table}
+              {table.name}
+              {table.kind === 'view' && (
+                <span style={{ fontSize:10, fontWeight:600, color:'#8a6f4e',
+                  background:'#fdf4e3', border:'1px solid #e0cda0',
+                  borderRadius:8, padding:'1px 6px' }}>VIEW</span>
+              )}
             </label>
           ))}
         </div>
