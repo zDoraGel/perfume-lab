@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { db } from '../lib/db'
-import { callAI, parseAIJson } from '../lib/ai'
+import { callAI, parseAIJson, MUSK_GUIDELINE } from '../lib/ai'
 import { S, FC } from '../constants/theme'
 import { Btn, BackBtn } from '../components/ui'
 
@@ -149,10 +149,10 @@ function FullFormulaResult({ formula, idea, onSave, savingState }) {
   return (
     <div style={{ padding:'14px 16px', background:S.goldLt, borderRadius:12,
       border:`1px solid ${S.goldBd}`, marginTop:8 }}>
-      {formula.ingredients?.map((ing, i) => (
+      {formula.ingredients?.filter(ing => ing.primary?.name).map((ing, i, arr) => (
         <div key={i} style={{ display:'flex', justifyContent:'space-between',
           alignItems:'center', padding:'7px 0',
-          borderBottom: i < formula.ingredients.length-1 ? `1px solid ${S.border}` : 'none' }}>
+          borderBottom: i < arr.length-1 ? `1px solid ${S.border}` : 'none' }}>
           <div>
             <span style={{ fontSize:9, fontWeight:600, color:S.textMid,
               textTransform:'uppercase', marginRight:8 }}>{ing.role}</span>
@@ -160,6 +160,12 @@ function FullFormulaResult({ formula, idea, onSave, savingState }) {
               fontSize:14, color:S.ink }}>{ing.primary?.name}</span>
             {ing._matched === false && (
               <span style={{ fontSize:9, color:S.red, marginLeft:6 }}>⚠ ไม่พบใน Materials</span>
+            )}
+            {ing._matched !== false && ing._inStock === false && (
+              <span style={{ fontSize:9, color:S.gold, marginLeft:6, background:S.goldLt,
+                padding:'1px 6px', borderRadius:8, border:`1px solid ${S.goldBd}` }}>
+                🛒 ต้องซื้อเพิ่ม
+              </span>
             )}
           </div>
           <span style={{ fontSize:12, color:S.gold }}>
@@ -245,7 +251,7 @@ export default function PageMaterialToFormula({ onBack, onSaved, initialMaterial
     const outStockList = outStockMats.map(m => `${m.name} (${m.family}, evap: ${m.evaporation||'?'})`).join(', ') || '(ไม่มี)'
     const mustUse = selected.map(m => m.name).join(', ')
 
-    const sysPrompt = 'You are a world-class perfumer. Reply with RAW JSON only. No markdown. No backticks. JSON format: {"ingredients":[{"role":"top","primary":{"name":"Bergamot","family":"Citrus","grams":0.5,"ml":0.6,"reason":"Thai 1 sentence"}}],"notes":"Thai 2 sentences"}'
+    const sysPrompt = 'You are a world-class perfumer. Reply with RAW JSON only. No markdown. No backticks. JSON format: {"ingredients":[{"role":"top","primary":{"name":"Bergamot","family":"Citrus","grams":0.5,"ml":0.6,"in_stock":true,"reason":"Thai 1 sentence"}}],"notes":"Thai 2 sentences"} — CRITICAL: every ingredient object MUST have a real, specific "name" plus non-empty "grams" and "ml". NEVER output a role with a blank/empty name — if nothing in stock fits well, pick the best-fitting material from the NOT IN STOCK list instead and set "in_stock":false. Leaving a slot empty is not allowed under any circumstance.'
 
     const userPrompt = [
       `Concept: "${idea.name}" — ${idea.vibe_en}`,
@@ -253,16 +259,21 @@ export default function PageMaterialToFormula({ onBack, onSaved, initialMaterial
       '',
       `MUST INCLUDE these materials (the whole point of this formula): ${mustUse}`,
       '',
-      '✅ MATERIALS ALREADY IN STOCK (use these FIRST for the rest of the pyramid):',
+      '✅ MATERIALS ALREADY IN STOCK (prefer these when they genuinely fit the direction):',
       inStockList,
       '',
-      '🛒 MATERIALS NOT IN STOCK (use only if truly necessary):',
+      '🛒 MATERIALS NOT IN STOCK (fine to use — mark "in_stock":false — if they fit the direction better than anything in stock):',
       outStockList,
       '',
       'Build a complete top/heart/base pyramid around the MUST INCLUDE materials.',
       '- ต้องมี Top note อย่างน้อย 1 ตัว',
       '- ต้องมี Heart note อย่างน้อย 2 ตัว',
       '- ต้องมี Base note อย่างน้อย 2 ตัว',
+      '- ทุก role ที่ระบุต้องมีชื่อวัตถุดิบจริงเสมอ ห้ามเว้นว่างเด็ดขาด',
+      '- ถ้าวัตถุดิบที่เหมาะกับทิศทางนี้ที่สุดไม่มีในสต็อก ให้แนะนำไปเลย (in_stock:false) ดีกว่าฝืนเลือกตัวที่ไม่เหมาะเพราะมีของอยู่แล้ว',
+      '',
+      MUSK_GUIDELINE,
+      '',
       'Batch size: 15ml. Include grams AND ml. Reason in Thai 1 sentence per ingredient.',
     ].join('\n')
 
@@ -273,7 +284,21 @@ export default function PageMaterialToFormula({ onBack, onSaved, initialMaterial
       if (fb > 0) clean = clean.substring(fb, lb + 1)
       const p = parseAIJson(clean)
       if (!p.ingredients) throw new Error('no ingredients')
-      setFullStates(prev => ({ ...prev, [ideaIdx]: p }))
+      // เติมสถานะ match/stock ให้แต่ละ ingredient (ใช้โชว์ badge "ต้องซื้อเพิ่ม" / "ไม่พบใน Materials")
+      const enriched = {
+        ...p,
+        ingredients: (p.ingredients || [])
+          .filter(ing => (ing?.primary?.name || '').trim()) // กันเผื่อ AI ยังหลุดเว้นว่างมา
+          .map(ing => {
+            const mat = matchMaterial(ing.primary.name)
+            return {
+              ...ing,
+              _matched: !!mat,
+              _inStock: mat ? (mat.stock || 0) > 0.1 : (ing.primary.in_stock ?? false),
+            }
+          }),
+      }
+      setFullStates(prev => ({ ...prev, [ideaIdx]: enriched }))
     } catch (e) {
       setFullStates(prev => ({ ...prev, [ideaIdx]: { error: true } }))
     }

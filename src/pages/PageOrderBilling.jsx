@@ -4,6 +4,7 @@ import { db } from '../lib/db'
 import { S } from '../constants/theme'
 import { Btn } from '../components/ui'
 import { getPromptPayQrUrl } from '../lib/promptpay'
+import DiscoveryCard from '../components/DiscoveryCard'
 
 // ล็อกเป็น production URL เสมอ — เหตุผลเดียวกับ Blotter+QR (กัน Vercel preview URL หลุดไปให้ลูกค้า)
 const PRODUCTION_URL = 'https://perfume-lab-brown.vercel.app'
@@ -71,7 +72,7 @@ const CHANNELS = [
 ]
 
 // ── ฟอร์มสร้างออเดอร์ใหม่ ────────────────────────────────────────────────────────
-function NewOrderForm({ formulas, customers, orders, onSaved, onOrderSaved, onViewHistory }) {
+function NewOrderForm({ formulas, customers, orders, discoverySets, onDiscoverySetsChanged, onSaved, onOrderSaved, onViewHistory }) {
   const [channel,         setChannel]         = useState('app')
   const [customerName,    setCustomerName]    = useState('')
   const [customerContact, setCustomerContact] = useState('')
@@ -95,6 +96,39 @@ function NewOrderForm({ formulas, customers, orders, onSaved, onOrderSaved, onVi
 
   function addItem() {
     setItems(p => [...p, { formula_id:'', bottle_ml:15, qty:1, unit_price:String(BOTTLE_SIZE_PRICES[15]), original_price:'', discount_type:null, discount_value:'', discount_reason:'' }])
+  }
+  const [showSetPicker,  setShowSetPicker]  = useState(false)
+  const [showSetManager, setShowSetManager] = useState(false)
+
+  // เพิ่ม 5 รายการจาก Discovery Set — กระจายส่วนลด "fixed" ให้แต่ละขวด
+  // เพื่อให้รวมกันแล้วเท่ากับราคาชุด (เศษไปลงขวดสุดท้าย กันปัดเศษหาย)
+  function addDiscoverySetItems(set) {
+    const n = set.items?.length || 0
+    if (n === 0) { alert('ชุดนี้ยังไม่มีกลิ่นอยู่เลย ไปเพิ่มกลิ่นในหน้าจัดการชุดก่อนค่ะ'); return }
+    const unitFull      = BOTTLE_SIZE_PRICES[5] || 159
+    const totalFull     = unitFull * n
+    const totalDiscount = Math.max(0, totalFull - parseFloat(set.price || 0))
+    const perItem        = Math.floor((totalDiscount / n) * 100) / 100
+    const newItems = set.items.map((it, idx) => {
+      const isLast = idx === n - 1
+      const discountValue = isLast
+        ? Math.round((totalDiscount - perItem * (n - 1)) * 100) / 100
+        : perItem
+      return {
+        formula_id: String(it.formula?.id || ''),
+        bottle_ml: 5, qty: 1,
+        unit_price: String(unitFull),
+        original_price: String(unitFull),
+        discount_type: 'fixed',
+        discount_value: String(discountValue),
+        discount_reason: `Discovery Set: ${set.name}`,
+      }
+    })
+    setItems(p => {
+      const isEmptyStart = p.length === 1 && !p[0].formula_id
+      return isEmptyStart ? newItems : [...p, ...newItems]
+    })
+    setShowSetPicker(false)
   }
   function removeItem(i) {
     setItems(p => p.filter((_, idx) => idx !== i))
@@ -601,11 +635,56 @@ function NewOrderForm({ formulas, customers, orders, onSaved, onOrderSaved, onVi
           </div>
         </div>
       ))}
-      <button onClick={addItem}
-        style={{ fontSize:12, color:S.gold, background:'none', border:'none',
-          cursor:'pointer', fontWeight:600, marginBottom:14, padding:0 }}>
-        + เพิ่มรายการ
-      </button>
+      <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:14, flexWrap:'wrap', position:'relative' }}>
+        <button onClick={addItem}
+          style={{ fontSize:12, color:S.gold, background:'none', border:'none',
+            cursor:'pointer', fontWeight:600, padding:0 }}>
+          + เพิ่มรายการ
+        </button>
+        <button onClick={() => setShowSetPicker(v => !v)}
+          style={{ fontSize:12, color:S.gold, background:'none', border:'none',
+            cursor:'pointer', fontWeight:600, padding:0 }}>
+          🎁 เพิ่ม Discovery Set
+        </button>
+        <button onClick={() => setShowSetManager(true)}
+          style={{ fontSize:11, color:S.textLt, background:'none', border:'none',
+            cursor:'pointer', padding:0 }}>
+          ⚙ จัดการชุด
+        </button>
+
+        {showSetPicker && (
+          <div style={{ position:'absolute', top:'100%', left:0, marginTop:6, zIndex:20,
+            background:S.white, border:`1px solid ${S.border}`, borderRadius:10,
+            boxShadow:'0 4px 16px rgba(0,0,0,.1)', minWidth:240, overflow:'hidden' }}>
+            {(discoverySets || []).filter(s => s.is_active !== false).length === 0 ? (
+              <div style={{ padding:14, fontSize:12, color:S.textLt }}>
+                ยังไม่มี Discovery Set — กด "⚙ จัดการชุด" เพื่อสร้างใหม่
+              </div>
+            ) : (
+              (discoverySets || []).filter(s => s.is_active !== false).map(s => (
+                <div key={s.id} onClick={() => addDiscoverySetItems(s)}
+                  style={{ padding:'10px 14px', cursor:'pointer', fontSize:13,
+                    borderBottom:`1px solid ${S.border}` }}>
+                  <div style={{ fontWeight:600, color:S.ink }}>{s.name}</div>
+                  <div style={{ fontSize:11, color:S.textLt }}>
+                    {(s.items || []).map(it => it.formula?.name).filter(Boolean).join(' · ')}
+                  </div>
+                  <div style={{ fontSize:11, color:S.gold, fontWeight:600, marginTop:2 }}>฿{s.price}</div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {showSetManager && (
+        <DiscoverySetManager
+          formulas={formulas}
+          discoverySets={discoverySets}
+          onClose={() => setShowSetManager(false)}
+          onChanged={onDiscoverySetsChanged}
+        />
+      )}
 
       <input value={notes} onChange={e => setNotes(e.target.value)}
         placeholder="หมายเหตุ (ถ้ามี)" style={{ ...inputStyle, marginBottom:14 }}/>
@@ -1308,24 +1387,185 @@ function CustomerList({ customers, orders, onUpdated }) {
   )
 }
 
+// ── Discovery Set Manager (CRUD ชุด 5 กลิ่น) ────────────────────────────────────
+function DiscoverySetManager({ formulas, discoverySets, onClose, onChanged }) {
+  const [editing,     setEditing]     = useState(null) // null=list, 'new', หรือ set object
+  const [cardSet,     setCardSet]     = useState(null) // set ที่กำลังเปิดดู/ทำการ์ดอยู่
+  const [name,        setName]        = useState('')
+  const [price,       setPrice]       = useState('')
+  const [description, setDescription] = useState('')
+  const [pickedIds,   setPickedIds]   = useState([]) // string[] ของ formula.id ตามลำดับที่เลือก
+  const [saving,      setSaving]      = useState(false)
+
+  function startEdit(set) {
+    if (set === 'new') {
+      setName(''); setPrice(''); setDescription(''); setPickedIds([])
+    } else {
+      setName(set.name); setPrice(String(set.price)); setDescription(set.description || '')
+      setPickedIds((set.items || []).map(it => String(it.formula?.id)).filter(Boolean))
+    }
+    setEditing(set)
+  }
+
+  function toggleFormula(fid) {
+    setPickedIds(p => {
+      if (p.includes(fid)) return p.filter(x => x !== fid)
+      if (p.length >= 5) { alert('เลือกได้สูงสุด 5 กลิ่นต่อชุด'); return p }
+      return [...p, fid]
+    })
+  }
+
+  async function save() {
+    if (!name.trim() || !price) { alert('กรอกชื่อชุดและราคาก่อนค่ะ'); return }
+    if (pickedIds.length !== 5) { alert(`ตอนนี้เลือกไว้ ${pickedIds.length} กลิ่น — ต้องครบ 5 กลิ่นถึงจะบันทึกได้`); return }
+    setSaving(true)
+    const payload = { name: name.trim(), price: parseFloat(price), description: description.trim() || null, formulaIds: pickedIds }
+    try {
+      if (editing === 'new') await db.createDiscoverySet(payload)
+      else await db.updateDiscoverySet(editing.id, { ...payload, is_active: editing.is_active ?? true })
+      setEditing(null)
+      await onChanged?.()
+    } catch (e) {
+      console.error('[DiscoverySetManager save]', e)
+      alert('บันทึกไม่สำเร็จ: ' + e.message)
+    }
+    setSaving(false)
+  }
+
+  async function toggleActive(set) {
+    await db.updateDiscoverySet(set.id, { name: set.name, price: set.price, description: set.description, is_active: !(set.is_active !== false) })
+    await onChanged?.()
+  }
+
+  async function handleDelete(set) {
+    if (!window.confirm(`ลบชุด "${set.name}" ? (ออเดอร์เก่าที่เคยขายไปแล้วไม่กระทบ)`)) return
+    await db.deleteDiscoverySet(set.id)
+    await onChanged?.()
+  }
+
+  return (
+    <>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:100,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:S.white, borderRadius:16, padding:20, width:'100%', maxWidth:480,
+        maxHeight:'85vh', overflowY:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:S.ink }}>🎁 จัดการ Discovery Set</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:S.textLt }}>×</button>
+        </div>
+
+        {!editing ? (
+          <>
+            <button onClick={() => startEdit('new')}
+              style={{ width:'100%', padding:'10px', borderRadius:10, marginBottom:14,
+                border:`1px dashed ${S.goldBd}`, background:'none', color:S.gold, cursor:'pointer', fontSize:13 }}>
+              + สร้างชุดใหม่
+            </button>
+            {(discoverySets || []).length === 0 ? (
+              <div style={{ fontSize:12, color:S.textLt, textAlign:'center', padding:20 }}>ยังไม่มีชุดเลย</div>
+            ) : (
+              discoverySets.map(s => (
+                <div key={s.id} style={{ padding:'10px 12px', borderRadius:10, border:`1px solid ${S.border}`,
+                  marginBottom:8, opacity: s.is_active === false ? 0.5 : 1 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight:600, fontSize:13, color:S.ink }}>
+                        {s.name} {s.is_active === false && <span style={{ fontSize:10, color:S.textLt }}>(ปิดขาย)</span>}
+                      </div>
+                      <div style={{ fontSize:11, color:S.textLt, marginTop:2 }}>
+                        {(s.items || []).map(it => it.formula?.name).filter(Boolean).join(' · ') || 'ยังไม่มีกลิ่น'}
+                      </div>
+                      <div style={{ fontSize:12, color:S.gold, fontWeight:600, marginTop:2 }}>฿{s.price}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, marginTop:8, flexWrap:'wrap' }}>
+                    <button onClick={() => setCardSet(s)}
+                      style={{ fontSize:11, color:S.gold, background:'none', border:`1px solid ${S.goldBd}`,
+                        borderRadius:8, padding:'4px 10px', cursor:'pointer' }}>🎴 การ์ด</button>
+                    <button onClick={() => startEdit(s)}
+                      style={{ fontSize:11, color:S.textMid, background:'none', border:`1px solid ${S.border}`,
+                        borderRadius:8, padding:'4px 10px', cursor:'pointer' }}>แก้ไข</button>
+                    <button onClick={() => toggleActive(s)}
+                      style={{ fontSize:11, color:S.textMid, background:'none', border:`1px solid ${S.border}`,
+                        borderRadius:8, padding:'4px 10px', cursor:'pointer' }}>
+                      {s.is_active === false ? 'เปิดขาย' : 'ปิดขาย'}
+                    </button>
+                    <button onClick={() => handleDelete(s)}
+                      style={{ fontSize:11, color:'#b0402a', background:'none', border:'1px solid #f0c4b4',
+                        borderRadius:8, padding:'4px 10px', cursor:'pointer' }}>ลบ</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        ) : (
+          <>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="ชื่อชุด เช่น Discovery Set A"
+              style={{ ...inputStyle, marginBottom:10 }}/>
+            <input value={price} onChange={e => setPrice(e.target.value)} type="number" placeholder="ราคารวมทั้งชุด (บาท)"
+              style={{ ...inputStyle, marginBottom:10 }}/>
+            <input value={description} onChange={e => setDescription(e.target.value)} placeholder="คำอธิบายสั้นๆ (ถ้ามี)"
+              style={{ ...inputStyle, marginBottom:14 }}/>
+
+            <div style={{ fontSize:11, color:S.textMid, fontWeight:600, marginBottom:8 }}>
+              เลือกกลิ่น ({pickedIds.length}/5)
+            </div>
+            <div style={{ maxHeight:220, overflowY:'auto', border:`1px solid ${S.border}`, borderRadius:10, marginBottom:14 }}>
+              {formulas.map(f => (
+                <label key={f.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px',
+                  fontSize:13, borderBottom:`1px solid ${S.border}`, cursor:'pointer' }}>
+                  <input type="checkbox" checked={pickedIds.includes(String(f.id))}
+                    onChange={() => toggleFormula(String(f.id))}/>
+                  {f.name}
+                  {pickedIds.includes(String(f.id)) && (
+                    <span style={{ marginLeft:'auto', fontSize:11, color:S.gold, fontWeight:600 }}>
+                      #{pickedIds.indexOf(String(f.id)) + 1}
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setEditing(null)}
+                style={{ flex:1, padding:'10px', borderRadius:10, border:`1px solid ${S.border}`,
+                  background:'none', color:S.textMid, cursor:'pointer', fontSize:13 }}>ยกเลิก</button>
+              <button onClick={save} disabled={saving}
+                style={{ flex:2, padding:'10px', borderRadius:10, border:'none',
+                  background:S.gold, color:'#fff', fontWeight:600, cursor:'pointer', fontSize:13 }}>
+                {saving ? 'กำลังบันทึก...' : 'บันทึกชุด'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+    {cardSet && <DiscoveryCard discoverySet={cardSet} onClose={() => setCardSet(null)}/>}
+    </>
+  )
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function PageOrderBilling() {
   const [tab,       setTab]       = useState('new') // 'new' | 'history'
   const [formulas,  setFormulas]  = useState([])
   const [customers, setCustomers] = useState([])
   const [orders,    setOrders]    = useState([])
+  const [discoverySets, setDiscoverySets] = useState([])
   const [loading,   setLoading]   = useState(true)
   const [formKey,   setFormKey]   = useState(0)
 
   async function loadAll() {
-    const [{ data: f }, { data: c }, { data: o }] = await Promise.all([
+    const [{ data: f }, { data: c }, { data: o }, sets] = await Promise.all([
       supabase.from('formulas').select('id, name').eq('lot_status', 'active'),
       supabase.from('customers').select('*').order('name'),
       supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending:false }),
+      db.getDiscoverySets(),
     ])
     setFormulas(f || [])
     setCustomers(c || [])
     setOrders((o || []).map(ord => ({ ...ord, items: ord.order_items || [] })))
+    setDiscoverySets(sets || [])
     setLoading(false)
   }
 
@@ -1402,6 +1642,7 @@ export default function PageOrderBilling() {
 
       {tab === 'new' && (
         <NewOrderForm key={formKey} formulas={formulas} customers={customers} orders={orders}
+          discoverySets={discoverySets} onDiscoverySetsChanged={loadAll}
           onSaved={() => { loadAll(); setFormKey(k => k+1) }}
           onOrderSaved={loadAll}
           onViewHistory={() => { loadAll(); setTab('history') }}/>

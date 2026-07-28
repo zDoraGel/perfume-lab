@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from '../lib/db'
-import { callAI, parseAIJson } from '../lib/ai'
+import { callAI, parseAIJson, MUSK_GUIDELINE } from '../lib/ai'
 import { S, inputStyle } from '../constants/theme'
 import { Btn, BackBtn, TextInput, TextArea, SelectInput, Field } from '../components/ui'
 import StockRecommendations from '../components/StockRecommendations'
@@ -95,6 +95,9 @@ export default function PageNewVersion({ formula, versions, onBack, onSave }) {
       '- ต้องมี Base note อย่างน้อย 2 ตัว',
       '- สัดส่วน: Top 15-25%, Heart 35-45%, Base 35-45% ของ total grams',
       '- reason in Thai (1 sentence), similarity in Thai, note = how to adjust amount',
+      '',
+      MUSK_GUIDELINE,
+      '',
       (() => {
         const cxPrompt = {
           simple:   'Formula complexity: simple — keep it minimal, 4-6 ingredients max, clean pyramid',

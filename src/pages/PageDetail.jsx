@@ -470,6 +470,7 @@ function VersionCard({ ver, isLatest, formula, materials, versions = [], setVers
               materials={materials}
               scaleMl={scaleMl}
               batchMl={batchMl}
+              formula={formula}
               onSaveNewVersion={async (draft, extraIngs) => {
                 function getDensity(family) {
                   const d = { Citrus:.87, Fresh:.88, Floral:.95, Woody:1.0, Musk:1.0, Ambery:1.05, Spicy:1.02, Gourmand:1.0 }

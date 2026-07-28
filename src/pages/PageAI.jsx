@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from '../lib/db'
-import { callAI, parseAIJson } from '../lib/ai'
+import { callAI, parseAIJson, MUSK_GUIDELINE } from '../lib/ai'
 import { S } from '../constants/theme'
 import { Card, Btn, BackBtn } from '../components/ui'
 
@@ -663,13 +663,15 @@ VIBE
 [3-5 keywords/phrases ที่ capture กลิ่นนี้]
 
 MATERIALS
-[materials หลักที่ควรใช้ บรรทัดละ 1 ตัว]
+[materials หลักที่ควรใช้ บรรทัดละ 1 ตัว — ถ้าเป็นกลุ่ม musk (White Musk, Musk, Galaxolide, Ambrettolide, Habanolide, Cashmeran, Exaltolide ฯลฯ) ใส่ได้ไม่เกิน 2 ตัวในลิสต์นี้]
 
 AVOID
-[สิ่งที่ต้องหลีกเลี่ยง บรรทัดละ 1 ข้อ]
+[สิ่งที่ต้องหลีกเลี่ยง บรรทัดละ 1 ข้อ — ถ้า MATERIALS ด้านบนมี musk ครบ 2 ตัวแล้ว ให้เพิ่มบรรทัด "Stacking musk เกิน 2 ตัว (เสี่ยง muddy/musty base)" ไว้ใน AVOID ด้วย]
 
 SUMMARY
-[2-3 บรรทัด สรุป contrast เช่น "Fresh but not citrus. Soft but not powdery."]`,
+[2-3 บรรทัด สรุป contrast เช่น "Fresh but not citrus. Soft but not powdery."]
+
+${MUSK_GUIDELINE}`,
       `Formula: "${formula.name}"\nVibe: ${formula.vibe||''}\n\n${briefText}\n\nVersion history:\n${hists.join('\n')}`
     )
     setProfile(r.trim())
@@ -689,7 +691,9 @@ SUMMARY
 - ต้องมี Heart note อย่างน้อย 2 ตัว
 - ต้องมี Base note อย่างน้อย 2 ตัว
 - สัดส่วนโดยรวม: Top 15-25%, Heart 35-45%, Base 35-45%
-- total_grams รวมกันต้องได้ประมาณ 15g`
+- total_grams รวมกันต้องได้ประมาณ 15g
+
+${MUSK_GUIDELINE}`
     const prompt = tab === 'analyze'
       ? `Formula: "${formula.name}"\n\nTarget Profile:\n${profile}\n\nHistory:\n${hists.join('\n')}\n\nStock: ${stockList}\n\nแนะนำ V${nextVer} ที่ตรง Target Profile ใช้เฉพาะ material ใน stock`
       : `Formula: "${formula.name}" V${latest.ver}(${latest.status})\n\nTarget Profile:\n${profile}\n\nHistory:\n${hists.join('\n')}\n\nStock: ${stockList}\n\nแนะนำ V${nextVer} ปรับปรุงจาก V${latest.ver} ให้ตรง Target Profile`

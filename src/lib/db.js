@@ -14,11 +14,13 @@ export const db = {
     return data || []
   },
   async createSupplier(payload) {
-    const { data } = await supabase.from('suppliers').insert(payload).select().single()
+    const { data, error } = await supabase.from('suppliers').insert(payload).select().single()
+    if (error) throw new Error(error.message)
     return data
   },
   async updateSupplier(id, payload) {
-    await supabase.from('suppliers').update(payload).eq('id', id)
+    const { error } = await supabase.from('suppliers').update(payload).eq('id', id)
+    if (error) throw new Error(error.message)
   },
 
   // ── Material Documents (SDS / IFRA Cert / COA) ───────────────────────────────
@@ -60,18 +62,22 @@ export const db = {
     return data || []
   },
   async createMasterIngredient(payload) {
-    const { data } = await supabase.from('master_ingredients').insert(payload).select().single()
+    const { data, error } = await supabase.from('master_ingredients').insert(payload).select().single()
+    if (error) throw new Error(error.message)
     return data
   },
   async updateMasterIngredient(id, payload) {
-    await supabase.from('master_ingredients').update(payload).eq('id', id)
+    const { error } = await supabase.from('master_ingredients').update(payload).eq('id', id)
+    if (error) throw new Error(error.message)
   },
   async createMaterial(data) {
-    const { data: d } = await supabase.from('materials').insert(data).select().single()
+    const { data: d, error } = await supabase.from('materials').insert(data).select().single()
+    if (error) throw new Error(error.message)
     return d
   },
   async updateMaterial(id, data) {
-    await supabase.from('materials').update(data).eq('id', id)
+    const { error } = await supabase.from('materials').update(data).eq('id', id)
+    if (error) throw new Error(error.message)
   },
   async deleteMaterial(id) {
     await supabase.from('materials').delete().eq('id', id)
@@ -1166,4 +1172,43 @@ export const db = {
       .select('id')
     return balance
   },
+
+  // ── Discovery Sets (ชุด 5 กลิ่น ราคารวม — เทมเพลตแก้ไขได้ตลอด) ───────────────
+  async getDiscoverySets() {
+    const { data } = await supabase.from('discovery_sets')
+      .select('*, discovery_set_items(id, sort_order, formula:formulas(id, name, name_meaning, vibe, feeling))')
+      .order('created_at')
+    return (data || []).map(s => ({
+      ...s,
+      items: (s.discovery_set_items || []).sort((a,b) => a.sort_order - b.sort_order),
+    }))
+  },
+  async createDiscoverySet({ name, price, description, formulaIds }) {
+    const { data: set, error } = await supabase.from('discovery_sets')
+      .insert({ name, price, description: description || null }).select().single()
+    if (error) throw new Error(error.message)
+    if (set && formulaIds?.length) {
+      const { error: itemsErr } = await supabase.from('discovery_set_items').insert(
+        formulaIds.map((fid, i) => ({ discovery_set_id: set.id, formula_id: fid, sort_order: i }))
+      )
+      if (itemsErr) throw new Error(itemsErr.message)
+    }
+    return set
+  },
+  async updateDiscoverySet(id, { name, price, description, is_active, formulaIds }) {
+    const { error } = await supabase.from('discovery_sets').update({ name, price, description, is_active }).eq('id', id)
+    if (error) throw new Error(error.message)
+    if (formulaIds) {
+      // แทนที่รายการกลิ่นทั้งหมดใหม่ — ง่ายและชัวร์สุดตอนสลับกลิ่นในชุด
+      await supabase.from('discovery_set_items').delete().eq('discovery_set_id', id)
+      const { error: itemsErr } = await supabase.from('discovery_set_items').insert(
+        formulaIds.map((fid, i) => ({ discovery_set_id: id, formula_id: fid, sort_order: i }))
+      )
+      if (itemsErr) throw new Error(itemsErr.message)
+    }
+  },
+  async deleteDiscoverySet(id) {
+    await supabase.from('discovery_sets').delete().eq('id', id)
+  },
 }
+

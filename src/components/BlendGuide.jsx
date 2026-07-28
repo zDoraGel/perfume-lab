@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { S, FC } from '../constants/theme'
 import { callAI } from '../lib/ai'
+import { db } from '../lib/db'
 import MaterialPicker from './MaterialPicker'
 
 function isEssential(item, allItems) {
@@ -458,10 +459,21 @@ function GuideSection({ label, color, children }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function BlendGuide({ items = [], materials = [], scaleMl, batchMl = 15, onSaveNewVersion, formula = {} }) {
-  const [draft,     setDraft]     = useState([])
-  const [saving,    setSaving]    = useState(false)
-  const [extraIngs, setExtraIngs] = useState([]) // manual add-on
-  const [showExtra, setShowExtra] = useState(false)
+  const [draft,      setDraft]      = useState([])
+  const [saving,     setSaving]     = useState(false)
+  const [extraIngs,  setExtraIngs]  = useState([]) // manual add-on
+  const [showExtra,  setShowExtra]  = useState(false)
+  const [complexity, setComplexity] = useState(formula.complexity || 'standard')
+  const [savingComplexity, setSavingComplexity] = useState(false)
+
+  async function changeComplexity(newVal) {
+    setComplexity(newVal) // อัปเดต UI ทันที ไม่ต้องรอ save
+    if (!formula.id) return
+    setSavingComplexity(true)
+    try { await db.updateFormula(formula.id, { complexity: newVal }) }
+    catch (e) { console.error('[BlendGuide changeComplexity]', e) }
+    setSavingComplexity(false)
+  }
 
   // ── Rebalance: คง Top:Heart:Base ratio แล้วคำนวณ g ใหม่ทุกตัว ──────────────────
   function rebalance() {
@@ -596,13 +608,15 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
       </div>
 
       {/* Draft summary */}
-      {draft.length > 0 && (
+      {(draft.length > 0 || extraIngs.filter(e=>e.matId&&e.grams).length > 0) && (
         <div style={{ padding:'12px 14px', background:S.amberBg, borderRadius:12,
           border:`1px solid ${S.goldBd}`, marginBottom:12 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:S.amber,
-            textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
-            📝 Draft — {draft.length} การเปลี่ยนแปลง
-          </div>
+          {draft.length > 0 && (
+            <div style={{ fontSize:11, fontWeight:700, color:S.amber,
+              textTransform:'uppercase', letterSpacing:.8, marginBottom:8 }}>
+              📝 Draft — {draft.length} การเปลี่ยนแปลง
+            </div>
+          )}
           {draft.map((d, i) => (
             <div key={i} style={{ display:'flex', justifyContent:'space-between',
               alignItems:'center', marginBottom:6 }}>
@@ -623,6 +637,12 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
                   cursor:'pointer' }}>ยกเลิก</button>
             </div>
           ))}
+          {extraIngs.filter(e=>e.matId&&e.grams).length > 0 && (
+            <div style={{ fontSize:12, color:S.gold, fontFamily:'Cormorant Garamond,serif',
+              fontStyle:'italic', marginBottom:6 }}>
+              + เพิ่ม {extraIngs.filter(e=>e.matId&&e.grams).length} ตัวใหม่ (ดูรายละเอียดในช่อง "+ เพิ่ม Ingredient เอง" ด้านล่าง)
+            </div>
+          )}
           <button onClick={saveDraftAsVersion} disabled={saving}
             style={{ width:'100%', marginTop:8, padding:'10px 0', borderRadius:10,
               cursor:'pointer', fontFamily:'Inter,sans-serif', fontSize:13, fontWeight:700,
@@ -659,7 +679,7 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
       {/* ── เพิ่ม ingredient เอง ── */}
       {(() => {
         const maxMap = { simple:6, standard:10, complex:15 }
-        const max    = maxMap[formula.complexity || 'standard'] || 10
+        const max    = maxMap[complexity] || 10
         const removedCount = draft.filter(d=>d.action==='remove').length
         const current = items.length - removedCount + extraIngs.length
         const canAdd  = current < max
@@ -667,7 +687,7 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
           <div style={{ marginBottom:12, padding:'12px 14px', borderRadius:12,
             background:S.goldLt, border:`1px solid ${S.goldBd}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-              marginBottom: showExtra ? 10 : 0 }}>
+              marginBottom: 8, flexWrap:'wrap', gap:6 }}>
               <div style={{ fontSize:10, fontWeight:700, color:S.gold,
                 letterSpacing:.8, textTransform:'uppercase' }}>
                 + เพิ่ม Ingredient เอง
@@ -689,6 +709,25 @@ export default function BlendGuide({ items = [], materials = [], scaleMl, batchM
                   <span style={{ fontSize:10, color:S.red }}>ถึง max แล้ว</span>
                 )}
               </div>
+            </div>
+
+            {/* เปลี่ยนระดับความซับซ้อน — ปลดล็อก max ได้เองตรงนี้ ไม่ต้องรอแก้สูตรใหม่ */}
+            <div style={{ display:'flex', gap:6, marginBottom: showExtra ? 10 : 0 }}>
+              {[
+                { v:'simple',   l:'Simple (6)' },
+                { v:'standard', l:'Standard (10)' },
+                { v:'complex',  l:'Complex (15)' },
+              ].map(opt => (
+                <button key={opt.v} onClick={() => changeComplexity(opt.v)} disabled={savingComplexity}
+                  style={{ flex:1, padding:'5px 4px', borderRadius:8, cursor:'pointer',
+                    fontSize:10, fontFamily:'Inter,sans-serif',
+                    border:`1px solid ${complexity===opt.v ? S.gold : S.goldBd}`,
+                    background: complexity===opt.v ? S.gold : 'transparent',
+                    color: complexity===opt.v ? '#fff' : S.gold,
+                    fontWeight: complexity===opt.v ? 600 : 400 }}>
+                  {opt.l}
+                </button>
+              ))}
             </div>
 
             {showExtra && (

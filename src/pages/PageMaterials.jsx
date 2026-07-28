@@ -163,7 +163,7 @@ function MatModal({ mat, allMasterIngredients, allSuppliers, onClose, onSave }) 
   const FAMILIES_EXT = [
     'Woody','Floral','Citrus','Ambery','Musk','Fresh','Spicy','Gourmand',
     'Marine','Ozonic','Aquatic','Fresh Air','Green','Aromatic','Chypre','Fougere',
-    'White Floral',
+    'White Floral','Creamy',
   ]
 
   const [name,          setName]          = useState(mat?.name || '')
@@ -230,7 +230,7 @@ function MatModal({ mat, allMasterIngredients, allSuppliers, onClose, onSave }) 
     else if (Array.isArray(f)) arr = f
     else try { arr = JSON.parse(f) } catch { arr = mat?.family ? [mat.family] : [] }
     // filter เฉพาะที่อยู่ใน FAMILIES list
-    const ALL_FAM = ['Woody','Floral','Citrus','Ambery','Musk','Fresh','Spicy','Gourmand','Marine','Ozonic','Aquatic','Fresh Air','Green','Aromatic','Chypre','Fougere']
+    const ALL_FAM = ['Woody','Floral','Citrus','Ambery','Musk','Fresh','Spicy','Gourmand','Marine','Ozonic','Aquatic','Fresh Air','Green','Aromatic','Chypre','Fougere','White Floral','Creamy']
     return arr.filter(x => ALL_FAM.includes(x))
   })
   const [stock,         setStock]         = useState(mat?.stock ?? '')
@@ -255,51 +255,56 @@ function MatModal({ mat, allMasterIngredients, allSuppliers, onClose, onSave }) 
   async function save() {
     if (!name.trim()) return
     setSaving(true)
-    let finalMiId = miId
-    if (!finalMiId && showCreateMi) {
-      const newMi = await db.createMasterIngredient({
-        name:          (newMiName.trim() || name.trim()),
-        inci:          newMiInci.trim() || null,
-        cas:           newMiCas.trim() || null,
-        sds_url:       newMiSdsUrl.trim() || null,
-        ifra_limit:    newMiIfraLimit !== '' ? parseFloat(newMiIfraLimit) : null,
-        ifra_category: newMiIfraCategory || 'leave-on',
-      })
-      finalMiId = newMi?.id || null
+    try {
+      let finalMiId = miId
+      if (!finalMiId && showCreateMi) {
+        const newMi = await db.createMasterIngredient({
+          name:          (newMiName.trim() || name.trim()),
+          inci:          newMiInci.trim() || null,
+          cas:           newMiCas.trim() || null,
+          sds_url:       newMiSdsUrl.trim() || null,
+          ifra_limit:    newMiIfraLimit !== '' ? parseFloat(newMiIfraLimit) : null,
+          ifra_category: newMiIfraCategory || 'leave-on',
+        })
+        finalMiId = newMi?.id || null
+      }
+      let finalSupplierId = supplierId
+      if (!finalSupplierId && showCreateSupplier && newSupplierName.trim()) {
+        const newSup = await db.createSupplier({
+          name:    newSupplierName.trim(),
+          website: newSupplierWebsite.trim() || null,
+          email:   newSupplierEmail.trim() || null,
+          country: newSupplierCountry.trim() || null,
+        })
+        finalSupplierId = newSup?.id || null
+      }
+      const finalCost = autoCost ? parseFloat(autoCost) : (cost !== '' ? parseFloat(cost) : null)
+      const payload = {
+        name: name.trim(),
+        master_ingredient_id: finalMiId,
+        supplier_id: finalSupplierId,
+        family: families[0] || null,
+        families:       families.length > 0 ? families : null,
+        stock:          stock         !== '' ? parseFloat(stock)         : 0,
+        cost:           finalCost,
+        dilution:       dilution      !== '' ? parseFloat(dilution)      : null,
+        evaporation:    evap,
+        purchase_price: purchasePrice !== '' ? parseFloat(purchasePrice) : null,
+        purchase_size:  purchaseSize  !== '' ? parseFloat(purchaseSize)  : null,
+        notes:          notes.trim() || null,
+        scent_profile:  scentProfile.trim() || null,
+        performance:    performance.trim() || null,
+        effect:         effect.trim() || null,
+        is_key:         isKey,
+        stock_alert_at: stockAlertAt !== '' ? parseFloat(stockAlertAt) : null,
+      }
+      await onSave(payload)
+      onClose()
+    } catch (e) {
+      console.error('[MatModal save]', e)
+      alert('บันทึกไม่สำเร็จ: ' + e.message)
     }
-    let finalSupplierId = supplierId
-    if (!finalSupplierId && showCreateSupplier && newSupplierName.trim()) {
-      const newSup = await db.createSupplier({
-        name:    newSupplierName.trim(),
-        website: newSupplierWebsite.trim() || null,
-        email:   newSupplierEmail.trim() || null,
-        country: newSupplierCountry.trim() || null,
-      })
-      finalSupplierId = newSup?.id || null
-    }
-    const finalCost = autoCost ? parseFloat(autoCost) : (cost !== '' ? parseFloat(cost) : null)
-    const payload = {
-      name: name.trim(),
-      master_ingredient_id: finalMiId,
-      supplier_id: finalSupplierId,
-      family: families[0] || null,
-      families:       families.length > 0 ? families : null,
-      stock:          stock         !== '' ? parseFloat(stock)         : 0,
-      cost:           finalCost,
-      dilution:       dilution      !== '' ? parseFloat(dilution)      : null,
-      evaporation:    evap,
-      purchase_price: purchasePrice !== '' ? parseFloat(purchasePrice) : null,
-      purchase_size:  purchaseSize  !== '' ? parseFloat(purchaseSize)  : null,
-      notes:          notes.trim() || null,
-      scent_profile:  scentProfile.trim() || null,
-      performance:    performance.trim() || null,
-      effect:         effect.trim() || null,
-      is_key:         isKey,
-      stock_alert_at: stockAlertAt !== '' ? parseFloat(stockAlertAt) : null,
-    }
-    await onSave(payload)
     setSaving(false)
-    onClose()
   }
 
   return (

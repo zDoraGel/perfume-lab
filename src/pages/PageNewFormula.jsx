@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
-import { callAI, parseAIJson } from '../lib/ai'
+import { callAI, parseAIJson, MUSK_GUIDELINE } from '../lib/ai'
 import { S } from '../constants/theme'
 import { Btn, BackBtn } from '../components/ui'
 import StockRecommendations from '../components/StockRecommendations'
@@ -104,6 +104,8 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
   const [complexity,    setComplexity]    = useState('standard')
   const [formulaSugg,   setFormulaSugg]   = useState(null)
   const [formulaLoading,setFormulaLoading]= useState(false)
+  const [routeOptions,  setRouteOptions]  = useState(null) // 3 ทางเลือก (Alternative Route)
+  const [selectedRouteIdx, setSelectedRouteIdx] = useState(0)
   const [selectedChoice,setSelectedChoice]= useState({})
   const [expandedIng,   setExpandedIng]   = useState(null)
   const [overrideGrams, setOverrideGrams] = useState({})
@@ -663,7 +665,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
 
   // ── Generate formula ────────────────────────────────────────────────────────
   async function genFormula() {
-    setFormulaLoading(true); setFormulaSugg(null); setSelectedChoice({}); setExpandedIng(null); setExtraIngs([{matId:'',grams:'',ml:''}]); setOverrideGrams({}); setOverrideMl({})
+    setFormulaLoading(true); setFormulaSugg(null); setRouteOptions(null); setSelectedRouteIdx(0); setSelectedChoice({}); setExpandedIng(null); setExtraIngs([{matId:'',grams:'',ml:''}]); setOverrideGrams({}); setOverrideMl({})
     const inStockMats  = materials.filter(m => (m.stock || 0) > 0.1)
     const outStockMats = materials.filter(m => !((m.stock || 0) > 0.1))
     const inStockList  = inStockMats.map(m => m.name + ' (' + m.family + ', stock: ' + m.stock + 'g, evap: ' + (m.evaporation||'?') + ')').join(', ') || '(ไม่มี)'
@@ -675,7 +677,7 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       complex:  'Formula complexity: complex — rich layered niche structure, aim for 10-15 ingredients, add supporting notes for depth, diffusion, longevity and smooth transitions.',
     }[complexity]
 
-    const sysPrompt = 'You are a world-class perfumer. Reply with RAW JSON only. No markdown. No backticks. No explanation. JSON format: {"ingredients":[{"role":"top","primary":{"name":"Bergamot","family":"Citrus","grams":0.5,"ml":0.6,"reason":"Thai 1 sentence"},"alternatives":[{"name":"Lemon","family":"Citrus","grams":0.4,"ml":0.5,"similarity":"Thai","note":"Thai"},{"name":"Lime","family":"Citrus","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"},{"name":"Grapefruit","family":"Citrus","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"},{"name":"Yuzu","family":"Citrus","grams":0.4,"ml":0.5,"similarity":"Thai","note":"Thai"},{"name":"Petitgrain","family":"Fresh","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"}]}],"notes":"Thai 2 sentences"}'
+    const sysPrompt = 'You are a world-class perfumer. Reply with RAW JSON only. No markdown. No backticks. No explanation. JSON format: {"routes":[{"route_name":"Linen","route_desc":"Thai 1 sentence: what makes this route different","ingredients":[{"role":"top","primary":{"name":"Bergamot","family":"Citrus","grams":0.5,"ml":0.6,"reason":"Thai 1 sentence","risk":"low","confidence":90},"alternatives":[{"name":"Lemon","family":"Citrus","grams":0.4,"ml":0.5,"similarity":"Thai","note":"Thai"},{"name":"Lime","family":"Citrus","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"},{"name":"Grapefruit","family":"Citrus","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"},{"name":"Yuzu","family":"Citrus","grams":0.4,"ml":0.5,"similarity":"Thai","note":"Thai"},{"name":"Petitgrain","family":"Fresh","grams":0.5,"ml":0.6,"similarity":"Thai","note":"Thai"}]}],"notes":"Thai 2 sentences","why_expensive":"Thai 1-2 sentences: ทำไมสูตรนี้ถึงให้ความรู้สึกหรูหรา (เพราะทุกตัวมีหน้าที่ชัดเจน ไม่ใช่เพราะดังกว่าหรือแพงกว่า)"}]} — MUST return EXACTLY 3 routes in the array, each a genuinely different structural direction (e.g. one leans linen/fabric, one leans skin-scent, one leans different accord entirely) not just minor tweaks of each other. "risk" is "low"|"medium"|"high" (how likely this material choice causes an unwanted effect e.g. muddy/too strong/clashing). "confidence" is 0-100 (how sure you are this material is the right choice for this role).'
 
     const userPrompt = [
       compiledPrompt,
@@ -688,9 +690,9 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       '🛒 MATERIALS NOT IN STOCK (would require new purchase — use ONLY if no suitable in-stock material exists for that role):',
       outStockList,
       '',
-      'Create a formula that EXACTLY matches the person and vibe description above.',
-      'STRICTLY follow the Target pyramid ratio from VIBE INTELLIGENCE section.',
-      'PRIORITY RULE: Build the formula primarily from "MATERIALS ALREADY IN STOCK". Only pick from "NOT IN STOCK" list when truly necessary for the vibe (e.g. a defining note that nothing in-stock can substitute) — and when you do, say so briefly in the Thai reason ("ต้องซื้อใหม่เพราะ...").',
+      'Create 3 alternative formula ROUTES that EACH exactly match the person and vibe description above, but take genuinely different structural approaches (see route examples in the JSON format).',
+      'STRICTLY follow the Target pyramid ratio from VIBE INTELLIGENCE section for every route.',
+      'PRIORITY RULE: Build each route primarily from "MATERIALS ALREADY IN STOCK". Only pick from "NOT IN STOCK" list when truly necessary for the vibe (e.g. a defining note that nothing in-stock can substitute) — and when you do, say so briefly in the Thai reason ("ต้องซื้อใหม่เพราะ...").',
       'For "alternatives" of each ingredient: list in-stock options BEFORE out-of-stock options whenever quality/relevance is comparable.',
       '5 alternatives per ingredient, ranked best to worst (in-stock first when comparable).',
       'Include grams AND ml for every option.',
@@ -698,7 +700,11 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       '- ต้องมี Top note อย่างน้อย 1 ตัว',
       '- ต้องมี Heart note อย่างน้อย 2 ตัว',
       '- ต้องมี Base note อย่างน้อย 2 ตัว',
-      'Reason in Thai 1 sentence.',
+      '',
+      MUSK_GUIDELINE,
+      '',
+      'If any single ingredient (especially white floral materials) exceeds 35% of the total formula weight, explain why in its "reason" field — otherwise keep dominance below that.',
+      'Reason in Thai 1 sentence per ingredient.',
     ].join('\n')
 
     const r = await callAI(sysPrompt, userPrompt)
@@ -708,8 +714,9 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
       const lastBrace  = clean.lastIndexOf('}')
       if (firstBrace > 0) clean = clean.substring(firstBrace, lastBrace + 1)
       const p = parseAIJson(clean)
-      if (!p.ingredients) throw new Error('no ingredients key')
-      setFormulaSugg(p)
+      if (!p.routes || !p.routes.length) throw new Error('no routes key')
+      setRouteOptions(p.routes)
+      setFormulaSugg(p.routes[0])
       setStep(7)
     } catch (e) {
       setFormulaSugg({ error: r || 'AI ไม่ตอบ — ลอง Generate ใหม่' })
@@ -718,6 +725,13 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
   }
 
   // ── Gen name suggestions ────────────────────────────────────────────────────
+  function switchRoute(idx) {
+    if (!routeOptions?.[idx]) return
+    setSelectedRouteIdx(idx)
+    setFormulaSugg(routeOptions[idx])
+    setSelectedChoice({}); setExpandedIng(null); setOverrideGrams({}); setOverrideMl({})
+  }
+
   async function genNames() {
     setNameLoading(true); setNameSuggs([])
     const vibe = buildVibeString()
@@ -1252,6 +1266,30 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
                 {formulaLoading ? '✦ กำลังสร้างสูตร...' : formulaSugg ? '↻ Generate ใหม่' : '✦ Generate Formula'}
               </Btn>
 
+              {/* Alternative Route — 3 ทางเลือก */}
+              {routeOptions?.length > 1 && (
+                <div style={{ display:'flex', gap:6, marginTop:14 }}>
+                  {routeOptions.map((route, i) => (
+                    <button key={i} onClick={() => switchRoute(i)}
+                      style={{ flex:1, padding:'10px 6px', borderRadius:10, cursor:'pointer',
+                        border:`1.5px solid ${selectedRouteIdx === i ? S.gold : S.border}`,
+                        background: selectedRouteIdx === i ? S.goldLt : S.white,
+                        color: selectedRouteIdx === i ? S.gold : S.textMid,
+                        fontFamily:'Inter,sans-serif', fontSize:11,
+                        fontWeight: selectedRouteIdx === i ? 700 : 400, textAlign:'center' }}>
+                      <div>Route {String.fromCharCode(65+i)}</div>
+                      <div style={{ fontSize:10, marginTop:2, opacity:.8 }}>{route.route_name}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {routeOptions?.[selectedRouteIdx]?.route_desc && (
+                <div style={{ fontSize:13, color:S.textLt, textAlign:'center', marginTop:8,
+                  fontStyle:'italic', fontFamily:'Cormorant Garamond,serif' }}>
+                  {routeOptions[selectedRouteIdx].route_desc}
+                </div>
+              )}
+
               {/* Result */}
               {formulaSugg && !formulaSugg.error && formulaSugg.ingredients && (
                 <div style={{ marginTop:16 }}>
@@ -1299,6 +1337,19 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
                                             ✗ ต้องหาซื้อ
                                           </span>
                                       }
+                                      {ing.primary?.risk && (
+                                        <span style={{ fontSize:9, fontWeight:600, padding:'1px 7px', borderRadius:20,
+                                          color: ing.primary.risk === 'high' ? '#b0402a' : ing.primary.risk === 'medium' ? S.gold : S.green,
+                                          background: ing.primary.risk === 'high' ? '#fdf0ec' : ing.primary.risk === 'medium' ? S.goldLt : S.greenBg }}>
+                                          risk: {ing.primary.risk}
+                                        </span>
+                                      )}
+                                      {ing.primary?.confidence != null && (
+                                        <span style={{ fontSize:9, fontWeight:600, color:S.textMid,
+                                          background:S.bg, padding:'1px 7px', borderRadius:20, border:`1px solid ${S.border}` }}>
+                                          {ing.primary.confidence}% confident
+                                        </span>
+                                      )}
                                     </div>
                                     {chosen.reason && (
                                       <div style={{ fontSize:11, color:S.textLt, lineHeight:1.5 }}>{chosen.reason}</div>
@@ -1399,6 +1450,19 @@ export default function PageNewFormula({ onBack, onCreate, initialVibe, initialP
                       padding:'12px 16px', background:S.white, borderRadius:12,
                       border:`1px solid ${S.goldBd}`, marginBottom:8, lineHeight:1.7 }}>
                       {formulaSugg.notes}
+                    </div>
+                  )}
+
+                  {formulaSugg.why_expensive && (
+                    <div style={{ marginBottom:8, padding:'12px 16px', borderRadius:12,
+                      background:S.ink, color:'#fff' }}>
+                      <div style={{ fontSize:10, fontWeight:700, letterSpacing:1,
+                        textTransform:'uppercase', color:S.gold, marginBottom:5 }}>
+                        ✦ ทำไมสูตรนี้ถึงหรู
+                      </div>
+                      <div style={{ fontSize:12, lineHeight:1.7, opacity:.92 }}>
+                        {formulaSugg.why_expensive}
+                      </div>
                     </div>
                   )}
 
