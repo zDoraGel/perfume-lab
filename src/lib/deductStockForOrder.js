@@ -1,96 +1,135 @@
-// เพิ่มใน src/lib/db.js
+// ═══════════════════════════════════════════════════════════════════════════
+// แทนที่ deductStockForOrder เดิมใน src/lib/db.js (บรรทัด 637-741)
+//
+// แก้ 2 บั๊ก:
+//   1. ไม่กรอง bottle_ml → ขาย 5ml ไปหักจาก batch 15ml (เกิดค่า 0.333)
+//   2. แปลง ml กลับเป็นเศษขวด → qty_sold เป็นทศนิยม
+//
+// หลักการใหม่: ขวด = หน่วยนับ ตัดเป็นจำนวนเต็มเสมอ
+//   - หัก batch ที่ bottle_ml ตรงกับที่ขายเท่านั้น
+//   - เรียง FIFO ตาม produced_at (ของเก่าออกก่อน)
+//   - ถ้าไม่มี batch ขนาดนั้น → throw error ชัดเจน ไม่ไปกินขนาดอื่นมั่ว
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Stock Deduction (FIFO) ─────────────────────────────────────────────────
   async deductStockForOrder(orderId) {
     try {
-      // 1. ดึง order + order_items
       const { data: order } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', orderId)
-        .single()
-      
+        .from('orders').select('*').eq('id', orderId).single()
       if (!order) throw new Error('Order not found')
-      
-      const { data: orderItems } = await supabase
-        .from('order_items')
-        .select('*')
-        .eq('order_id', orderId)
-      
-      if (!orderItems || orderItems.length === 0) {
-        console.log('No items in order')
-        return { success: true, orderId, message: 'No items to deduct' }
+
+      // กันตัดสต็อกซ้ำ
+      if (order.stock_deducted) {
+        return { success: true, orderId, deductions: [],
+          message: `Order ${orderId} already deducted, skipped` }
       }
 
-      // 2. สำหรับแต่ละ item → ตัด stock FIFO
+      const { data: orderItems } = await supabase
+        .from('order_items').select('*').eq('order_id', orderId)
+      if (!orderItems || orderItems.length === 0) {
+        return { success: true, orderId, deductions: [], message: 'No items to deduct' }
+      }
+
       const deductions = []
-      
+      const versionCache = {}
+      let totalCogs = 0
+
       for (const item of orderItems) {
-        const { formula_id, qty } = item
-        let remainingQty = qty
-        
-        // ดึง batches ของ formula นี้ (order by produced_at ASC = เก่าสุดมาก่อน)
-        const { data: batches } = await supabase
-          .from('production_batches')
-          .select('*')
-          .eq('formula_id', formula_id)
-          .order('produced_at', { ascending: true })
-        
-        if (!batches || batches.length === 0) {
-          throw new Error(`No batches found for formula ${formula_id}`)
+        const { formula_id, qty, bottle_ml: itemBottleMl } = item
+
+        const qtyBottles = parseInt(qty, 10)
+        if (!Number.isFinite(qtyBottles) || qtyBottles <= 0) {
+          throw new Error(`order_item ${item.id}: qty ไม่ถูกต้อง (${qty})`)
         }
 
-        // ตัด qty จากแต่ละ batch จนครบ
+        const { data: allBatches } = await supabase
+          .from('production_batches').select('*')
+          .eq('formula_id', formula_id)
+          .order('produced_at', { ascending: true })
+        if (!allBatches || allBatches.length === 0) {
+          throw new Error(`ไม่พบ batch ของสูตร ${formula_id}`)
+        }
+
+        // ✅ หักเฉพาะ batch ที่ขนาดขวดตรงกับที่ขายจริง
+        // ถ้า item ไม่มี bottle_ml (ออเดอร์เก่า) ยอมให้ใช้ batch ไหนก็ได้ (พฤติกรรมเดิม)
+        const batches = itemBottleMl
+          ? allBatches.filter(b => Number(b.bottle_ml) === Number(itemBottleMl))
+          : allBatches
+
+        if (batches.length === 0) {
+          throw new Error(
+            `สูตร ${formula_id}: ไม่มี batch ขนาด ${itemBottleMl}ml ` +
+            `(มีขนาด ${[...new Set(allBatches.map(b => b.bottle_ml))].join(', ')}ml)`
+          )
+        }
+
+        // version สำหรับคำนวณต้นทุน
+        if (!(formula_id in versionCache)) {
+          const versions = await this.getVersions(formula_id)
+          const final = versions.find(v => v.is_final)
+          versionCache[formula_id] = final ? final.id : (versions[versions.length - 1]?.id || null)
+        }
+        const versionId = versionCache[formula_id]
+
+        // ✅ ตัดเป็น "จำนวนขวด" จำนวนเต็ม ไม่แปลงไป-กลับผ่าน ml อีกแล้ว
+        let remainingBottles = qtyBottles
+
         for (const batch of batches) {
-          if (remainingQty <= 0) break
-          
-          const currentRemaining = batch.qty_produced - batch.qty_sold
-          
-          if (currentRemaining <= 0) continue // batch นี้หมดแล้ว
-          
-          const deductAmount = Math.min(remainingQty, currentRemaining)
-          const newQtySold = batch.qty_sold + deductAmount
-          
-          // update production_batches
-          await supabase
-            .from('production_batches')
-            .update({ qty_sold: newQtySold })
-            .eq('id', batch.id)
-          
+          if (remainingBottles <= 0) break
+
+          const available = Math.floor((batch.qty_produced || 0) - (batch.qty_sold || 0))
+          if (available <= 0) continue
+
+          const take = Math.min(remainingBottles, available)
+          const newQtySold = (batch.qty_sold || 0) + take
+
+          const { error: batchUpdateErr } = await supabase.from('production_batches')
+            .update({ qty_sold: newQtySold }).eq('id', batch.id)
+          if (batchUpdateErr) {
+            throw new Error(`อัปเดตสต็อก batch ${batch.id} ไม่สำเร็จ: ${batchUpdateErr.message}`)
+          }
+
+          let batchCost = 0
+          if (versionId) {
+            try {
+              const unit = await this.getCostPerUnit(versionId, batch)
+              batchCost = (unit.totalCostPerBottle || 0) * take
+              totalCogs += batchCost
+            } catch (e) {
+              console.error('getCostPerUnit error during deduction:', e)
+            }
+          }
+
           deductions.push({
             formula_id,
             batch_id: batch.id,
-            deduct_qty: deductAmount,
+            deduct_qty: take,
+            batch_bottle_ml: batch.bottle_ml,
             batch_produced_at: batch.produced_at,
+            cost: parseFloat(batchCost.toFixed(2)),
           })
-          
-          remainingQty -= deductAmount
+
+          remainingBottles -= take
         }
-        
-        if (remainingQty > 0) {
-          throw new Error(`Insufficient stock for formula ${formula_id}. Needed ${remainingQty} more.`)
+
+        if (remainingBottles > 0) {
+          throw new Error(
+            `สต็อกไม่พอ: สูตร ${formula_id} ขนาด ${itemBottleMl || '-'}ml ` +
+            `ขาดอีก ${remainingBottles} ขวด`
+          )
         }
       }
 
-      // 3. Update order status → 'paid' (ถ้ายังไม่ paid)
-      if (order.status !== 'paid') {
-        await supabase
-          .from('orders')
-          .update({ status: 'paid' })
-          .eq('id', orderId)
+      const { error: orderUpdateErr } = await supabase.from('orders')
+        .update({ status: 'paid', stock_deducted: true, cogs: parseFloat(totalCogs.toFixed(2)) })
+        .eq('id', orderId)
+      if (orderUpdateErr) {
+        throw new Error(`อัปเดตสถานะ order ${orderId} ไม่สำเร็จ: ${orderUpdateErr.message}`)
       }
 
-      return {
-        success: true,
-        orderId,
-        deductions,
-        message: `Stock deducted successfully for order ${orderId}`,
-      }
+      return { success: true, orderId, deductions, cogs: parseFloat(totalCogs.toFixed(2)),
+        message: `Stock deducted successfully for order ${orderId}` }
     } catch (error) {
       console.error('deductStockForOrder error:', error)
-      return {
-        success: false,
-        error: error.message,
-      }
+      return { success: false, error: error.message }
     }
   },
