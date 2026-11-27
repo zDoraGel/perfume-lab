@@ -562,25 +562,52 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
   const [concentration, setConcentration] = useState('SIGNATURE')
   const [bottle_ml,     setBottleMl]      = useState(15)
   const [qty,           setQty]           = useState('')
-  const [usedMl,        setUsedMl]        = useState(totalConcentrateMl ? String(totalConcentrateMl) : '')
+  // ✅ เริ่มเป็นค่าว่าง แล้วให้ระบบคำนวณเติมให้จาก (หัวเชื้อ/ขวด × จำนวนขวด)
+  // เดิมตั้งต้นเป็นหัวเชื้อทั้งก้อน — บรรจุขวดเดียวก็กินหมดก้อน เศษหายไปเงียบๆ
+  const [usedMl,        setUsedMl]        = useState('')
   const [alcoholMix, setAlcoholMix] = useState([{ brand:'', ml:'', isCustom:false }])
   const [producedAt, setProducedAt] = useState(new Date().toISOString().split('T')[0])
   const [sellPrice,  setSellPrice]  = useState('')
   const [notes,      setNotes]      = useState(batch.notes || '')
   const [saving,     setSaving]     = useState(false)
-  const [overridden, setOverridden] = useState(false)
+  const [overridden,     setOverridden]     = useState(false) // แก้ ml แอลกอฮอล์เอง
+  const [usedOverridden, setUsedOverridden] = useState(false) // แก้หัวเชื้อเอง
 
-  // หัวเชื้อ/ขวด คำนวณจาก "หัวเชื้อที่จะใช้รอบนี้" (ไม่จำเป็นต้องใช้หมด) หารด้วยจำนวนขวดที่จะบรรจุ
+  const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
+  const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
+  const stdPerBottle = fill?.concInBottle ?? null // หัวเชื้อมาตรฐานต่อขวด ตาม concentration + ขนาดขวด
+
+  const qtyNum    = parseInt(qty) || 0
   const usedMlNum = parseFloat(usedMl) || 0
-  const concentratePerBottle = (qty && parseInt(qty) > 0 && usedMlNum > 0) ? usedMlNum / parseInt(qty) : null
-  const remainingAfter = Math.max(0, Math.round((totalConcentrateMl - usedMlNum) * 100) / 100)
+  const concentratePerBottle = (qtyNum > 0 && usedMlNum > 0) ? usedMlNum / qtyNum : null
+  const remainingAfter = Math.round((totalConcentrateMl - usedMlNum) * 100) / 100
+  const neededMl = (stdPerBottle != null && qtyNum > 0)
+    ? Math.round(stdPerBottle * qtyNum * 100) / 100
+    : null
+
+  // หัวเชื้อที่มีพอบรรจุได้กี่ขวด (เอาไว้เตือนตอนกรอกจำนวนเกิน)
+  const maxBottles = (stdPerBottle > 0)
+    ? Math.floor((totalConcentrateMl + 0.05) / stdPerBottle)
+    : null
+
+  // เตือนเมื่อค่าที่กรอกเองต่างจากสูตรมาตรฐาน (กันกรอกสลับระหว่าง "ต่อขวด" กับ "ยอดรวม")
+  const offStandard = (neededMl != null && usedMlNum > 0
+    && Math.abs(usedMlNum - neededMl) > 0.05)
+
+  // ✅ auto-fill หัวเชื้อที่จะใช้ = หัวเชื้อ/ขวด × จำนวนขวด (จนกว่าจะแก้เอง)
+  useEffect(() => {
+    if (usedOverridden) return
+    setUsedMl(neededMl != null && neededMl > 0 ? String(neededMl) : '')
+  }, [neededMl, usedOverridden])
 
   useEffect(() => {
     if (overridden) return
-    const concMap = { SOFT:'EdP_Soft', SIGNATURE:'EdP_Signature', DEEP:'EdP_Deep' }
-    const fill = calcBottleFill(0, concMap[concentration], bottle_ml, 0)
     if (fill?.alcoholInBottle != null) {
-      setAlcoholMix([{ brand:'', ml: String(fill.alcoholInBottle), isCustom:false }])
+      // เก็บยี่ห้อที่เลือกไว้แล้ว เปลี่ยนแค่ ml (เดิมล้างยี่ห้อทิ้งทุกครั้งที่เปลี่ยนขนาดขวด)
+      setAlcoholMix(prev => {
+        const first = prev[0] || { brand:'', isCustom:false }
+        return [{ ...first, ml: String(fill.alcoholInBottle) }, ...prev.slice(1)]
+      })
     }
   }, [concentration, bottle_ml, overridden])
 
@@ -599,10 +626,22 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
   }
 
   async function save() {
-    if (!qty || parseInt(qty) <= 0) return alert('กรอกจำนวนขวดที่จะบรรจุก่อนค่ะ')
+    if (!qty || qtyNum <= 0) return alert('กรอกจำนวนขวดที่จะบรรจุก่อนค่ะ')
     if (!usedMl || usedMlNum <= 0) return alert('กรอกปริมาณหัวเชื้อที่จะใช้รอบนี้ก่อนค่ะ')
     if (usedMlNum > totalConcentrateMl + 0.05) {
       return alert(`ใช้หัวเชื้อเกินที่มี (มีอยู่ ${totalConcentrateMl}ml)`)
+    }
+    // ✅ กันกรอกสลับ "ต่อขวด" กับ "ยอดรวม" — ตัวเลขที่ต่างจากสูตรมาตรฐานต้องยืนยันก่อน
+    if (offStandard) {
+      const ok = window.confirm(
+        `ตัวเลขไม่ตรงกับสูตรค่ะ\n\n` +
+        `${concentration} ขนาด ${bottle_ml}ml ใช้หัวเชื้อ ${stdPerBottle}ml/ขวด\n` +
+        `${qtyNum} ขวด → ควรใช้รวม ${neededMl}ml\n\n` +
+        `แต่กรอกไว้ ${usedMlNum}ml (= ${(usedMlNum / qtyNum).toFixed(2)}ml/ขวด)\n\n` +
+        `กด OK ถ้าตั้งใจผสมเข้ม/อ่อนกว่าสูตรจริงๆ\n` +
+        `กด ยกเลิก เพื่อกลับไปแก้`
+      )
+      if (!ok) return
     }
     const hasMlWithoutBrand = alcoholMix.some(r => r.ml && !r.brand)
     if (hasMlWithoutBrand) {
@@ -632,20 +671,8 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
       borderRadius:12, padding:16, marginBottom:12 }}>
       <div style={{ fontSize:12, fontWeight:700, color:S.gold, letterSpacing:1,
         textTransform:'uppercase', marginBottom:4 }}>🧴 ผสมแอล + บรรจุขวด</div>
-      <div style={{ fontSize:11, color:S.textLt, marginBottom:8 }}>
+      <div style={{ fontSize:11, color:S.textLt, marginBottom:10 }}>
         หัวเชื้อที่มี {totalConcentrateMl}ml (ทำไว้ {batch.concentrate_made_at})
-      </div>
-
-      <div style={{ marginBottom:10 }}>
-        <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
-          fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ใช้หัวเชื้อรอบนี้ (ml)</div>
-        <input type="number" step="0.01" value={usedMl} onChange={e => setUsedMl(e.target.value)}
-          placeholder={`สูงสุด ${totalConcentrateMl}`} style={inputStyle}/>
-        <div style={{ fontSize:10, color:S.textLt, marginTop:4 }}>
-          {usedMlNum > 0 && usedMlNum < totalConcentrateMl
-            ? `เหลือหัวเชื้อไว้รอบหน้าอีก ${remainingAfter}ml`
-            : 'ไม่ต้องใช้หมดก็ได้ — ที่เหลือจะเก็บไว้บรรจุรอบหน้า'}
-        </div>
       </div>
 
       <div style={{ marginBottom:10 }}>
@@ -665,7 +692,7 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:6 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
         <div>
           <div style={{ fontSize:11, color:S.textMid, marginBottom:6,
             fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>ขนาดขวด</div>
@@ -687,13 +714,70 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
             fontWeight:500, textTransform:'uppercase', letterSpacing:.5 }}>จำนวนขวดที่จะบรรจุ</div>
           <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
             placeholder="เช่น 3" style={inputStyle}/>
+          {maxBottles != null && (
+            <div style={{ fontSize:10, marginTop:4,
+              color: qtyNum > maxBottles ? S.red : S.textLt }}>
+              {qtyNum > maxBottles
+                ? `⚠ หัวเชื้อพอแค่ ${maxBottles} ขวด`
+                : `หัวเชื้อที่มีพอบรรจุได้ ${maxBottles} ขวด`}
+            </div>
+          )}
         </div>
       </div>
-      {concentratePerBottle != null && (
-        <div style={{ fontSize:11, color:S.gold, marginBottom:10 }}>
-          = หัวเชื้อ {concentratePerBottle.toFixed(2)}ml/ขวด
+
+      {/* ── สรุปหัวเชื้อ — ระบบคำนวณให้ ไม่ต้องคิดในใจ ────────────────────── */}
+      <div style={{ background:S.goldLt, border:`1px solid ${S.border}`,
+        borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
+        <div style={{ fontSize:10, fontWeight:700, color:S.gold, letterSpacing:1,
+          textTransform:'uppercase', marginBottom:8 }}>หัวเชื้อที่จะใช้รอบนี้</div>
+
+        {stdPerBottle != null && qtyNum > 0 ? (
+          <div style={{ fontSize:13, color:S.ink, fontWeight:600, marginBottom:8 }}>
+            {qtyNum} ขวด × {stdPerBottle}ml/ขวด = {neededMl}ml
+          </div>
+        ) : (
+          <div style={{ fontSize:12, color:S.textLt, marginBottom:8 }}>
+            เลือกขนาดขวด + กรอกจำนวนขวด แล้วระบบจะคำนวณให้
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <input type="number" step="0.01" value={usedMl}
+            onChange={e => { setUsedMl(e.target.value); setUsedOverridden(true) }}
+            placeholder={`สูงสุด ${totalConcentrateMl}`}
+            style={{ ...inputStyle, flex:1,
+              borderColor: offStandard ? '#c07820' : S.border }}/>
+          <span style={{ fontSize:12, color:S.textMid, flexShrink:0 }}>ml รวม</span>
         </div>
-      )}
+
+        {concentratePerBottle != null && (
+          <div style={{ fontSize:11, color:S.gold, marginTop:6 }}>
+            = หัวเชื้อ {concentratePerBottle.toFixed(2)}ml/ขวด
+          </div>
+        )}
+
+        {offStandard && (
+          <div style={{ fontSize:11, color:'#c07820', marginTop:6, lineHeight:1.5 }}>
+            ⚠ ไม่ตรงสูตร — {concentration} {bottle_ml}ml ควรใช้รวม {neededMl}ml{' '}
+            <button onClick={() => { setUsedOverridden(false); setUsedMl(String(neededMl)) }}
+              style={{ color:S.gold, textDecoration:'underline', background:'none',
+                border:'none', cursor:'pointer', fontSize:11, padding:0 }}>
+              ใช้ค่าสูตร
+            </button>
+          </div>
+        )}
+
+        {usedMlNum > 0 && (
+          <div style={{ fontSize:11, marginTop:6,
+            color: remainingAfter < -0.05 ? S.red : S.textMid }}>
+            {remainingAfter < -0.05
+              ? `⚠ เกินหัวเชื้อที่มีอยู่ ${Math.abs(remainingAfter)}ml`
+              : remainingAfter > 0.05
+                ? `เหลือหัวเชื้อไว้รอบหน้า ${remainingAfter}ml`
+                : 'ใช้หัวเชื้อหมดก้อนพอดี'}
+          </div>
+        )}
+      </div>
 
       <div style={{ marginBottom:10 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
@@ -751,6 +835,7 @@ function AlcoholMixForm({ batch, onSave, onCancel }) {
         {alcoholMixTotalMl > 0 && (
           <div style={{ fontSize:10, color:S.textLt, marginTop:2 }}>
             รวม Alcohol {alcoholMixTotalMl.toFixed(2)} ml/ขวด
+            {qtyNum > 0 && ` · ทั้งหมด ${(alcoholMixTotalMl * qtyNum).toFixed(2)} ml`}
           </div>
         )}
       </div>
@@ -1101,7 +1186,7 @@ export default function PageProduction() {
                           </button>
                           <button onClick={() => setGiveawayBatch(b)}
                             style={{ fontSize:11, color:S.gold, background:S.goldLt,
-                              border:`1px solid ${S.goldBd}`, borderRadius:14,
+                              border:`1px solid ${S.border}`, borderRadius:14,
                               padding:'4px 10px', cursor:'pointer', fontWeight:600,
                               whiteSpace:'nowrap' }}>
                             + แจก
